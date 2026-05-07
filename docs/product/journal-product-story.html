@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Journal 产品故事</title>
+  <style>
+    :root {
+      --paper: #f7f1e7;
+      --paper-2: #efe6d8;
+      --ink: #202124;
+      --muted: #6e665b;
+      --line: rgba(34, 32, 28, 0.16);
+      --teal: #1f6f68;
+      --teal-2: #8fbdb4;
+      --amber: #c9822f;
+      --rose: #a75858;
+      --blue: #3d6f94;
+      --green: #5f7f4c;
+      --shadow: 0 28px 90px rgba(38, 30, 20, 0.18);
+      --radius: 8px;
+      --font: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
+      --mono: "Cascadia Mono", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.72), transparent 28%),
+        linear-gradient(135deg, #f8f3eb 0%, #ede3d4 52%, #e8ddcc 100%);
+      overflow: hidden;
+    }
+
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: clamp(28px, 4.8vw, 76px);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(28px);
+      transition: opacity 420ms ease, transform 520ms cubic-bezier(.22, .9, .24, 1);
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0);
+    }
+
+    .slide::before {
+      content: "";
+      position: absolute;
+      inset: 16px;
+      border: 1px solid rgba(46, 40, 31, 0.12);
+      pointer-events: none;
+    }
+
+    .kicker {
+      margin: 0 0 12px;
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--teal);
+      font-weight: 700;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      max-width: 920px;
+      margin-bottom: 22px;
+      font-size: clamp(48px, 7.2vw, 112px);
+      line-height: 0.95;
+      letter-spacing: 0;
+      font-weight: 760;
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-size: clamp(34px, 4.7vw, 68px);
+      line-height: 1.02;
+      letter-spacing: 0;
+      font-weight: 760;
+    }
+
+    h3 {
+      margin-bottom: 10px;
+      font-size: clamp(18px, 1.6vw, 24px);
+      line-height: 1.25;
+    }
+
+    .lead {
+      max-width: 760px;
+      color: #4f4940;
+      font-size: clamp(18px, 1.8vw, 28px);
+      line-height: 1.55;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .nowrap {
+      white-space: nowrap;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: clamp(28px, 4vw, 64px);
+      align-items: center;
+      min-height: 70vh;
+    }
+
+    .grid-2.media-right {
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: clamp(24px, 3.4vw, 54px);
+    }
+
+    .grid-2.media-left {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: clamp(24px, 3.4vw, 54px);
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .visual {
+      position: relative;
+      margin: 0;
+      min-height: 420px;
+      padding: 12px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.78), transparent 30%),
+        linear-gradient(135deg, #f8f1e6 0%, #e8ddcc 100%);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(40, 32, 22, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .visual img {
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      object-fit: contain;
+      display: block;
+      box-sizing: border-box;
+      border-radius: calc(var(--radius) - 8px);
+    }
+
+    .visual.wide {
+      min-height: 0;
+      aspect-ratio: 16 / 9;
+    }
+
+    .visual.wide img {
+      min-height: 0;
+    }
+
+    .caption-strip {
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      bottom: 28px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: #f8f3eb;
+      font-size: 13px;
+    }
+
+    .caption-strip span {
+      padding: 7px 10px;
+      background: rgba(24, 22, 18, 0.56);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .card {
+      padding: 24px;
+      border-radius: var(--radius);
+      background: rgba(255, 252, 246, 0.7);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 40px rgba(60, 48, 33, 0.08);
+    }
+
+    .card.dark {
+      color: #f7f1e7;
+      background: #282823;
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .card .tag {
+      display: inline-block;
+      margin-bottom: 16px;
+      padding: 4px 8px;
+      font-size: 12px;
+      color: var(--teal);
+      border: 1px solid rgba(31, 111, 104, 0.28);
+      background: rgba(143, 189, 180, 0.18);
+    }
+
+    .card.dark .tag {
+      color: #d7eee8;
+      border-color: rgba(215, 238, 232, 0.24);
+      background: rgba(31, 111, 104, 0.28);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1fr) 34px
+        minmax(0, 1fr) 34px
+        minmax(0, 1fr) 34px
+        minmax(0, 1fr) 34px
+        minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+      margin-top: 30px;
+    }
+
+    .step {
+      position: relative;
+      min-height: 112px;
+      padding: 16px 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.56);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: visible;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+
+    .step em {
+      font-style: normal;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .flow-arrow {
+      position: relative;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--amber);
+    }
+
+    .flow-arrow::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 9px;
+      top: 50%;
+      height: 4px;
+      background: linear-gradient(90deg, rgba(201, 130, 47, 0.25), var(--amber));
+      transform: translateY(-50%);
+    }
+
+    .flow-arrow::after {
+      content: "";
+      position: absolute;
+      right: 2px;
+      top: 50%;
+      width: 0;
+      height: 0;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 10px solid var(--amber);
+      transform: translateY(-50%);
+    }
+
+    .mock-window {
+      border-radius: var(--radius);
+      background: #fbf7ef;
+      border: 1px solid rgba(36, 32, 28, 0.16);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .chrome {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      background: #e7ddcf;
+      border-bottom: 1px solid rgba(36, 32, 28, 0.12);
+    }
+
+    .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .dot:nth-child(1) { background: #d56a5f; }
+    .dot:nth-child(2) { background: #d5a544; }
+    .dot:nth-child(3) { background: #6aa66c; }
+
+    .app-ui {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) 280px;
+      min-height: 520px;
+    }
+
+    .sidebar {
+      padding: 22px;
+      background: #f0e6d8;
+      border-right: 1px solid rgba(36, 32, 28, 0.12);
+    }
+
+    .main-pane {
+      padding: 24px;
+      border-right: 1px solid rgba(36, 32, 28, 0.12);
+    }
+
+    .side-pane {
+      padding: 24px;
+      background: rgba(31, 111, 104, 0.08);
+    }
+
+    .line {
+      height: 10px;
+      margin: 12px 0;
+      background: rgba(41, 35, 28, 0.12);
+    }
+
+    .line.short { width: 58%; }
+    .line.mid { width: 76%; }
+    .line.teal { background: rgba(31, 111, 104, 0.32); }
+    .line.amber { background: rgba(201, 130, 47, 0.36); }
+
+    .section-box {
+      margin: 16px 0;
+      padding: 16px;
+      border: 1px solid rgba(36, 32, 28, 0.12);
+      background: #fffaf2;
+      border-radius: var(--radius);
+    }
+
+    .section-label {
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: var(--teal);
+      font-weight: 700;
+    }
+
+    .code-card {
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: clamp(12px, 1.1vw, 15px);
+      line-height: 1.7;
+      color: #f5ead8;
+      background: #232620;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      white-space: pre-wrap;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 30px;
+    }
+
+    .node {
+      padding: 22px;
+      min-height: 174px;
+      background: rgba(255, 252, 246, 0.72);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 12px;
+      font-size: 20px;
+    }
+
+    .node ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .quote {
+      padding-left: 22px;
+      border-left: 4px solid var(--teal);
+      color: #423b31;
+      font-size: clamp(26px, 3vw, 48px);
+      line-height: 1.2;
+      font-weight: 720;
+    }
+
+    .story-list {
+      display: grid;
+      gap: 14px;
+      margin-top: 30px;
+    }
+
+    .story-item {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      padding: 16px;
+      background: rgba(255, 252, 246, 0.66);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .story-item .num {
+      font-family: var(--mono);
+      color: var(--amber);
+      font-size: 22px;
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateX(-50%);
+      padding: 8px;
+      background: rgba(39, 35, 30, 0.72);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+    }
+
+    button {
+      min-width: 42px;
+      height: 36px;
+      border: 0;
+      border-radius: 999px;
+      color: #fff8ee;
+      background: rgba(255, 255, 255, 0.1);
+      font-family: var(--font);
+      cursor: pointer;
+    }
+
+    button:hover { background: rgba(255, 255, 255, 0.18); }
+
+    .counter {
+      min-width: 86px;
+      text-align: center;
+      color: #fff8ee;
+      font-size: 13px;
+      font-family: var(--mono);
+    }
+
+    .progress {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 12;
+      height: 4px;
+      width: 100%;
+      background: rgba(32, 33, 36, 0.08);
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--teal), var(--amber));
+      transition: width 260ms ease;
+    }
+
+    .notes {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 11;
+      max-width: 360px;
+      padding: 16px;
+      color: #f8f3eb;
+      background: rgba(31, 29, 24, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 70px rgba(0, 0, 0, 0.24);
+      transform: translateY(18px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+
+    .notes.show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .notes h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #efe0c7;
+    }
+
+    .notes p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #e6dbc9;
+    }
+
+    .animate-in {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 500ms ease, transform 600ms cubic-bezier(.22,.9,.24,1);
+    }
+
+    .slide.active .animate-in {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .delay-1 { transition-delay: 120ms; }
+    .delay-2 { transition-delay: 240ms; }
+    .delay-3 { transition-delay: 360ms; }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .deck { height: auto; min-height: 100vh; }
+      .slide {
+        position: relative;
+        min-height: 100vh;
+        display: none;
+        transform: none;
+      }
+      .slide.active { display: grid; }
+      .grid-2, .grid-3, .architecture, .flow {
+        grid-template-columns: 1fr;
+      }
+      .flow-arrow {
+        height: 32px;
+        transform: rotate(90deg);
+      }
+      .app-ui {
+        grid-template-columns: 1fr;
+      }
+      .sidebar, .main-pane { border-right: 0; border-bottom: 1px solid rgba(36, 32, 28, 0.12); }
+      .controls { bottom: 12px; }
+      .notes { right: 12px; left: 12px; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress"><span id="progress"></span></div>
+  <main class="deck" id="deck">
+    <section class="slide active" data-note="开场先讲一句话：这不是一个填表软件，而是把真实表达变成长期可回看的系统。">
+      <div class="grid-2 media-right">
+        <div>
+          <p class="kicker animate-in">Journal Product Story</p>
+          <h1 class="animate-in delay-1">每天 3 分钟的人生坐标系统</h1>
+          <p class="lead animate-in delay-2">你负责真实表达，AI 负责整理，Markdown 负责保存。它不是替你写日记，而是帮你把说出来的生活变成可回看的结构。</p>
+        </div>
+        <figure class="visual wide animate-in delay-3">
+          <img src="assets/story-01-morning-expression.png" alt="晨间自然表达场景" />
+          <figcaption class="caption-strip">
+            <span>自然表达</span>
+            <span>低负担</span>
+            <span>长期记录</span>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这一页解释问题：用户不是不想记录，而是不想被格式和工具打断。">
+      <div>
+        <p class="kicker animate-in">Why</p>
+        <h2 class="animate-in delay-1">传统日记的问题，不是写不下来，而是很难长期坚持</h2>
+        <div class="grid-3 animate-in delay-2">
+          <div class="card">
+            <span class="tag">太散</span>
+            <h3>自由写，未来难回看</h3>
+            <p class="small">纯文本没有结构，几年后很难按主题、情绪、目标和同一天快速找到自己。</p>
+          </div>
+          <div class="card">
+            <span class="tag">太硬</span>
+            <h3>模板写，灵感被压扁</h3>
+            <p class="small">九宫格或固定表单能保持整齐，但每天都填格子，很快就像报表。</p>
+          </div>
+          <div class="card">
+            <span class="tag">太脆</span>
+            <h3>App 写，数据被锁住</h3>
+            <p class="small">如果日记只能在某个应用里活着，长期记录就不够安全。</p>
+          </div>
+        </div>
+        <p class="quote animate-in delay-3" style="margin-top: 40px;">我们要的是：真实表达不丢，结构自然长出来。</p>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这页讲核心链路：自然语言不是终点，AI 也不是终点，确认后的 Markdown 才是正式记录。">
+      <div class="grid-2 media-left">
+        <figure class="visual wide animate-in">
+          <img src="assets/story-02-ai-markdown-pipeline.png" alt="AI 到 Markdown 管线" />
+        </figure>
+        <div>
+          <p class="kicker animate-in">Core Loop</p>
+          <h2 class="animate-in delay-1">从一句自然表达，到一篇确认过的 Markdown</h2>
+          <div class="flow animate-in delay-2">
+            <div class="step"><strong>输入</strong><em>自然文本</em></div>
+            <div class="flow-arrow" aria-hidden="true"></div>
+            <div class="step"><strong>原文</strong><em>安全保存</em></div>
+            <div class="flow-arrow" aria-hidden="true"></div>
+            <div class="step"><strong>JSON</strong><em>结构草稿</em></div>
+            <div class="flow-arrow" aria-hidden="true"></div>
+            <div class="step"><strong>预览</strong><em>确认调整</em></div>
+            <div class="flow-arrow" aria-hidden="true"></div>
+            <div class="step"><strong>归档</strong><em>正式 JMF</em></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这页说明用户控制权：AI 可以建议，但不能擅自定稿。">
+      <div class="grid-2 media-right">
+        <div>
+          <p class="kicker animate-in">Review First</p>
+          <h2 class="animate-in delay-1">AI 只生成预览，用户确认后才写正式日记</h2>
+          <div class="story-list animate-in delay-2">
+            <div class="story-item">
+              <div class="num">01</div>
+              <div><h3>原始输入先安全落地</h3><p class="small">用户提交后立刻保存，不依赖模型是否成功。</p></div>
+            </div>
+            <div class="story-item">
+              <div class="num">02</div>
+              <div><h3>预览可以继续对话调整</h3><p class="small">比如“更自然一点”“保留更多原话”“这条放到灵感”。</p></div>
+            </div>
+            <div class="story-item">
+              <div class="num">03</div>
+              <div><h3>确认后才进入正式 Markdown</h3><p class="small">正式文件永远代表用户确认过的版本。</p></div>
+            </div>
+          </div>
+        </div>
+        <figure class="visual wide animate-in delay-3">
+          <img src="assets/story-04-review-confirm.png" alt="确认后写入正式日记" />
+        </figure>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这页讲 JMF：它不是普通 Markdown，而是可解析、可编辑、可长期保存的 Markdown 格式。">
+      <div class="grid-2 media-left">
+        <figure class="visual wide animate-in">
+          <img src="assets/story-03-jmf-structured-markdown.png" alt="结构化 Markdown 文档" />
+        </figure>
+        <div>
+          <p class="kicker animate-in">JMF v1</p>
+          <h2 class="animate-in delay-1"><span class="nowrap">Markdown 可读</span>，块标记可解析</h2>
+          <p class="lead animate-in delay-2">普通用户在块编辑器里写内容；专业用户可以看源码。系统靠 section marker 识别结构，不靠标题猜。</p>
+          <div class="code-card animate-in delay-3">&lt;!-- journal:section today-focus --&gt;
+## 今日重点
+
+- 确认 JMF v1
+- 用户确认后写入正式日记
+
+&lt;!-- /journal:section --&gt;</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这页展示未来 UI，不是最终视觉稿，但说明交互结构。">
+      <div>
+        <p class="kicker animate-in">Product Surface</p>
+        <h2 class="animate-in delay-1">默认是块编辑器，不是吓人的源码编辑器</h2>
+        <div class="mock-window animate-in delay-2">
+          <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="app-ui">
+            <aside class="sidebar">
+              <div class="section-label">五月 2026</div>
+              <div class="line teal"></div>
+              <div class="line"></div>
+              <div class="line"></div>
+              <div class="line amber short"></div>
+              <div class="line"></div>
+              <div class="line mid"></div>
+            </aside>
+            <section class="main-pane">
+              <div class="section-label">今日晨间卡 · reviewing</div>
+              <div class="section-box">
+                <div class="section-label">原始输入</div>
+                <div class="line teal"></div>
+                <div class="line mid"></div>
+              </div>
+              <div class="section-box">
+                <div class="section-label">昨日回顾</div>
+                <div class="line"></div>
+                <div class="line short"></div>
+              </div>
+              <div class="section-box">
+                <div class="section-label">今日重点</div>
+                <div class="line amber"></div>
+                <div class="line mid"></div>
+              </div>
+            </section>
+            <aside class="side-pane">
+              <div class="section-label">AI 预览操作</div>
+              <div class="line teal"></div>
+              <div class="line"></div>
+              <div class="line short"></div>
+              <div class="section-box">
+                <div class="section-label">快捷调整</div>
+                <div class="line amber"></div>
+                <div class="line mid"></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这页讲存储架构：Markdown 是源，SQLite 是索引，版本是保险。">
+      <div>
+        <p class="kicker animate-in">Local First</p>
+        <h2 class="animate-in delay-1">可信源、索引、版本，各做各的事</h2>
+        <div class="architecture animate-in delay-2">
+          <div class="node">
+            <strong>entries/</strong>
+            <ul>
+              <li>一天一个 Markdown</li>
+              <li>用户确认后的最新版</li>
+              <li>脱离应用也可阅读</li>
+            </ul>
+          </div>
+          <div class="node">
+            <strong>.journal/</strong>
+            <ul>
+              <li>原始输入 JSONL</li>
+              <li>版本快照</li>
+              <li>草稿与内部元数据</li>
+            </ul>
+          </div>
+          <div class="node">
+            <strong>SQLite FTS</strong>
+            <ul>
+              <li>全文检索</li>
+              <li>标签、状态、同日年轮</li>
+              <li>可从 Markdown 重建</li>
+            </ul>
+          </div>
+        </div>
+        <p class="quote animate-in delay-3" style="margin-top: 40px;">数据库是索引，不是牢笼。</p>
+      </div>
+    </section>
+
+    <section class="slide" data-note="这页降低配置焦虑：普通用户只填 key，专业用户再进高级配置。">
+      <div class="grid-2">
+        <div>
+          <p class="kicker animate-in">AI Provider</p>
+          <h2 class="animate-in delay-1">普通用户只填 API Key，专业用户再打开高级配置</h2>
+          <p class="lead animate-in delay-2">默认提供 DeepSeek、OpenAI、智谱 GLM、本地 Mock。Provider 抽象保留扩展能力，但首屏不让用户研究 baseUrl。</p>
+        </div>
+        <div class="grid-3 animate-in delay-3">
+          <div class="card dark"><span class="tag">Default</span><h3>DeepSeek</h3><p class="small">填 API Key，测试连接，开始整理。</p></div>
+          <div class="card dark"><span class="tag">Default</span><h3>OpenAI</h3><p class="small">填 API Key，选择模型，保持通用。</p></div>
+          <div class="card dark"><span class="tag">Default</span><h3>智谱 GLM</h3><p class="small">适合中文输入与本地使用习惯。</p></div>
+          <div class="card"><span class="tag">Advanced</span><h3>兼容模型</h3><p class="small">自定义 baseUrl、model、超时和 JSON mode。</p></div>
+          <div class="card"><span class="tag">Testing</span><h3>Mock</h3><p class="small">无 Key 也能跑完整产品链路。</p></div>
+          <div class="card"><span class="tag">Later</span><h3>Embedding</h3><p class="small">语义检索后续接入，不拖慢第一版。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-note="最后落到阶段路线：先讲清楚第一阶段只搭骨架，别把所有能力一次做完。">
+      <div>
+        <p class="kicker animate-in">Roadmap</p>
+        <h2 class="animate-in delay-1">第一阶段先让地基跑起来</h2>
+        <div class="grid-3 animate-in delay-2">
+          <div class="card">
+            <span class="tag">Phase 1</span>
+            <h3>Electron + React + .NET</h3>
+            <p class="small">窗口、前端、后端健康检查打通，建立工程骨架。</p>
+          </div>
+          <div class="card">
+            <span class="tag">Phase 2</span>
+            <h3>文本到 JMF 预览</h3>
+            <p class="small">Mock AI、JSON 校验、JMF 渲染、用户确认流。</p>
+          </div>
+          <div class="card">
+            <span class="tag">Phase 3</span>
+            <h3>版本与检索</h3>
+            <p class="small">版本快照、SQLite FTS、索引重建、状态流。</p>
+          </div>
+        </div>
+        <p class="quote animate-in delay-3" style="margin-top: 44px;">先让它成为一个可靠的日记系统，再让它变聪明。</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="controls" aria-label="幻灯片控制">
+    <button id="prev" title="上一页">←</button>
+    <div class="counter" id="counter">01 / 09</div>
+    <button id="next" title="下一页">→</button>
+    <button id="noteToggle" title="讲稿">Notes</button>
+  </div>
+  <aside class="notes" id="notes">
+    <h4>Speaker Notes</h4>
+    <p id="noteText"></p>
+  </aside>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const counter = document.getElementById("counter");
+    const progress = document.getElementById("progress");
+    const notes = document.getElementById("notes");
+    const noteText = document.getElementById("noteText");
+    const requestedSlide = Number(new URLSearchParams(window.location.search).get("slide"));
+    let index = Number.isFinite(requestedSlide) && requestedSlide > 0
+      ? requestedSlide - 1
+      : Number(localStorage.getItem("journalProductStory.index") || 0);
+    let notesVisible = false;
+
+    function clampIndex(value) {
+      return Math.max(0, Math.min(slides.length - 1, value));
+    }
+
+    function show(nextIndex) {
+      index = clampIndex(nextIndex);
+      slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+      counter.textContent = `${String(index + 1).padStart(2, "0")} / ${String(slides.length).padStart(2, "0")}`;
+      progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+      noteText.textContent = slides[index].dataset.note || "";
+      localStorage.setItem("journalProductStory.index", String(index));
+    }
+
+    document.getElementById("prev").addEventListener("click", () => show(index - 1));
+    document.getElementById("next").addEventListener("click", () => show(index + 1));
+    document.getElementById("noteToggle").addEventListener("click", () => {
+      notesVisible = !notesVisible;
+      notes.classList.toggle("show", notesVisible);
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+        event.preventDefault();
+        show(index + 1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        show(index - 1);
+      }
+      if (event.key.toLowerCase() === "n") {
+        notesVisible = !notesVisible;
+        notes.classList.toggle("show", notesVisible);
+      }
+      if (event.key === "Home") show(0);
+      if (event.key === "End") show(slides.length - 1);
+    });
+
+    show(index);
+  </script>
+</body>
+</html>
