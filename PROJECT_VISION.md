@@ -624,6 +624,8 @@ Journal/
 
 目标是让 Electron 前端和 .NET 后端在本地跑起来，并建立可持续迭代的工程骨架。
 
+> 执行策略：阶段 1 已确认采用 B 方案：工程化薄壳闭环。开发期先使用 .NET API 与 Electron/Vite 双进程联通，不在本阶段处理 Electron 托管 .NET 后端进程。
+
 产物：
 
 - Electron + React + TypeScript 前端应用。
