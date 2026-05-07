@@ -66,6 +66,20 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Contains("http://localhost:5173", origins);
     }
 
+    [Fact]
+    public async Task HealthEndpoint_AllowsLoopbackDesktopDevelopmentOrigin()
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+        request.Headers.Add("Origin", "http://127.0.0.1:5173");
+
+        using var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
+        Assert.Contains("http://127.0.0.1:5173", origins);
+    }
+
     private sealed record HealthResponse(
         string App,
         string Status,
