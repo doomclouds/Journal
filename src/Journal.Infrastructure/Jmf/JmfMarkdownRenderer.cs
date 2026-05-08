@@ -100,6 +100,7 @@ public static class JmfMarkdownRenderer
     private static bool NeedsYamlQuotes(string value) =>
         char.IsWhiteSpace(value[0])
         || char.IsWhiteSpace(value[^1])
+        || char.IsDigit(value[0])
         || YamlLeadingIndicatorCharacters.Contains(value[0], StringComparison.Ordinal)
         || ContainsYamlFlowIndicator(value)
         || value.Contains(':', StringComparison.Ordinal)

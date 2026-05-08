@@ -90,8 +90,8 @@ public sealed class MockAiAndJmfTests
 
         Assert.Contains("---", markdown);
         Assert.Contains("schema: journal-entry/v1", markdown);
-        Assert.Contains("date: 2026-05-08", markdown);
-        Assert.Contains("month_day: 05-08", markdown);
+        Assert.Contains("date: \"2026-05-08\"", markdown);
+        Assert.Contains("month_day: \"05-08\"", markdown);
         Assert.Contains("status: draft", markdown);
         Assert.Contains("tags:", markdown);
         Assert.Contains("  - 工程", markdown);
@@ -180,6 +180,25 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("  - \"true\"", markdown);
         Assert.Contains("  - \"null\"", markdown);
         Assert.Contains("mood: \" trailing \"", markdown);
+    }
+
+    [Fact]
+    public void JmfMarkdownRenderer_QuotesNumericAndDateLikeYamlScalars()
+    {
+        var aiJson = CreateAiJson(
+            tags: ["2026", "3.14"],
+            topics: ["2026-05-08", "05-08"],
+            mood: "001");
+
+        var markdown = JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
+
+        Assert.Contains("date: \"2026-05-08\"", markdown);
+        Assert.Contains("month_day: \"05-08\"", markdown);
+        Assert.Contains("  - \"2026\"", markdown);
+        Assert.Contains("  - \"3.14\"", markdown);
+        Assert.Contains("  - \"2026-05-08\"", markdown);
+        Assert.Contains("  - \"05-08\"", markdown);
+        Assert.Contains("mood: \"001\"", markdown);
     }
 
     [Fact]
