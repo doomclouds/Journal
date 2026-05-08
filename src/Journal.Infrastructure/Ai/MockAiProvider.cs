@@ -5,6 +5,8 @@ namespace Journal.Infrastructure.Ai;
 
 public sealed class MockAiProvider : IJournalAiProvider
 {
+    private const string Schema = "journal-entry/v1";
+
     private static readonly Regex TagRegex = new(@"(?<![\p{L}\p{N}_])#([\p{L}\p{N}_-]+)", RegexOptions.Compiled);
 
     private static readonly string[] YesterdayKeywords = ["昨天", "昨晚", "上次", "完成了"];
@@ -27,7 +29,7 @@ public sealed class MockAiProvider : IJournalAiProvider
         var tags = ExtractTags(inputTexts);
 
         return new JournalAiJson(
-            "journal.v1",
+            Schema,
             date.IsoDate,
             date.MonthDay,
             "draft",

@@ -5,13 +5,15 @@ namespace Journal.Infrastructure.Jmf;
 
 public static class JournalAiJsonValidator
 {
+    private const string RequiredSchema = "journal-entry/v1";
+
     public static JournalAiValidationResult Validate(JournalAiJson aiJson)
     {
         var errors = new List<string>();
 
-        if (!string.Equals(aiJson.Schema, "journal.v1", StringComparison.Ordinal))
+        if (!string.Equals(aiJson.Schema, RequiredSchema, StringComparison.Ordinal))
         {
-            errors.Add("schema must be journal.v1.");
+            errors.Add("schema must be journal-entry/v1.");
         }
 
         if (!DateOnly.TryParseExact(aiJson.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))

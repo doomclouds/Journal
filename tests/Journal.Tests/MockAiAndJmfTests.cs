@@ -21,7 +21,7 @@ public sealed class MockAiAndJmfTests
 
         var aiJson = new MockAiProvider().Generate(date, inputs, generatedAt);
 
-        Assert.Equal("journal.v1", aiJson.Schema);
+        Assert.Equal("journal-entry/v1", aiJson.Schema);
         Assert.Equal("2026-05-08", aiJson.Date);
         Assert.Equal("05-08", aiJson.MonthDay);
         Assert.Equal("draft", aiJson.Status);
@@ -39,7 +39,7 @@ public sealed class MockAiAndJmfTests
     public void JournalAiJsonValidator_ReturnsInvalidWhenRequiredSectionsAreMissing()
     {
         var aiJson = new JournalAiJson(
-            "journal.v1",
+            "legacy-schema",
             "2026-05-08",
             "05-08",
             "draft",
@@ -54,9 +54,19 @@ public sealed class MockAiAndJmfTests
         var result = JournalAiJsonValidator.Validate(aiJson);
 
         Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("schema must be journal-entry/v1", StringComparison.Ordinal));
         Assert.Contains(result.Errors, error => error.Contains("rawInputs", StringComparison.Ordinal));
         Assert.Contains(result.Errors, error => error.Contains("yesterdayReview", StringComparison.Ordinal));
         Assert.Contains(result.Errors, error => error.Contains("todayFocus", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void JournalAiJsonValidator_AcceptsJournalEntryV1Schema()
+    {
+        var result = JournalAiJsonValidator.Validate(CreateAiJson());
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Errors);
     }
 
     [Fact]
@@ -64,7 +74,7 @@ public sealed class MockAiAndJmfTests
     {
         var generatedAt = DateTimeOffset.Parse("2026-05-08T09:30:00+08:00");
         var aiJson = new JournalAiJson(
-            "journal.v1",
+            "journal-entry/v1",
             "2026-05-08",
             "05-08",
             "draft",
@@ -76,12 +86,7 @@ public sealed class MockAiAndJmfTests
             ["实现 JMF renderer。"],
             ["可以让 Markdown 稳定可读。"]);
 
-        var markdown = JmfMarkdownRenderer.Render(
-            aiJson,
-            provider: "mock",
-            model: "mock-deterministic",
-            promptVersion: "jmf-mock-v1",
-            generatedAt);
+        var markdown = JmfMarkdownRenderer.Render(aiJson, generatedAt);
 
         Assert.Contains("---", markdown);
         Assert.Contains("schema: journal-entry/v1", markdown);
@@ -95,8 +100,8 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("mood: 有推进感", markdown);
         Assert.Contains("version: 1", markdown);
         Assert.Contains("provider: mock", markdown);
-        Assert.Contains("model: mock-deterministic", markdown);
-        Assert.Contains("prompt_version: jmf-mock-v1", markdown);
+        Assert.Contains("model: mock-journal", markdown);
+        Assert.Contains("prompt_version: mock-journal-entry-v1", markdown);
         Assert.Contains("generated_at: \"2026-05-08T09:30:00.0000000+08:00\"", markdown);
         Assert.Contains("<!-- journal:section raw-inputs -->", markdown);
         Assert.Contains("<!-- /journal:section raw-inputs -->", markdown);
@@ -117,9 +122,6 @@ public sealed class MockAiAndJmfTests
     {
         var markdown = JmfMarkdownRenderer.Render(
             CreateAiJson(schema: "untrusted-ai-schema"),
-            provider: "mock",
-            model: "mock-deterministic",
-            promptVersion: "jmf-mock-v1",
             DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
 
         Assert.Contains("schema: journal-entry/v1", markdown);
@@ -134,20 +136,15 @@ public sealed class MockAiAndJmfTests
             topics: ["quote \"topic\"", "path C:\\journal\\today"],
             mood: "平静\n继续");
 
-        var markdown = JmfMarkdownRenderer.Render(
-            aiJson,
-            provider: "mock:local",
-            model: "model \"quoted\"",
-            promptVersion: "prompt\\v1\r\nnext",
-            DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
+        var markdown = JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
 
         Assert.Contains("  - \"tag:with-colon\"", markdown);
         Assert.Contains("  - \"quote \\\"topic\\\"\"", markdown);
         Assert.Contains("  - \"path C:\\\\journal\\\\today\"", markdown);
         Assert.Contains("mood: \"平静\\n继续\"", markdown);
-        Assert.Contains("provider: \"mock:local\"", markdown);
-        Assert.Contains("model: \"model \\\"quoted\\\"\"", markdown);
-        Assert.Contains("prompt_version: \"prompt\\\\v1\\nnext\"", markdown);
+        Assert.Contains("provider: mock", markdown);
+        Assert.Contains("model: mock-journal", markdown);
+        Assert.Contains("prompt_version: mock-journal-entry-v1", markdown);
     }
 
     [Fact]
@@ -160,12 +157,7 @@ public sealed class MockAiAndJmfTests
             todayFocus: ["今天继续"],
             inspiration: ["可以保留灵感 closing marker"]);
 
-        var markdown = JmfMarkdownRenderer.Render(
-            aiJson,
-            provider: "mock",
-            model: "mock-deterministic",
-            promptVersion: "jmf-mock-v1",
-            DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
+        var markdown = JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
 
         Assert.Equal(8, CountSectionMarkers(markdown));
         Assert.Contains("<!-- journal:section inspiration -->", markdown);
@@ -177,7 +169,7 @@ public sealed class MockAiAndJmfTests
     }
 
     private static JournalAiJson CreateAiJson(
-        string schema = "journal.v1",
+        string schema = "journal-entry/v1",
         IReadOnlyList<string>? tags = null,
         IReadOnlyList<string>? topics = null,
         string mood = "有推进感",

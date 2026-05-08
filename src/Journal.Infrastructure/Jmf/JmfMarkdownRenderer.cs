@@ -6,12 +6,12 @@ namespace Journal.Infrastructure.Jmf;
 public static class JmfMarkdownRenderer
 {
     private const string DocumentSchema = "journal-entry/v1";
+    private const string Provider = "mock";
+    private const string Model = "mock-journal";
+    private const string PromptVersion = "mock-journal-entry-v1";
 
     public static string Render(
         JournalAiJson aiJson,
-        string provider,
-        string model,
-        string promptVersion,
         DateTimeOffset generatedAt)
     {
         var builder = new StringBuilder();
@@ -25,9 +25,9 @@ public static class JmfMarkdownRenderer
         AppendList(builder, "topics", aiJson.Topics);
         AppendScalar(builder, "mood", aiJson.Mood);
         builder.AppendLine("version: 1");
-        AppendScalar(builder, "provider", provider);
-        AppendScalar(builder, "model", model);
-        AppendScalar(builder, "prompt_version", promptVersion);
+        AppendScalar(builder, "provider", Provider);
+        AppendScalar(builder, "model", Model);
+        AppendScalar(builder, "prompt_version", PromptVersion);
         AppendScalar(builder, "generated_at", generatedAt.ToString("O"));
         builder.AppendLine("---");
         builder.AppendLine();
