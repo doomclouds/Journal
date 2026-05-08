@@ -1,105 +1,240 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  addTodayInput,
+  confirmTodayDraft,
+  getHealth,
+  getToday,
+  type HealthResponse,
+  type TodayJournalState
+} from "./api";
+import { MarkdownPreview } from "./MarkdownPreview";
 import "./styles.css";
 
-type ApiStatus = "checking" | "online" | "offline";
+type LoadState = "loading" | "ready" | "error";
 
-type HealthResponse = {
-  app: string;
-  status: string;
-  version: string;
-  environment: string;
-  serverTime: string;
-};
+function getErrorMessage(caught: unknown) {
+  return caught instanceof Error ? caught.message : "unknown error";
+}
 
-const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
+function formatRawInputTime(value: string) {
+  const time = value.match(/T(\d{2}:\d{2})/);
+  return time?.[1] ?? value;
+}
 
 export default function App() {
-  const [status, setStatus] = useState<ApiStatus>("checking");
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string>("");
-
-  const today = useMemo(() => {
-    return new Intl.DateTimeFormat("zh-CN", {
-      dateStyle: "full"
-    }).format(new Date());
-  }, []);
+  const [today, setToday] = useState<TodayJournalState | null>(null);
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadHealth() {
+    async function load() {
       try {
-        const response = await fetch(`${apiBaseUrl}/health`);
-        if (!response.ok) {
-          throw new Error(`health check failed: ${response.status}`);
-        }
-
-        const payload = await response.json() as HealthResponse;
+        const [healthResult, todayResult] = await Promise.all([getHealth(), getToday()]);
         if (!cancelled) {
-          setHealth(payload);
-          setStatus("online");
+          setHealth(healthResult);
+          setToday(todayResult);
+          setLoadState("ready");
           setError("");
         }
       } catch (caught) {
         if (!cancelled) {
-          setStatus("offline");
-          setHealth(null);
-          setError(caught instanceof Error ? caught.message : "unknown error");
+          setLoadState("error");
+          setError(getErrorMessage(caught));
         }
       }
     }
 
-    loadHealth();
+    load();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
+  const title = useMemo(() => {
+    return today ? `${today.date.isoDate} 晨间日记` : "今日晨间日记";
+  }, [today]);
+
+  const canConfirm = today?.status === "reviewing" && today.draft !== null;
+  const markdown = today?.draft?.markdown ?? today?.entry?.markdown ?? "";
+  const statusLabel = today?.status ?? loadState;
+  const inputCount = today?.rawInputs.length ?? 0;
+  const attentionErrors = [
+    ...(today?.errors ?? []),
+    ...(today?.draft?.status === "attention" ? today.draft.errors : [])
+  ];
+  const uniqueAttentionErrors = Array.from(new Set(attentionErrors));
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedInput = input.trim();
+
+    if (!trimmedInput) {
+      setError("请输入一段今天的自然语言内容。");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const next = await addTodayInput(trimmedInput);
+      setToday(next);
+      setInput("");
+      setError("");
+      setLoadState("ready");
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleConfirm() {
+    setIsSubmitting(true);
+    try {
+      const next = await confirmTodayDraft();
+      setToday(next);
+      setError("");
+      setLoadState("ready");
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function focusInput() {
+    document.getElementById("today-input")?.focus();
+  }
+
   return (
-    <main className="app-shell">
-      <section className="hero-panel">
-        <p className="eyebrow">Phase 1 Skeleton</p>
-        <h1>Journal</h1>
-        <p className="lead">每天 3 分钟的人生坐标系统，先从一个稳定的桌面工程骨架开始。</p>
-      </section>
-
-      <section className="status-panel" aria-label="应用状态">
-        <div className="status-row">
-          <span>今天</span>
-          <strong>{today}</strong>
+    <main className="today-shell">
+      <header className="top-context">
+        <div className="title-block">
+          <span className="eyebrow">Journal</span>
+          <h1>{title}</h1>
         </div>
-        <div className="status-row">
-          <span>API 状态</span>
-          <strong className={`status status-${status}`}>{status}</strong>
+        <div className="status-strip" aria-label="运行状态">
+          <span className={`status-pill status-${statusLabel}`}>{statusLabel}</span>
+          <span className="api-pill">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
         </div>
-        {health ? (
-          <dl className="health-grid">
-            <div>
-              <dt>服务</dt>
-              <dd>{health.app}</dd>
-            </div>
-            <div>
-              <dt>版本</dt>
-              <dd>{health.version}</dd>
-            </div>
-            <div>
-              <dt>环境</dt>
-              <dd>{health.environment}</dd>
-            </div>
-            <div>
-              <dt>服务端时间</dt>
-              <dd>{health.serverTime}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="error-text">{status === "checking" ? "正在检查本地 API..." : error}</p>
-        )}
-      </section>
+      </header>
 
-      <section className="next-panel">
-        <span>Next</span>
-        <p>阶段 2：自然语言文本 -&gt; Mock AI JSON -&gt; JMF Markdown 预览。</p>
+      {error ? (
+        <p className="api-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <section className="workspace">
+        <aside className="context-rail" aria-label="今日上下文">
+          <section className="rail-block date-block">
+            <span className="rail-label">Today</span>
+            <strong>{today?.date.monthDay ?? "--"}</strong>
+            <p>{today?.date.markdownFileName ?? "读取中"}</p>
+          </section>
+
+          <section className="rail-block">
+            <div className="section-head">
+              <h2>Raw inputs</h2>
+              <span>{inputCount} 条</span>
+            </div>
+            {inputCount > 0 ? (
+              <ol className="raw-list">
+                {today?.rawInputs.map(raw => (
+                  <li key={raw.id}>
+                    <strong>{formatRawInputTime(raw.createdAt)}</strong>
+                    <p>{raw.text}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="muted">今天还没有原始输入。</p>
+            )}
+          </section>
+        </aside>
+
+        <section className="journal-stage" aria-label="日记预览">
+          <div className="compact-actions" aria-label="紧凑窗口操作">
+            <button type="button" className="secondary-action" onClick={focusInput}>
+              补充输入
+            </button>
+            {canConfirm ? (
+              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isSubmitting}>
+                确认保存
+              </button>
+            ) : null}
+          </div>
+
+          <article className="journal-paper">
+            {loadState === "loading" ? <p className="empty-paper">正在读取今天的日记状态...</p> : null}
+            {loadState === "error" && !markdown ? <p className="empty-paper">还没有草稿</p> : null}
+            {markdown ? <MarkdownPreview markdown={markdown} /> : null}
+            {loadState !== "loading" && loadState !== "error" && !markdown ? (
+              <p className="empty-paper">还没有草稿</p>
+            ) : null}
+          </article>
+        </section>
+
+        <aside className="input-dock" aria-label="输入与确认">
+          <section className="dock-block input-block">
+            <div className="section-head">
+              <h2>补充今天</h2>
+              <span>raw input</span>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <label htmlFor="today-input">补充今天的自然语言输入</label>
+              <textarea
+                id="today-input"
+                value={input}
+                onChange={event => setInput(event.target.value)}
+                placeholder="例如：昨天把阶段 1 跑通了，今天准备做 JMF 主链路。"
+                rows={8}
+              />
+              <button type="submit" className="primary-action" disabled={isSubmitting}>
+                生成草稿
+              </button>
+            </form>
+          </section>
+
+          {uniqueAttentionErrors.length > 0 ? (
+            <section className="dock-block attention-panel" aria-label="需要处理">
+              <div className="section-head">
+                <h2>需要处理</h2>
+                <span>需处理</span>
+              </div>
+              <ul>
+                {uniqueAttentionErrors.map(item => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {canConfirm ? (
+            <section className="confirm-panel" aria-label="草稿确认">
+              <strong>草稿可以确认</strong>
+              <p>确认后更新当天正式 Markdown；阶段 2 不创建版本快照。</p>
+              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isSubmitting}>
+                确认写入正式日记
+              </button>
+            </section>
+          ) : null}
+
+          {today?.entry ? (
+            <section className="dock-block path-panel">
+              <div className="section-head">
+                <h2>正式文件</h2>
+                <span>已写入</span>
+              </div>
+              <p>{today.entry.path}</p>
+            </section>
+          ) : null}
+        </aside>
       </section>
     </main>
   );

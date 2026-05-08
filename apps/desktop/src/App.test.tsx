@@ -124,8 +124,8 @@ describe("App", () => {
     expect(screen.getByText("empty")).toBeInTheDocument();
     expect(screen.getByLabelText("补充今天的自然语言输入")).toBeInTheDocument();
     expect(screen.getByText("还没有草稿")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:5057/health");
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today");
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:5057/health", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today", undefined);
   });
 
   test("shows reviewing draft after submitting input", async () => {
@@ -142,8 +142,22 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
     expect(await screen.findByText("reviewing")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认写入日记" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认写入正式日记" })).toBeInTheDocument();
     expect(screen.getByTestId("markdown-preview")).toHaveTextContent("今天完成 Phase 2 API 连接");
+  });
+
+  test("shows validation message for empty input", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: emptyToday }
+    ]);
+
+    render(<App />);
+
+    await screen.findByLabelText("补充今天的自然语言输入");
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    expect(await screen.findByText("请输入一段今天的自然语言内容。")).toBeInTheDocument();
   });
 
   test("shows attention errors without confirm action", async () => {
@@ -156,7 +170,7 @@ describe("App", () => {
 
     expect(await screen.findByText("attention")).toBeInTheDocument();
     expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "确认写入日记" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认写入正式日记" })).not.toBeInTheDocument();
   });
 
   test("shows processed entry path after confirming reviewing draft", async () => {
@@ -169,7 +183,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "确认写入日记" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认写入正式日记" }));
 
     await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
     expect(screen.getByText(entryPath)).toBeInTheDocument();
