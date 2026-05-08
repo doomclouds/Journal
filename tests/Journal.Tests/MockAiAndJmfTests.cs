@@ -111,6 +111,11 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("<!-- /journal:section today-focus -->", markdown);
         Assert.Contains("<!-- journal:section mood -->", markdown);
         Assert.Contains("<!-- journal:section inspiration -->", markdown);
+        Assert.Contains("## 原始输入", markdown);
+        Assert.Contains("## 昨日回顾", markdown);
+        Assert.Contains("## 今日重点", markdown);
+        Assert.Contains("## 情绪", markdown);
+        Assert.Contains("## 灵感", markdown);
         Assert.Contains("- 昨天完成了存储骨架 #工程", markdown);
         Assert.Contains("- 完成了 Task 1/2 依赖。", markdown);
         Assert.Contains("- 实现 JMF renderer。", markdown);

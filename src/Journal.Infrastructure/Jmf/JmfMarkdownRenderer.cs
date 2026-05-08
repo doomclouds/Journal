@@ -32,18 +32,18 @@ public static class JmfMarkdownRenderer
         builder.AppendLine("---");
         builder.AppendLine();
 
-        AppendSection(builder, "raw-inputs", "Raw Inputs", aiJson.RawInputs);
-        AppendSection(builder, "yesterday-review", "Yesterday Review", aiJson.YesterdayReview);
-        AppendSection(builder, "today-focus", "Today Focus", aiJson.TodayFocus);
+        AppendSection(builder, "raw-inputs", "原始输入", aiJson.RawInputs);
+        AppendSection(builder, "yesterday-review", "昨日回顾", aiJson.YesterdayReview);
+        AppendSection(builder, "today-focus", "今日重点", aiJson.TodayFocus);
 
         if (!string.IsNullOrWhiteSpace(aiJson.Mood) && !string.Equals(aiJson.Mood, "未标注", StringComparison.Ordinal))
         {
-            AppendSection(builder, "mood", "Mood", [aiJson.Mood]);
+            AppendSection(builder, "mood", "情绪", [aiJson.Mood]);
         }
 
         if (aiJson.Inspiration.Count > 0 && aiJson.Inspiration.Any(item => !string.IsNullOrWhiteSpace(item)))
         {
-            AppendSection(builder, "inspiration", "Inspiration", aiJson.Inspiration);
+            AppendSection(builder, "inspiration", "灵感", aiJson.Inspiration);
         }
 
         return builder.ToString();
