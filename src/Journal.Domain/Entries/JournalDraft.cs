@@ -4,6 +4,6 @@ public sealed record JournalDraft(
     JournalDate Date,
     JournalStatus Status,
     string Markdown,
-    IReadOnlyList<Guid> SourceRawInputIds,
+    IReadOnlyList<string> SourceRawInputIds,
     IReadOnlyList<string> Errors,
     DateTimeOffset UpdatedAt);

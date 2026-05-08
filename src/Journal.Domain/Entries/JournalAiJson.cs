@@ -2,13 +2,13 @@ namespace Journal.Domain.Entries;
 
 public sealed record JournalAiJson(
     string Schema,
-    JournalDate Date,
+    string Date,
     string MonthDay,
-    JournalStatus Status,
+    string Status,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Topics,
     string Mood,
     IReadOnlyList<string> RawInputs,
-    string YesterdayReview,
-    string TodayFocus,
-    string Inspiration);
+    IReadOnlyList<string> YesterdayReview,
+    IReadOnlyList<string> TodayFocus,
+    IReadOnlyList<string> Inspiration);
