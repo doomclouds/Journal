@@ -132,18 +132,27 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  test("disables submit while initial today load is pending", async () => {
+  test("prevents stale initial load race by disabling submit until getToday resolves", async () => {
     const healthDeferred = createDeferred<Response>();
     const todayDeferred = createDeferred<Response>();
+    const submitDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
       .mockReturnValueOnce(healthDeferred.promise)
-      .mockReturnValueOnce(todayDeferred.promise);
+      .mockReturnValueOnce(todayDeferred.promise)
+      .mockReturnValueOnce(submitDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    const input = screen.getByLabelText("补充今天的自然语言输入");
+    const submitButton = screen.getByRole("button", { name: "生成草稿" });
+
+    fireEvent.change(input, { target: { value: "初始加载未完成时不能提交" } });
+    fireEvent.click(submitButton);
+
+    expect(submitButton).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     healthDeferred.resolve({
       ok: true,
@@ -156,7 +165,18 @@ describe("App", () => {
       json: async () => emptyToday
     } as Response);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "生成草稿" })).toBeEnabled());
+    await waitFor(() => expect(submitButton).toBeEnabled());
+
+    fireEvent.change(input, { target: { value: "今天完成 Phase 2 API 连接" } });
+    fireEvent.click(submitButton);
+
+    expect(submitButton).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    submitDeferred.resolve(mockJsonResponse(reviewingToday));
+
+    expect(await screen.findByText("reviewing")).toBeInTheDocument();
+    expect(screen.getByTestId("markdown-preview")).toHaveTextContent("今天完成 Phase 2 API 连接");
   });
 
   test("renders empty today workbench", async () => {
