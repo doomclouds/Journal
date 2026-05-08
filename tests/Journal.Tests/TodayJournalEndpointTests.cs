@@ -5,6 +5,7 @@ using Journal.Domain.Entries;
 using Journal.Infrastructure.Clock;
 using Journal.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -100,7 +101,7 @@ public sealed class TodayJournalEndpointTests
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
-                builder.ConfigureServices(services =>
+                builder.ConfigureTestServices(services =>
                 {
                     services.RemoveAll<JournalStorageOptions>();
                     services.RemoveAll<IJournalClock>();
