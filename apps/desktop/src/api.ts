@@ -58,25 +58,39 @@ export type HealthResponse = {
 
 const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type ErrorResponse = {
+  error?: unknown;
+};
+
+async function readErrorMessage(response: Response): Promise<string | null> {
+  try {
+    const body = await response.json() as ErrorResponse;
+    return typeof body.error === "string" ? body.error : null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, init);
   if (!response.ok) {
-    throw new Error(`${path} failed: ${response.status}`);
+    const errorMessage = await readErrorMessage(response);
+    throw new Error(errorMessage ?? `${path} failed: ${response.status}`);
   }
 
   return await response.json() as T;
 }
 
 export function getHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>("/health");
+  return requestJson<HealthResponse>("/health");
 }
 
 export function getToday(): Promise<TodayJournalState> {
-  return request<TodayJournalState>("/journal/today");
+  return requestJson<TodayJournalState>("/journal/today");
 }
 
 export function addTodayInput(text: string, source = "text"): Promise<TodayJournalState> {
-  return request<TodayJournalState>("/journal/today/inputs", {
+  return requestJson<TodayJournalState>("/journal/today/inputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -86,7 +100,7 @@ export function addTodayInput(text: string, source = "text"): Promise<TodayJourn
 }
 
 export function confirmTodayDraft(): Promise<TodayJournalState> {
-  return request<TodayJournalState>("/journal/today/draft/confirm", {
+  return requestJson<TodayJournalState>("/journal/today/draft/confirm", {
     method: "POST"
   });
 }

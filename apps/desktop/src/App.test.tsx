@@ -155,7 +155,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText("attention")).toBeInTheDocument();
-    expect(screen.getByText("title is required")).toBeInTheDocument();
+    expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "确认写入日记" })).not.toBeInTheDocument();
   });
 
