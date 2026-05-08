@@ -97,6 +97,20 @@ public sealed class TodayJournalEndpointTests
         Assert.True(File.Exists(paths.EntryPath(date)));
     }
 
+    [Fact]
+    public async Task PostTodayDraftConfirm_WithoutDraft_ReturnsConflict()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/journal/today/draft/confirm", content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("draft does not exist", body, StringComparison.Ordinal);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string root) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
