@@ -5,6 +5,8 @@ namespace Journal.Infrastructure.Jmf;
 
 public static class JmfMarkdownRenderer
 {
+    private const string DocumentSchema = "journal-entry/v1";
+
     public static string Render(
         JournalAiJson aiJson,
         string provider,
@@ -15,7 +17,7 @@ public static class JmfMarkdownRenderer
         var builder = new StringBuilder();
 
         builder.AppendLine("---");
-        AppendScalar(builder, "schema", aiJson.Schema);
+        AppendScalar(builder, "schema", DocumentSchema);
         AppendScalar(builder, "date", aiJson.Date);
         AppendScalar(builder, "month_day", aiJson.MonthDay);
         AppendScalar(builder, "status", aiJson.Status);
@@ -74,7 +76,7 @@ public static class JmfMarkdownRenderer
 
         foreach (var item in items.Where(item => !string.IsNullOrWhiteSpace(item)))
         {
-            builder.Append("- ").AppendLine(item.Trim());
+            builder.Append("- ").AppendLine(SanitizeBullet(item));
         }
 
         builder.AppendLine($"<!-- /journal:section {marker} -->");
@@ -88,8 +90,32 @@ public static class JmfMarkdownRenderer
             return "\"\"";
         }
 
-        return value.Contains(':', StringComparison.Ordinal) || value.Contains('"', StringComparison.Ordinal)
-            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+        return NeedsYamlQuotes(value)
+            ? $"\"{EscapeYamlQuotedValue(value)}\""
             : value;
     }
+
+    private static bool NeedsYamlQuotes(string value) =>
+        value.Contains(':', StringComparison.Ordinal)
+        || value.Contains('"', StringComparison.Ordinal)
+        || value.Contains('\\', StringComparison.Ordinal)
+        || value.Contains('\r', StringComparison.Ordinal)
+        || value.Contains('\n', StringComparison.Ordinal);
+
+    private static string EscapeYamlQuotedValue(string value) =>
+        value
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\r", "\n", StringComparison.Ordinal)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+    private static string SanitizeBullet(string value) =>
+        value
+            .Trim()
+            .Replace("\r\n", " ", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("<!--", "&lt;!--", StringComparison.Ordinal)
+            .Replace("-->", "--&gt;", StringComparison.Ordinal);
 }
