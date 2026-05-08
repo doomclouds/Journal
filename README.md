@@ -6,6 +6,7 @@
 
 - [项目愿景](./PROJECT_VISION.md)
 - [阶段 1 设计](./docs/superpowers/specs/2026-05-07-phase-1-skeleton-design.md)
+- [阶段 2 设计](./docs/superpowers/specs/2026-05-08-phase-2-jmf-generation-confirmation-design.md)
 - [产品故事演示](./docs/product/journal-product-story.html)
 
 ## 阶段 1：应用框架骨架
@@ -19,6 +20,22 @@
 - Markdown/JMF 生成
 - SQLite 索引
 - 安装包
+
+## 阶段 2：JMF 生成确认 MVP
+
+阶段 2 只打通今日晨间日记主链路：
+
+```text
+自然语言输入 -> Mock AI JSON -> JMF Markdown 草稿 -> 用户确认 -> 正式 Markdown 文件
+```
+
+本阶段默认将开发期数据写入：
+
+```text
+%LocalAppData%/Journal/
+```
+
+阶段 2 不包含块编辑模式、源码模式、版本快照、SQLite 索引和真实 AI Provider。这些能力按新路线图进入后续阶段。
 
 ## 环境要求
 

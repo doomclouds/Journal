@@ -1,0 +1,1250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <!--
+    Phase 2 Today Workbench prototype v3.
+    Design correction from user review:
+    - The diary is the product center. Input and Mock AI controls are auxiliary.
+    - The central surface follows mature writing apps: focused document canvas first, tools second.
+    - References reviewed: Day One for journaling states and memories, Bear for warm minimal writing,
+      iA Writer for editor/preview focus, Obsidian for source/live-preview separation.
+    - Local product story assets informed the softer paper, flow, and confirmation treatment.
+    - V3 adds realistic Electron sizing: 1360+ wide three-column, 1180 default two-column,
+      and 960 minimum compact single-column behavior.
+    - This remains design material only. It is not production frontend code.
+  -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Journal Phase 2 Today Workbench Prototype</title>
+  <style>
+    :root {
+      --bg: #f3f0e8;
+      --bg-cool: #e8eeeb;
+      --paper: #fffdf7;
+      --paper-soft: #faf6ee;
+      --ink: #22241f;
+      --ink-2: #45483f;
+      --muted: #85877b;
+      --line: rgba(38, 42, 34, 0.13);
+      --line-strong: rgba(38, 42, 34, 0.22);
+      --sage: #6f8a77;
+      --sage-dark: #2f604a;
+      --blue: #52697c;
+      --sun: #b68642;
+      --clay: #b46a55;
+      --red: #8d4038;
+      --shadow-soft: 0 20px 60px rgba(43, 38, 30, 0.10);
+      --shadow-paper: 0 28px 80px rgba(47, 42, 32, 0.15);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 960px;
+      min-height: 100vh;
+      background:
+        linear-gradient(120deg, rgba(111, 138, 119, 0.15), transparent 38%),
+        linear-gradient(180deg, #fbfaf5 0%, var(--bg) 48%, var(--bg-cool) 100%);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .app {
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .shell {
+      min-height: calc(100vh - 36px);
+      display: grid;
+      grid-template-rows: 64px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      background: rgba(255, 253, 247, 0.68);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 20px;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.78);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand strong {
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .today-line {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 11px;
+      min-width: 0;
+      color: var(--ink-2);
+      font-size: 14px;
+    }
+
+    .today-line b {
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--sage-dark);
+      box-shadow: 0 0 0 4px rgba(47, 96, 74, 0.12);
+    }
+
+    .state-tabs,
+    .view-tabs {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      background: #ebe5d9;
+    }
+
+    .state-tabs button,
+    .view-tabs button {
+      height: 32px;
+      min-width: 86px;
+      padding: 0 12px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .state-tabs button[aria-pressed="true"],
+    .view-tabs button[aria-pressed="true"] {
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: 0 8px 22px rgba(43, 38, 30, 0.08);
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 318px;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .left-rail,
+    .tool-dock {
+      min-width: 0;
+      border-color: var(--line);
+    }
+
+    .left-rail {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr) 230px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(236, 232, 221, 0.70);
+    }
+
+    .date-card {
+      padding: 18px 18px 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .date-card .month {
+      margin: 0 0 8px;
+      color: var(--sun);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .date-card h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .date-card h1 span {
+      display: block;
+      margin-top: 8px;
+      color: var(--ink-2);
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .state-pill {
+      display: inline-flex;
+      margin-top: 12px;
+      padding: 7px 10px;
+      color: var(--sage-dark);
+      background: rgba(111, 138, 119, 0.13);
+      border: 1px solid rgba(111, 138, 119, 0.25);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .state-pill.attention {
+      color: var(--red);
+      background: rgba(180, 106, 85, 0.12);
+      border-color: rgba(180, 106, 85, 0.28);
+    }
+
+    .state-pill.processed {
+      color: var(--blue);
+      background: rgba(82, 105, 124, 0.11);
+      border-color: rgba(82, 105, 124, 0.25);
+    }
+
+    .rail-section {
+      min-width: 0;
+      padding: 16px 18px;
+      border-right: 1px solid var(--line);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .section-head h2,
+    .dock-head h2 {
+      margin: 0;
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    .section-head span,
+    .dock-head span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .memory-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .memory-item {
+      padding: 11px;
+      border: 1px solid rgba(38, 42, 34, 0.10);
+      background: rgba(255, 253, 247, 0.62);
+    }
+
+    .memory-item strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .memory-item p {
+      margin: 0;
+      color: var(--ink-2);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .tiny-path {
+      display: none;
+      margin-top: auto;
+      padding: 18px 20px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+
+    .stage {
+      grid-column: 1;
+      grid-row: 2;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.38), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.25)),
+        rgba(248, 246, 239, 0.84);
+    }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 15px 24px 12px;
+    }
+
+    .compact-actions {
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stage-title {
+      min-width: 0;
+    }
+
+    .stage-title p {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-title h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .document-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 28px 34px;
+    }
+
+    .document {
+      width: min(720px, 100%);
+      min-height: 760px;
+      margin: 0 auto;
+      padding: 42px 52px 52px;
+      border: 1px solid rgba(38, 42, 34, 0.11);
+      background: var(--paper);
+      box-shadow: var(--shadow-paper);
+    }
+
+    .document-header {
+      margin-bottom: 34px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid rgba(38, 42, 34, 0.13);
+    }
+
+    .document-header .kicker {
+      margin: 0 0 12px;
+      color: var(--sun);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .document h1 {
+      margin: 0;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+      font-size: 34px;
+      line-height: 1.24;
+      letter-spacing: 0;
+    }
+
+    .document .subtitle {
+      margin: 14px 0 0;
+      color: var(--ink-2);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .doc-section {
+      margin: 0 0 30px;
+    }
+
+    .doc-section h2 {
+      margin: 0 0 13px;
+      color: var(--sage-dark);
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .doc-section p,
+    .doc-section li {
+      color: #383b35;
+      font-size: 16px;
+      line-height: 1.92;
+    }
+
+    .doc-section p {
+      margin: 0;
+    }
+
+    .doc-section ul {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding-left: 1.2em;
+    }
+
+    .raw-fold {
+      margin: 0 0 12px;
+      padding: 14px 16px;
+      border: 1px solid rgba(38, 42, 34, 0.10);
+      background: var(--paper-soft);
+    }
+
+    .raw-fold summary {
+      color: var(--sun);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .raw-fold p {
+      margin-top: 10px;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tags span {
+      padding: 6px 9px;
+      color: var(--sage-dark);
+      background: rgba(111, 138, 119, 0.12);
+      border: 1px solid rgba(111, 138, 119, 0.22);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .source-paper {
+      display: none;
+      width: min(760px, 100%);
+      min-height: 760px;
+      margin: 0 auto;
+      background: #20231f;
+      color: #eceadd;
+      box-shadow: var(--shadow-paper);
+    }
+
+    .source-paper pre {
+      margin: 0;
+      padding: 34px;
+      overflow: auto;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.72;
+      white-space: pre-wrap;
+    }
+
+    .source-mode .document {
+      display: none;
+    }
+
+    .source-mode .source-paper {
+      display: block;
+    }
+
+    .attention-banner,
+    .processed-banner {
+      display: none;
+      margin: -8px 0 28px;
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .attention-banner {
+      color: var(--red);
+      border: 1px solid rgba(180, 106, 85, 0.30);
+      background: rgba(180, 106, 85, 0.10);
+    }
+
+    .processed-banner {
+      color: var(--blue);
+      border: 1px solid rgba(82, 105, 124, 0.24);
+      background: rgba(82, 105, 124, 0.10);
+    }
+
+    .attention-view .attention-banner,
+    .processed-view .processed-banner {
+      display: block;
+    }
+
+    .tool-dock {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.76);
+    }
+
+    .dock-block {
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .dock-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .capture-box {
+      border: 1px solid var(--line-strong);
+      background: #fffefa;
+    }
+
+    .capture-box textarea {
+      width: 100%;
+      min-height: 156px;
+      padding: 14px;
+      resize: none;
+      border: 0;
+      outline: none;
+      color: var(--ink);
+      background: transparent;
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    .capture-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      background: #faf6ee;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .primary,
+    .secondary {
+      height: 38px;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .primary {
+      color: #fff;
+      background: var(--sage-dark);
+    }
+
+    .primary:hover {
+      background: #244d3a;
+    }
+
+    .secondary {
+      color: var(--ink);
+      background: #ebe5d9;
+      border: 1px solid var(--line);
+    }
+
+    .extraction-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .extraction-list li {
+      display: grid;
+      grid-template-columns: 8px minmax(0, 1fr);
+      gap: 9px;
+      color: var(--ink-2);
+      font-size: 12px;
+      line-height: 1.62;
+    }
+
+    .extraction-list li::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      margin-top: 7px;
+      border-radius: 99px;
+      background: var(--sage);
+    }
+
+    .attention-tools li::before {
+      background: var(--clay);
+    }
+
+    .confirm-panel {
+      margin-top: auto;
+      padding: 20px;
+      border-top: 1px solid var(--line);
+      background: rgba(236, 232, 221, 0.56);
+    }
+
+    .confirm-panel strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .confirm-panel p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .confirm-panel .primary {
+      width: 100%;
+    }
+
+    @media (min-width: 1360px) {
+      .app {
+        padding: 24px;
+      }
+
+      .shell {
+        min-height: calc(100vh - 48px);
+      }
+
+      .workspace {
+        grid-template-columns: 230px minmax(560px, 1fr) 350px;
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      .left-rail {
+        grid-column: auto;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+      }
+
+      .date-card {
+        padding: 26px 20px 22px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .date-card .month {
+        margin-bottom: 10px;
+      }
+
+      .date-card h1 {
+        font-size: 42px;
+        line-height: 0.95;
+      }
+
+      .date-card h1 span {
+        margin-top: 10px;
+      }
+
+      .state-pill {
+        margin-top: 18px;
+      }
+
+      .rail-section {
+        padding: 20px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .memory-list {
+        grid-template-columns: 1fr;
+      }
+
+      .tiny-path {
+        display: block;
+      }
+
+      .stage {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      .stage-toolbar {
+        padding: 18px 28px 14px;
+      }
+
+      .document-scroll {
+        padding: 8px 42px 42px;
+      }
+
+      .document {
+        width: min(780px, 100%);
+        min-height: 900px;
+        padding: 54px 68px 62px;
+      }
+
+      .document h1 {
+        font-size: 38px;
+      }
+
+      .source-paper {
+        width: min(820px, 100%);
+        min-height: 900px;
+      }
+
+      .tool-dock {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      .dock-block {
+        padding: 20px;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .app {
+        padding: 12px;
+      }
+
+      .shell {
+        min-height: calc(100vh - 24px);
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .topbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto;
+        row-gap: 10px;
+        padding: 12px 14px;
+      }
+
+      .today-line {
+        justify-content: flex-start;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        font-size: 13px;
+      }
+
+      .state-tabs {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .workspace {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .left-rail {
+        grid-template-columns: 170px minmax(0, 1fr);
+      }
+
+      .left-rail .rail-section:last-of-type {
+        display: none;
+      }
+
+      .date-card {
+        padding: 14px 16px;
+      }
+
+      .date-card h1 {
+        font-size: 26px;
+      }
+
+      .stage {
+        grid-column: 1;
+        grid-row: 2;
+        min-height: 0;
+      }
+
+      .stage-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        row-gap: 10px;
+        padding: 12px 18px 10px;
+      }
+
+      .compact-actions {
+        display: flex;
+        grid-column: 1 / -1;
+      }
+
+      .compact-actions .primary,
+      .compact-actions .secondary {
+        height: 34px;
+      }
+
+      .document-scroll {
+        padding: 8px 20px 28px;
+      }
+
+      .document {
+        width: min(680px, 100%);
+        min-height: 620px;
+        padding: 36px 42px 46px;
+      }
+
+      .source-paper {
+        width: min(720px, 100%);
+        min-height: 620px;
+      }
+
+      .tool-dock {
+        grid-column: 1;
+        grid-row: 3;
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) 220px;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .tool-dock .dock-block {
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+      }
+
+      .tool-dock .dock-block:nth-of-type(3) {
+        display: none;
+      }
+
+      .capture-box textarea {
+        min-height: 104px;
+      }
+
+      .confirm-panel {
+        margin-top: 0;
+        border-top: 0;
+      }
+    }
+
+    @media (max-height: 720px) {
+      .document {
+        min-height: 560px;
+      }
+
+      .document-header {
+        margin-bottom: 26px;
+      }
+
+      .doc-section {
+        margin-bottom: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="shell" aria-label="Journal 今日工作台原型">
+      <header class="topbar">
+        <div class="brand">
+          <strong>Journal</strong>
+          <span>JMF 生成确认 MVP</span>
+        </div>
+        <div class="today-line">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span><b>2026 年 5 月 8 日</b> · API online · 本地保存</span>
+        </div>
+        <nav class="state-tabs" aria-label="状态示例">
+          <button type="button" data-state="reviewing" aria-pressed="true">预览中</button>
+          <button type="button" data-state="attention" aria-pressed="false">需处理</button>
+          <button type="button" data-state="processed" aria-pressed="false">已保存</button>
+        </nav>
+      </header>
+
+      <div class="workspace">
+        <aside class="left-rail">
+          <section class="date-card">
+            <p class="month">May</p>
+            <h1>08<span>星期五 · 晨间日记</span></h1>
+            <span class="state-pill" id="statePill">reviewing</span>
+          </section>
+
+          <section class="rail-section">
+            <div class="section-head">
+              <h2>今天的上下文</h2>
+              <span>2 条输入</span>
+            </div>
+            <div class="memory-list">
+              <article class="memory-item">
+                <strong>08:12</strong>
+                <p>阶段 1 已跑通，今天准备打通 JMF 主链路。</p>
+              </article>
+              <article class="memory-item">
+                <strong>08:26</strong>
+                <p>有点累，但方向清楚；原始输入不能丢。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="rail-section">
+            <div class="section-head">
+              <h2>文件状态</h2>
+              <span id="fileState">待确认</span>
+            </div>
+            <div class="memory-item">
+              <strong id="fileLabel">草稿</strong>
+              <p id="fileCopy">.journal/drafts/2026/05/2026-05-08.md</p>
+            </div>
+          </section>
+
+          <div class="tiny-path">
+            %LocalAppData%/Journal<br>
+            entries/2026/05/2026-05-08.md<br>
+            .journal/raw-inputs/2026/05/2026-05-08.jsonl
+          </div>
+        </aside>
+
+        <section class="stage" aria-label="日记预览">
+          <div class="stage-toolbar">
+            <div class="stage-title">
+              <p>当前重点</p>
+              <h2>先看日记，再看工具</h2>
+            </div>
+            <div class="view-tabs" aria-label="预览模式">
+              <button type="button" data-view="rendered" aria-pressed="true">日记</button>
+              <button type="button" data-view="source" aria-pressed="false">JMF 原文</button>
+            </div>
+            <div class="compact-actions" aria-label="紧凑窗口操作">
+              <button class="secondary" type="button">补充输入</button>
+              <button class="primary" type="button">确认保存</button>
+            </div>
+          </div>
+
+          <div class="document-scroll" id="documentScroll">
+            <article class="document">
+              <div class="attention-banner">
+                Mock AI 返回的 JSON 缺少必需块，系统已保留原始输入，没有覆盖正式 Markdown。
+              </div>
+              <div class="processed-banner">
+                正式 Markdown 已写入 entries/2026/05/2026-05-08.md。再次输入会生成新的待确认草稿。
+              </div>
+
+              <header class="document-header">
+                <p class="kicker">Morning Journal</p>
+                <h1>2026-05-08 晨间日记</h1>
+                <p class="subtitle">昨天把骨架跑通了，今天把第一条真正的日记生成确认链路做扎实。</p>
+              </header>
+
+              <section class="doc-section">
+                <h2>原始输入</h2>
+                <details class="raw-fold" open>
+                  <summary>08:12 原始表达</summary>
+                  <p>昨天把阶段 1 的骨架跑通了，今天准备把 JMF 主链路做出来。</p>
+                </details>
+                <details class="raw-fold">
+                  <summary>08:26 原始表达</summary>
+                  <p>我有点累，但这个方向挺清楚。要先保证原始输入不丢，预览可以恢复。</p>
+                </details>
+              </section>
+
+              <section class="doc-section">
+                <h2>情绪状态</h2>
+                <p>有点累，但整体方向清楚，推进感稳定。</p>
+              </section>
+
+              <section class="doc-section">
+                <h2>昨日回顾</h2>
+                <ul>
+                  <li>完成阶段 1 工程骨架，前端和本地 API 已经联通。</li>
+                  <li>确认阶段 2 要从 JMF 生成确认链路切入，而不是提前做完整编辑器。</li>
+                </ul>
+              </section>
+
+              <section class="doc-section">
+                <h2>今日重点</h2>
+                <ul>
+                  <li>实现自然语言输入到 JMF Markdown 草稿的主链路。</li>
+                  <li>确保原始输入追加保存，草稿可恢复，正式文件只在确认后更新。</li>
+                </ul>
+              </section>
+
+              <section class="doc-section">
+                <h2>灵感</h2>
+                <ul>
+                  <li>阶段 2 只做生成、预览、确认；编辑器能力单独进入阶段 3。</li>
+                  <li>系统宁可进入 attention，也不能悄悄污染正式日记。</li>
+                </ul>
+              </section>
+
+              <section class="doc-section">
+                <h2>关键词</h2>
+                <div class="tags">
+                  <span>阶段2</span>
+                  <span>JMF</span>
+                  <span>原始输入</span>
+                  <span>草稿恢复</span>
+                </div>
+              </section>
+            </article>
+
+            <article class="source-paper" aria-label="JMF Markdown 原文">
+              <pre>---
+schema: journal-entry/v1
+id: 2026-05-08
+date: 2026-05-08
+month_day: 05-08
+status: reviewing
+tags: [阶段2, JMF, 原始输入, 草稿恢复]
+topics: [产品设计, 工程实现]
+mood: 有点累，但方向清楚
+version: 1
+provider: mock
+model: mock-journal
+prompt_version: mock-journal-entry-v1
+generated_at: 2026-05-08T08:31:20+08:00
+---
+
+# 2026-05-08 晨间日记
+
+&lt;!-- journal:section raw-inputs --&gt;
+## 原始输入
+
+&lt;details&gt;
+&lt;summary&gt;08:12 原始表达&lt;/summary&gt;
+
+昨天把阶段 1 的骨架跑通了，今天准备把 JMF 主链路做出来。
+
+&lt;/details&gt;
+&lt;!-- /journal:section --&gt;
+
+&lt;!-- journal:section mood --&gt;
+## 情绪状态
+
+有点累，但整体方向清楚，推进感稳定。
+
+&lt;!-- /journal:section --&gt;
+
+&lt;!-- journal:section yesterday-review --&gt;
+## 昨日回顾
+
+- 完成阶段 1 工程骨架，前端和本地 API 已经联通。
+- 确认阶段 2 要从 JMF 生成确认链路切入。
+
+&lt;!-- /journal:section --&gt;
+
+&lt;!-- journal:section today-focus --&gt;
+## 今日重点
+
+- 实现自然语言输入到 JMF Markdown 草稿的主链路。
+- 确保原始输入追加保存，草稿可恢复，正式文件只在确认后更新。
+
+&lt;!-- /journal:section --&gt;</pre>
+            </article>
+          </div>
+        </section>
+
+        <aside class="tool-dock" aria-label="辅助输入和生成工具">
+          <section class="dock-block">
+            <div class="dock-head">
+              <h2>补充今天</h2>
+              <span>辅助输入</span>
+            </div>
+            <div class="capture-box">
+              <textarea aria-label="自然语言输入">昨天把阶段 1 的骨架跑通了，今天准备把 JMF 主链路做出来。我有点累，但这个方向挺清楚。要先保证原始输入不丢，预览可以恢复。</textarea>
+              <div class="capture-actions">
+                <span class="hint">追加 raw input，并重新生成今天的草稿</span>
+                <button class="primary" type="button">生成</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="dock-block">
+            <div class="dock-head">
+              <h2>Mock AI 提取</h2>
+              <span id="extractState">4 项</span>
+            </div>
+            <ul class="extraction-list" id="extractList">
+              <li>昨日回顾：阶段 1 工程骨架已经跑通。</li>
+              <li>今日重点：打通 JMF 主链路和草稿确认流程。</li>
+              <li>情绪：有点累，但方向清楚。</li>
+              <li>标签：阶段2、JMF、原始输入、草稿恢复。</li>
+            </ul>
+          </section>
+
+          <section class="dock-block">
+            <div class="dock-head">
+              <h2>设计参考</h2>
+              <span>已吸收</span>
+            </div>
+            <div class="memory-list">
+              <article class="memory-item">
+                <strong>写作优先</strong>
+                <p>中间文档是主角，输入和 AI 退到右侧辅助。</p>
+              </article>
+              <article class="memory-item">
+                <strong>预览优先</strong>
+                <p>默认看渲染日记，JMF 原文作为只读次级视图。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="confirm-panel">
+            <strong id="confirmTitle">草稿可以确认</strong>
+            <p id="confirmText">确认后更新当天正式 Markdown；阶段 2 不创建版本快照。</p>
+            <button class="primary" type="button" id="confirmButton">确认写入正式日记</button>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const states = {
+      reviewing: {
+        pill: "reviewing",
+        pillClass: "",
+        fileState: "待确认",
+        fileLabel: "草稿",
+        fileCopy: ".journal/drafts/2026/05/2026-05-08.md",
+        extractState: "4 项",
+        extractClass: "",
+        items: [
+          "昨日回顾：阶段 1 工程骨架已经跑通。",
+          "今日重点：打通 JMF 主链路和草稿确认流程。",
+          "情绪：有点累，但方向清楚。",
+          "标签：阶段2、JMF、原始输入、草稿恢复。"
+        ],
+        confirmTitle: "草稿可以确认",
+        confirmText: "确认后更新当天正式 Markdown；阶段 2 不创建版本快照。",
+        confirmVisible: true,
+        stageClass: ""
+      },
+      attention: {
+        pill: "attention",
+        pillClass: "attention",
+        fileState: "未写正式文件",
+        fileLabel: "保护中",
+        fileCopy: "entries 没有被覆盖，raw input 已保留",
+        extractState: "需处理",
+        extractClass: "attention-tools",
+        items: [
+          "错误：Mock AI JSON 缺少必需块 todayFocus。",
+          "已保留：2 条原始输入仍在 raw-inputs JSONL。",
+          "保护：正式 Markdown 没有被覆盖。",
+          "下一步：重新生成或补充输入。"
+        ],
+        confirmTitle: "当前草稿不可确认",
+        confirmText: "attention 状态不会写入正式 Markdown，避免污染长期日记资产。",
+        confirmVisible: false,
+        stageClass: "attention-view"
+      },
+      processed: {
+        pill: "processed",
+        pillClass: "processed",
+        fileState: "已写入",
+        fileLabel: "正式文件",
+        fileCopy: "entries/2026/05/2026-05-08.md",
+        extractState: "已保存",
+        extractClass: "",
+        items: [
+          "正式文件：当天 Markdown 已更新。",
+          "raw inputs：2 条原始表达保留。",
+          "draft：当前草稿仍可恢复。",
+          "版本：阶段 2 不创建快照。"
+        ],
+        confirmTitle: "今天的日记已保存",
+        confirmText: "再次输入会追加 raw input，并生成新的待确认草稿。",
+        confirmVisible: false,
+        stageClass: "processed-view"
+      }
+    };
+
+    const stateButtons = Array.from(document.querySelectorAll("[data-state]"));
+    const viewButtons = Array.from(document.querySelectorAll("[data-view]"));
+    const statePill = document.getElementById("statePill");
+    const fileState = document.getElementById("fileState");
+    const fileLabel = document.getElementById("fileLabel");
+    const fileCopy = document.getElementById("fileCopy");
+    const extractState = document.getElementById("extractState");
+    const extractList = document.getElementById("extractList");
+    const confirmTitle = document.getElementById("confirmTitle");
+    const confirmText = document.getElementById("confirmText");
+    const confirmButton = document.getElementById("confirmButton");
+    const documentScroll = document.getElementById("documentScroll");
+
+    function renderItems(items) {
+      extractList.innerHTML = "";
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        extractList.appendChild(li);
+      }
+    }
+
+    function setState(name) {
+      const state = states[name] ?? states.reviewing;
+      stateButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.state === name));
+      });
+      statePill.textContent = state.pill;
+      statePill.className = `state-pill ${state.pillClass}`.trim();
+      fileState.textContent = state.fileState;
+      fileLabel.textContent = state.fileLabel;
+      fileCopy.textContent = state.fileCopy;
+      extractState.textContent = state.extractState;
+      extractList.className = `extraction-list ${state.extractClass}`.trim();
+      confirmTitle.textContent = state.confirmTitle;
+      confirmText.textContent = state.confirmText;
+      confirmButton.style.display = state.confirmVisible ? "block" : "none";
+      documentScroll.classList.remove("attention-view", "processed-view");
+      if (state.stageClass) {
+        documentScroll.classList.add(state.stageClass);
+      }
+      renderItems(state.items);
+    }
+
+    function setView(name) {
+      viewButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.view === name));
+      });
+      documentScroll.classList.toggle("source-mode", name === "source");
+    }
+
+    stateButtons.forEach((button) => {
+      button.addEventListener("click", () => setState(button.dataset.state));
+    });
+
+    viewButtons.forEach((button) => {
+      button.addEventListener("click", () => setView(button.dataset.view));
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    setState(states[params.get("state")] ? params.get("state") : "reviewing");
+    setView(params.get("view") === "source" ? "source" : "rendered");
+  </script>
+</body>
+</html>
