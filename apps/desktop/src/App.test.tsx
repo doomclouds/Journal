@@ -8,6 +8,11 @@ type MockResponse = {
   body: unknown;
 };
 
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+};
+
 const healthResponse = {
   app: "Journal.Api",
   status: "ok",
@@ -103,6 +108,15 @@ function mockFetchSequence(responses: MockResponse[]) {
   return fetchMock;
 }
 
+function createDeferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>(promiseResolve => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -110,6 +124,33 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  test("disables submit while initial today load is pending", async () => {
+    const healthDeferred = createDeferred<Response>();
+    const todayDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(healthDeferred.promise)
+      .mockReturnValueOnce(todayDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+
+    healthDeferred.resolve({
+      ok: true,
+      status: 200,
+      json: async () => healthResponse
+    } as Response);
+    todayDeferred.resolve({
+      ok: true,
+      status: 200,
+      json: async () => emptyToday
+    } as Response);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "生成草稿" })).toBeEnabled());
+  });
+
   test("renders empty today workbench", async () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
@@ -158,6 +199,28 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
     expect(await screen.findByText("请输入一段今天的自然语言内容。")).toBeInTheDocument();
+  });
+
+  test("keeps api error visible when empty input validation fails", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: emptyToday },
+      { ok: false, status: 500, body: { error: "submit failed" } }
+    ]);
+
+    render(<App />);
+
+    const input = await screen.findByLabelText("补充今天的自然语言输入");
+    fireEvent.change(input, { target: { value: "今天 API 会失败" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    expect(await screen.findByText("submit failed")).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    expect(screen.getByText("submit failed")).toBeInTheDocument();
+    expect(screen.getByText("请输入一段今天的自然语言内容。")).toBeInTheDocument();
   });
 
   test("shows attention errors without confirm action", async () => {

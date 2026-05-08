@@ -138,13 +138,23 @@ button:focus-visible {
   color: #8c332b;
 }
 
-.api-error {
+.api-error,
+.validation-error {
   margin: 0;
-  border-left: 4px solid #a84235;
   padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.api-error {
+  border-left: 4px solid #a84235;
   background: rgba(255, 246, 241, 0.86);
   color: #8c332b;
-  line-height: 1.5;
+}
+
+.validation-error {
+  border-left: 4px solid #8a6a2c;
+  background: rgba(255, 250, 232, 0.86);
+  color: #6e5018;
 }
 
 .workspace {

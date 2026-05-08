@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   addTodayInput,
   confirmTodayDraft,
@@ -22,29 +22,33 @@ function formatRawInputTime(value: string) {
 }
 
 export default function App() {
+  const requestIdRef = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [today, setToday] = useState<TodayJournalState | null>(null);
   const [input, setInput] = useState("");
-  const [error, setError] = useState("");
+  const [apiError, setApiError] = useState("");
+  const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
 
     async function load() {
       try {
         const [healthResult, todayResult] = await Promise.all([getHealth(), getToday()]);
-        if (!cancelled) {
+        if (!cancelled && requestId === requestIdRef.current) {
           setHealth(healthResult);
           setToday(todayResult);
           setLoadState("ready");
-          setError("");
+          setApiError("");
         }
       } catch (caught) {
-        if (!cancelled) {
+        if (!cancelled && requestId === requestIdRef.current) {
           setLoadState("error");
-          setError(getErrorMessage(caught));
+          setApiError(getErrorMessage(caught));
         }
       }
     }
@@ -64,6 +68,8 @@ export default function App() {
   const markdown = today?.draft?.markdown ?? today?.entry?.markdown ?? "";
   const statusLabel = today?.status ?? loadState;
   const inputCount = today?.rawInputs.length ?? 0;
+  const isInitialLoading = loadState === "loading";
+  const isBusy = isInitialLoading || isSubmitting;
   const attentionErrors = [
     ...(today?.errors ?? []),
     ...(today?.draft?.status === "attention" ? today.draft.errors : [])
@@ -75,35 +81,53 @@ export default function App() {
     const trimmedInput = input.trim();
 
     if (!trimmedInput) {
-      setError("请输入一段今天的自然语言内容。");
+      setValidationError("请输入一段今天的自然语言内容。");
       return;
     }
 
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setValidationError("");
     setIsSubmitting(true);
     try {
       const next = await addTodayInput(trimmedInput);
-      setToday(next);
-      setInput("");
-      setError("");
-      setLoadState("ready");
+      if (requestId === requestIdRef.current) {
+        setToday(next);
+        setInput("");
+        setApiError("");
+        setLoadState("ready");
+      }
     } catch (caught) {
-      setError(getErrorMessage(caught));
+      if (requestId === requestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
     } finally {
-      setIsSubmitting(false);
+      if (requestId === requestIdRef.current) {
+        setIsSubmitting(false);
+      }
     }
   }
 
   async function handleConfirm() {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setValidationError("");
     setIsSubmitting(true);
     try {
       const next = await confirmTodayDraft();
-      setToday(next);
-      setError("");
-      setLoadState("ready");
+      if (requestId === requestIdRef.current) {
+        setToday(next);
+        setApiError("");
+        setLoadState("ready");
+      }
     } catch (caught) {
-      setError(getErrorMessage(caught));
+      if (requestId === requestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
     } finally {
-      setIsSubmitting(false);
+      if (requestId === requestIdRef.current) {
+        setIsSubmitting(false);
+      }
     }
   }
 
@@ -124,9 +148,15 @@ export default function App() {
         </div>
       </header>
 
-      {error ? (
+      {apiError ? (
         <p className="api-error" role="alert">
-          {error}
+          {apiError}
+        </p>
+      ) : null}
+
+      {validationError ? (
+        <p className="validation-error" role="alert">
+          {validationError}
         </p>
       ) : null}
 
@@ -164,7 +194,7 @@ export default function App() {
               补充输入
             </button>
             {canConfirm ? (
-              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isSubmitting}>
+              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
                 确认保存
               </button>
             ) : null}
@@ -195,7 +225,7 @@ export default function App() {
                 placeholder="例如：昨天把阶段 1 跑通了，今天准备做 JMF 主链路。"
                 rows={8}
               />
-              <button type="submit" className="primary-action" disabled={isSubmitting}>
+              <button type="submit" className="primary-action" disabled={isBusy}>
                 生成草稿
               </button>
             </form>
@@ -219,7 +249,7 @@ export default function App() {
             <section className="confirm-panel" aria-label="草稿确认">
               <strong>草稿可以确认</strong>
               <p>确认后更新当天正式 Markdown；阶段 2 不创建版本快照。</p>
-              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isSubmitting}>
+              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
                 确认写入正式日记
               </button>
             </section>
