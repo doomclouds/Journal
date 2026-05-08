@@ -153,6 +153,36 @@ public sealed class MockAiAndJmfTests
     }
 
     [Fact]
+    public void JmfMarkdownRenderer_QuotesYamlPlainScalarEdgeCases()
+    {
+        var aiJson = CreateAiJson(
+            tags:
+            [
+                "tag # comment",
+                "- leading dash",
+                "[flow]",
+                "{map}",
+                "*alias",
+                "&anchor",
+                "true",
+                "null"
+            ],
+            mood: " trailing ");
+
+        var markdown = JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
+
+        Assert.Contains("  - \"tag # comment\"", markdown);
+        Assert.Contains("  - \"- leading dash\"", markdown);
+        Assert.Contains("  - \"[flow]\"", markdown);
+        Assert.Contains("  - \"{map}\"", markdown);
+        Assert.Contains("  - \"*alias\"", markdown);
+        Assert.Contains("  - \"&anchor\"", markdown);
+        Assert.Contains("  - \"true\"", markdown);
+        Assert.Contains("  - \"null\"", markdown);
+        Assert.Contains("mood: \" trailing \"", markdown);
+    }
+
+    [Fact]
     public void JmfMarkdownRenderer_SanitizesSectionBulletsAndKeepsMarkerPairsStable()
     {
         var aiJson = CreateAiJson(

@@ -9,6 +9,8 @@ public static class JmfMarkdownRenderer
     private const string Provider = "mock";
     private const string Model = "mock-journal";
     private const string PromptVersion = "mock-journal-entry-v1";
+    private const string YamlFlowIndicatorCharacters = "[]{},";
+    private const string YamlLeadingIndicatorCharacters = "-?:,[]{}#&*!|>'\"%@`";
 
     public static string Render(
         JournalAiJson aiJson,
@@ -96,11 +98,26 @@ public static class JmfMarkdownRenderer
     }
 
     private static bool NeedsYamlQuotes(string value) =>
-        value.Contains(':', StringComparison.Ordinal)
+        char.IsWhiteSpace(value[0])
+        || char.IsWhiteSpace(value[^1])
+        || YamlLeadingIndicatorCharacters.Contains(value[0], StringComparison.Ordinal)
+        || ContainsYamlFlowIndicator(value)
+        || value.Contains(':', StringComparison.Ordinal)
+        || value.Contains('#', StringComparison.Ordinal)
         || value.Contains('"', StringComparison.Ordinal)
         || value.Contains('\\', StringComparison.Ordinal)
         || value.Contains('\r', StringComparison.Ordinal)
-        || value.Contains('\n', StringComparison.Ordinal);
+        || value.Contains('\n', StringComparison.Ordinal)
+        || IsYamlSpecialPlainScalar(value);
+
+    private static bool IsYamlSpecialPlainScalar(string value) =>
+        string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "null", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "~", StringComparison.Ordinal);
+
+    private static bool ContainsYamlFlowIndicator(string value) =>
+        value.Any(character => YamlFlowIndicatorCharacters.Contains(character, StringComparison.Ordinal));
 
     private static string EscapeYamlQuotedValue(string value) =>
         value
