@@ -32,10 +32,23 @@
 本阶段默认将开发期数据写入：
 
 ```text
-%LocalAppData%/Journal/
+%LocalAppData%/Journal/entries/yyyy/MM/yyyy-MM-dd.md
+%LocalAppData%/Journal/.journal/raw-inputs/yyyy/MM/yyyy-MM-dd.jsonl
+%LocalAppData%/Journal/.journal/drafts/yyyy/MM/yyyy-MM-dd.md
+%LocalAppData%/Journal/.journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
 ```
 
-阶段 2 不包含块编辑模式、源码模式、版本快照、SQLite 索引和真实 AI Provider。这些能力按新路线图进入后续阶段。
+阶段 2 API：
+
+```text
+GET http://localhost:5057/journal/today
+POST http://localhost:5057/journal/today/inputs
+POST http://localhost:5057/journal/today/draft/confirm
+```
+
+今日工作台仍然是只读 Markdown 预览，不提供块编辑和源码编辑。
+
+阶段 2 不包含版本快照、SQLite 索引和真实 AI Provider。这些能力按新路线图进入后续阶段。
 
 ## 环境要求
 

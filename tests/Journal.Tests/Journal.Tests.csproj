@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Journal.Api\Journal.Api.csproj" />
     <ProjectReference Include="..\..\src\Journal.Domain\Journal.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Journal.Infrastructure\Journal.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
