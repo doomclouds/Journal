@@ -35,11 +35,26 @@ public sealed class RawInputStore
         var lines = await File.ReadAllLinesAsync(path, cancellationToken);
         var inputs = new List<RawInput>();
 
-        foreach (var line in lines.Where(value => !string.IsNullOrWhiteSpace(value)))
+        for (var index = 0; index < lines.Length; index++)
         {
-            var raw = JsonSerializer.Deserialize<RawInputLine>(line, JsonOptions)
-                ?? throw new InvalidOperationException($"Invalid raw input line in {path}.");
-            inputs.Add(raw.ToRawInput());
+            var line = lines[index];
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var lineNumber = index + 1;
+            try
+            {
+                var raw = JsonSerializer.Deserialize<RawInputLine>(line, JsonOptions)
+                    ?? throw new FormatException("Raw input line is empty.");
+                raw.Validate();
+                inputs.Add(raw.ToRawInput());
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw new InvalidOperationException($"Invalid raw input line in {path} at line {lineNumber}.", exception);
+            }
         }
 
         return inputs;
@@ -49,6 +64,17 @@ public sealed class RawInputStore
     {
         public static RawInputLine From(RawInput input) =>
             new(input.Id, input.Date.IsoDate, input.CreatedAt, input.Source, input.Text);
+
+        public void Validate()
+        {
+            if (string.IsNullOrWhiteSpace(Id)
+                || string.IsNullOrWhiteSpace(Date)
+                || string.IsNullOrWhiteSpace(Source)
+                || string.IsNullOrWhiteSpace(Text))
+            {
+                throw new FormatException("Raw input line is missing required fields.");
+            }
+        }
 
         public RawInput ToRawInput() =>
             new(Id, JournalDate.From(DateOnly.Parse(Date, CultureInfo.InvariantCulture)), CreatedAt, Source, Text);

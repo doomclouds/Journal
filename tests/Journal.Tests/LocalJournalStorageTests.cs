@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Storage;
 
@@ -32,6 +33,54 @@ public sealed class LocalJournalStorageTests
 
         Assert.Equal(["raw-1", "raw-2"], inputs.Select(input => input.Id).ToArray());
         Assert.Equal("今天做 JMF。", inputs[1].Text);
+    }
+
+    [Fact]
+    public async Task RawInputStore_ReportsInvalidJsonLineWithPathAndLineNumber()
+    {
+        using var workspace = TempWorkspace.Create();
+        var date = JournalDate.From(new DateOnly(2026, 5, 8));
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var store = new RawInputStore(paths);
+        var path = paths.RawInputPath(date);
+        LocalJournalPaths.EnsureParentDirectory(path);
+        await File.WriteAllLinesAsync(
+            path,
+            [
+                """{"id":"raw-1","date":"2026-05-08","createdAt":"2026-05-08T00:00:00+00:00","source":"text","text":"ok"}""",
+                """{"id":"raw-2","date":"""
+            ],
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => store.ReadAsync(date, CancellationToken.None));
+
+        Assert.Contains(path, exception.Message);
+        Assert.Contains("line 2", exception.Message);
+        Assert.IsType<JsonException>(exception.InnerException);
+    }
+
+    [Fact]
+    public async Task RawInputStore_ReportsInvalidDateLineWithPathAndLineNumber()
+    {
+        using var workspace = TempWorkspace.Create();
+        var date = JournalDate.From(new DateOnly(2026, 5, 8));
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var store = new RawInputStore(paths);
+        var path = paths.RawInputPath(date);
+        LocalJournalPaths.EnsureParentDirectory(path);
+        await File.WriteAllLinesAsync(
+            path,
+            [
+                """{"id":"raw-1","date":"2026-05-08","createdAt":"2026-05-08T00:00:00+00:00","source":"text","text":"ok"}""",
+                """{"id":"raw-2","date":"not-a-date","createdAt":"2026-05-08T00:01:00+00:00","source":"text","text":"bad"}"""
+            ],
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => store.ReadAsync(date, CancellationToken.None));
+
+        Assert.Contains(path, exception.Message);
+        Assert.Contains("line 2", exception.Message);
+        Assert.IsType<FormatException>(exception.InnerException);
     }
 
     [Fact]
