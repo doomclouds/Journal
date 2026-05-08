@@ -117,6 +117,14 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
+function mockJsonResponse(body: unknown, ok = true, status = 200): Response {
+  return {
+    ok,
+    status,
+    json: async () => body
+  } as Response;
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -187,6 +195,32 @@ describe("App", () => {
     expect(screen.getByTestId("markdown-preview")).toHaveTextContent("今天完成 Phase 2 API 连接");
   });
 
+  test("disables submit while draft generation is pending", async () => {
+    const submitDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(emptyToday))
+      .mockReturnValueOnce(submitDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const input = await screen.findByLabelText("补充今天的自然语言输入");
+    const submitButton = screen.getByRole("button", { name: "生成草稿" });
+    expect(submitButton).toBeEnabled();
+
+    fireEvent.change(input, { target: { value: "今天完成 Phase 2 API 连接" } });
+    fireEvent.click(submitButton);
+
+    expect(submitButton).toBeDisabled();
+
+    submitDeferred.resolve(mockJsonResponse(reviewingToday));
+
+    expect(await screen.findByText("reviewing")).toBeInTheDocument();
+    expect(submitButton).toBeEnabled();
+  });
+
   test("shows validation message for empty input", async () => {
     mockFetchSequence([
       { body: healthResponse },
@@ -247,6 +281,31 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "确认写入正式日记" }));
+
+    await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
+    expect(screen.getByText(entryPath)).toBeInTheDocument();
+  });
+
+  test("disables confirm while draft confirmation is pending", async () => {
+    const confirmDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(reviewingToday))
+      .mockReturnValueOnce(confirmDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const confirmButton = await screen.findByRole("button", { name: "确认写入正式日记" });
+    expect(confirmButton).toBeEnabled();
+
+    fireEvent.click(confirmButton);
+
+    expect(confirmButton).toBeDisabled();
+
+    const entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md";
+    confirmDeferred.resolve(mockJsonResponse(processedToday(entryPath)));
 
     await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
     expect(screen.getByText(entryPath)).toBeInTheDocument();
