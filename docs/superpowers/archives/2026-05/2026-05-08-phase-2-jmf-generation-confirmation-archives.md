@@ -30,13 +30,14 @@
 
 ## Verification Snapshot
 
-- `dotnet test Journal.slnx`：29/29 .NET tests passed。
+- `dotnet test Journal.slnx`：31/31 .NET tests passed。
 - `npm test --prefix apps/desktop`：11/11 frontend tests passed。
 - `npm run build --prefix apps/desktop`：TypeScript + Vite build passed。
 - `git diff --check`：无 whitespace error。
 - API 冒烟：`GET /journal/today` 返回 `empty`，`POST /journal/today/inputs` 返回 `reviewing`，`POST /journal/today/draft/confirm` 返回 `processed` / `updated`。
 - 文件冒烟：`%LocalAppData%/Journal/entries/2026/05/2026-05-08.md`、raw input JSONL、draft Markdown、draft meta JSON 均已写出。
 - Playwright 截图验证：`1180x780` 与 `960x640` 下 Today Workbench 可加载 `API ok`，日记纸面显示中文 section 标题，未暴露 YAML front matter 或 `journal:section` marker。
+- JMF renderer 回归验证：YAML front matter 会 quote `#` 注释、flow indicator、alias/anchor、布尔/null、首尾空白、数字和日期形态的字符串标量。
 
 ## Source Documents
 
