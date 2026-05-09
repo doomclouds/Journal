@@ -67,7 +67,7 @@ public sealed class TodayJournalService
         var now = _clock.Now;
         var input = new RawInput(
             $"raw-{Guid.NewGuid():N}",
-            date,
+            baseline.Date,
             now,
             string.IsNullOrWhiteSpace(source) ? "text" : source.Trim(),
             text);
@@ -81,7 +81,7 @@ public sealed class TodayJournalService
         if (!validation.IsValid)
         {
             var attentionDraft = new JournalDraft(
-                date,
+                baseline.Date,
                 JournalStatus.Attention,
                 RenderAttentionMarkdown(validation.Errors),
                 sourceRawInputIds,
@@ -94,7 +94,7 @@ public sealed class TodayJournalService
 
         var markdown = JmfMarkdownRenderer.Render(aiJson, now);
         var draft = new JournalDraft(
-            date,
+            baseline.Date,
             JournalStatus.Reviewing,
             markdown,
             sourceRawInputIds,
@@ -184,16 +184,20 @@ public sealed class TodayJournalService
             throw new ArgumentException("markdown is required", nameof(request.Markdown));
         }
 
-        var date = JournalDate.From(_clock.Today);
-        var draft = await _draftStore.ReadAsync(date, cancellationToken);
-        var sourceRawInputIds = await GetDraftSourceRawInputIdsAsync(date, draft, cancellationToken);
+        var baseline = await ReadEditorBaselineAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(baseline.Markdown))
+        {
+            throw new InvalidOperationException("editor baseline does not exist.");
+        }
+
+        var sourceRawInputIds = await GetDraftSourceRawInputIdsAsync(baseline.Date, baseline.Draft, cancellationToken);
         var parseResult = JmfMarkdownParser.Parse(request.Markdown);
         var validation = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
         var status = validation.IsValid ? JournalStatus.Reviewing : JournalStatus.Attention;
         var errors = validation.IsValid ? Array.Empty<string>() : ToMessages(validation.Issues);
 
         await WriteEditorDraftAsync(
-            date,
+            baseline.Date,
             status,
             request.Markdown,
             sourceRawInputIds,

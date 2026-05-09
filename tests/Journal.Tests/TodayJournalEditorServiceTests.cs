@@ -208,6 +208,22 @@ public sealed class TodayJournalEditorServiceTests
         Assert.Equal("editor baseline does not exist.", exception.Message);
     }
 
+
+    [Fact]
+    public async Task SaveSourceDraftAsync_ThrowsWhenBaselineDoesNotExist()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var service = CreateService(paths);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SaveSourceDraftAsync(
+                new JournalSourceEditRequest("# no baseline"),
+                CancellationToken.None));
+
+        Assert.Equal("editor baseline does not exist.", exception.Message);
+    }
+
     [Fact]
     public async Task SaveBlockDraftAsync_ThrowsArgumentExceptionWhenSectionsIsNull()
     {
