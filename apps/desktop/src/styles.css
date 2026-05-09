@@ -379,10 +379,10 @@ button:focus-visible {
 
 .journal-editor {
   min-height: 100%;
-  padding: 20px;
+  padding: 16px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
 }
 
 .journal-editor [role="tablist"] {
@@ -416,7 +416,7 @@ button:focus-visible {
 .journal-editor-source {
   min-height: 0;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .insert-block-menu {
@@ -436,15 +436,15 @@ button:focus-visible {
   border: 1px solid #d8d4ca;
   border-radius: 8px;
   background: #fffdf8;
-  padding: 14px;
+  padding: 12px;
 }
 
 .journal-block-card textarea {
-  min-height: 150px;
+  min-height: 112px;
 }
 
 .journal-block-readonly {
-  min-height: 96px;
+  min-height: 72px;
   border: 1px solid #d8d4ca;
   border-radius: 6px;
   background: #f4f2ec;
@@ -473,7 +473,7 @@ button:focus-visible {
 }
 
 .journal-editor-source textarea {
-  min-height: 430px;
+  min-height: 340px;
   font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
   font-size: 14px;
   line-height: 1.6;

@@ -130,10 +130,6 @@ export function getHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
 }
 
-export function getToday(): Promise<TodayJournalState> {
-  return requestJson<TodayJournalState>("/journal/today");
-}
-
 export function getTodayEditor(): Promise<TodayEditorState> {
   return requestJson<TodayEditorState>("/journal/today/editor");
 }

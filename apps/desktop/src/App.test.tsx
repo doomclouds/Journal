@@ -594,11 +594,106 @@ describe("App", () => {
     expect(saveButton).toBeDisabled();
     expect(confirmButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "插入 情绪感受" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toBeDisabled();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
     await waitFor(() => expect(saveButton).toBeEnabled());
     expect(confirmButton).toBeEnabled();
+  });
+
+  test("disables source editing while source save is pending", async () => {
+    const sourceSaveDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockReturnValueOnce(sourceSaveDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "源码模式" }));
+    const sourceEditor = screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" });
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+
+    expect(sourceEditor).toBeDisabled();
+
+    sourceSaveDeferred.resolve(mockJsonResponse(createEditorState()));
+
+    await waitFor(() => expect(sourceEditor).toBeEnabled());
+  });
+
+  test("ignores stale block save response when a later raw input refresh wins", async () => {
+    const blockSaveDeferred = createDeferred<Response>();
+    const postInputDeferred = createDeferred<Response>();
+    const inputRefreshDeferred = createDeferred<Response>();
+    const staleEditor = createEditorState({
+      status: "reviewing",
+      markdown: editorMarkdown.replace("推进 Phase 3", "旧保存响应"),
+      sections: [
+        {
+          id: "today-focus",
+          title: "今日重点",
+          content: "旧保存响应",
+          kind: "required",
+          isEditableInBlockMode: true
+        }
+      ]
+    });
+    const latestEditor = createEditorState({
+      status: "processed",
+      canConfirm: false,
+      today: processedToday(),
+      markdown: editorMarkdown.replace("推进 Phase 3", "最新输入刷新"),
+      sections: [
+        {
+          id: "today-focus",
+          title: "今日重点",
+          content: "最新输入刷新",
+          kind: "required",
+          isEditableInBlockMode: true
+        }
+      ]
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockReturnValueOnce(blockSaveDeferred.promise)
+      .mockReturnValueOnce(postInputDeferred.promise)
+      .mockReturnValueOnce(inputRefreshDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const focusEditor = await screen.findByRole("textbox", { name: "编辑 今日重点" });
+    const input = screen.getByLabelText("补充今天的自然语言输入");
+    const inputForm = input.closest("form");
+    if (!inputForm) {
+      throw new Error("Expected raw input form");
+    }
+
+    fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
+    fireEvent.change(focusEditor, { target: { value: "准备保存但会变旧" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
+    fireEvent.submit(inputForm);
+
+    postInputDeferred.resolve(mockJsonResponse(reviewingToday));
+    await Promise.resolve();
+    inputRefreshDeferred.resolve(mockJsonResponse(latestEditor));
+
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("最新输入刷新")
+    );
+
+    blockSaveDeferred.resolve(mockJsonResponse(staleEditor));
+
+    await Promise.resolve();
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("最新输入刷新")
+    );
+    expect(screen.queryByDisplayValue("旧保存响应")).not.toBeInTheDocument();
   });
 
   test("restores mocked fetch between tests", () => {
@@ -767,6 +862,23 @@ describe("JournalEditor", () => {
 
     expect(screen.getByText("缺少今日重点区块")).toBeInTheDocument();
     expect(screen.getByText("请补回 today-focus 区块后再保存。")).toBeInTheDocument();
+  });
+
+  test("disables editable block and source textareas while busy", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={true}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toBeDisabled();
   });
 });
 

@@ -144,6 +144,7 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
               key={section.id}
               section={section}
               value={section.content}
+              disabled={isBusy}
               onChange={content => updateSectionContent(section.id, content)}
             />
           ))}
@@ -156,8 +157,9 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
           <textarea
             aria-label="编辑完整 JMF Markdown"
             value={sourceMarkdown}
+            disabled={isBusy}
             onChange={event => setSourceMarkdown(event.target.value)}
-            rows={18}
+            rows={14}
           />
           <button type="button" onClick={() => onSaveSource(sourceMarkdown)} disabled={isBusy}>
             保存源码草稿

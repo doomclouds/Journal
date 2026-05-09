@@ -3,10 +3,11 @@ import type { JmfSection } from "./api";
 type JournalBlockCardProps = {
   section: JmfSection;
   value: string;
+  disabled: boolean;
   onChange: (content: string) => void;
 };
 
-export function JournalBlockCard({ section, value, onChange }: JournalBlockCardProps) {
+export function JournalBlockCard({ section, value, disabled, onChange }: JournalBlockCardProps) {
   return (
     <section className="journal-block-card" aria-labelledby={`journal-block-${section.id}`}>
       <div className="section-head">
@@ -17,8 +18,9 @@ export function JournalBlockCard({ section, value, onChange }: JournalBlockCardP
         <textarea
           aria-label={`编辑 ${section.title}`}
           value={value}
+          disabled={disabled}
           onChange={event => onChange(event.target.value)}
-          rows={8}
+          rows={5}
         />
       ) : (
         <div className="journal-block-readonly">
