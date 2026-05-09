@@ -85,4 +85,42 @@ public sealed class JmfMarkdownParserTests
 
         Assert.Contains(result.Issues, issue => issue.Code == "unmatched-section-marker");
     }
+
+    [Fact]
+    public void Parse_ReturnsIssueForNestedSectionStartMarker()
+    {
+        const string markdown = """
+            ---
+            schema: journal-entry/v1
+            date: "2026-05-09"
+            ---
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+
+            - 今天做编辑器。
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section yesterday-review -->
+            ## 昨日回顾
+
+            - 昨天完成 parser。
+            <!-- /journal:section yesterday-review -->
+
+            <!-- journal:section today-focus -->
+            ## 今日重点
+
+            - 保持 JMF marker 配对。
+            <!-- journal:section money -->
+            - 这个 marker 不应该被吞成普通内容。
+            <!-- /journal:section today-focus -->
+            """;
+
+        var parseResult = JmfMarkdownParser.Parse(markdown);
+        var validationResult = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
+
+        Assert.Contains(parseResult.Issues, issue => issue.Code == "unmatched-section-marker");
+        Assert.False(validationResult.IsValid);
+        Assert.Contains(validationResult.Issues, issue => issue.Code == "unmatched-section-marker");
+    }
 }

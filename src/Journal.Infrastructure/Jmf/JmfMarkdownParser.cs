@@ -95,6 +95,18 @@ public static partial class JmfMarkdownParser
             }
 
             var endSectionId = end.Groups["id"].Value;
+            var nestedStart = SectionStartRegex().Match(body, start.Index + start.Length);
+            if (nestedStart.Success && nestedStart.Index < end.Index)
+            {
+                var nestedSectionId = nestedStart.Groups["id"].Value;
+                issues.Add(CreateIssue(
+                    "unmatched-section-marker",
+                    $"Section '{sectionId}' contains nested start marker '{nestedSectionId}'.",
+                    "Close the current JMF section before starting another section."));
+                searchIndex = nestedStart.Index;
+                continue;
+            }
+
             if (!string.Equals(sectionId, endSectionId, StringComparison.Ordinal))
             {
                 issues.Add(CreateIssue(
