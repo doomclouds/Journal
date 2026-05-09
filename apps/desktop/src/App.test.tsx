@@ -797,6 +797,22 @@ describe("JournalEditor", () => {
     ]);
   });
 
+  test("keeps block save action before the section list", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: "保存块编辑草稿" });
+    const firstSection = screen.getByRole("region", { name: "原始输入" });
+
+    expect(saveButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   test("saves current editable block sections", () => {
     const onSaveBlocks = vi.fn();
     render(

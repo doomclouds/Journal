@@ -385,6 +385,19 @@ button:focus-visible {
   gap: 10px;
 }
 
+.journal-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid rgba(46, 39, 32, 0.1);
+  background: rgba(255, 252, 246, 0.94);
+  padding-bottom: 6px;
+}
+
 .journal-editor [role="tablist"] {
   display: inline-flex;
   width: max-content;
@@ -462,9 +475,7 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
-.journal-editor-blocks > button,
-.journal-editor-source > button {
-  justify-self: end;
+.editor-save-action {
   min-width: 150px;
   border-color: #2b6860;
   background: #2b6860;

@@ -111,23 +111,39 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
 
   return (
     <section className="journal-editor" aria-label="JMF 编辑器">
-      <div role="tablist" aria-label="编辑模式">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "blocks"}
-          onClick={() => setMode("blocks")}
-        >
-          区块模式
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "source"}
-          onClick={() => setMode("source")}
-        >
-          源码模式
-        </button>
+      <div className="journal-editor-toolbar">
+        <div role="tablist" aria-label="编辑模式">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "blocks"}
+            onClick={() => setMode("blocks")}
+          >
+            区块模式
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "source"}
+            onClick={() => setMode("source")}
+          >
+            源码模式
+          </button>
+        </div>
+        {mode === "blocks" ? (
+          <button type="button" className="editor-save-action" onClick={saveBlocks} disabled={isBusy}>
+            保存块编辑草稿
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="editor-save-action"
+            onClick={() => onSaveSource(sourceMarkdown)}
+            disabled={isBusy}
+          >
+            保存源码草稿
+          </button>
+        )}
       </div>
 
       <ValidationPanel validation={editor.validation} />
@@ -148,9 +164,6 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
               onChange={content => updateSectionContent(section.id, content)}
             />
           ))}
-          <button type="button" onClick={saveBlocks} disabled={isBusy}>
-            保存块编辑草稿
-          </button>
         </div>
       ) : (
         <div className="journal-editor-source">
@@ -161,9 +174,6 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
             onChange={event => setSourceMarkdown(event.target.value)}
             rows={14}
           />
-          <button type="button" onClick={() => onSaveSource(sourceMarkdown)} disabled={isBusy}>
-            保存源码草稿
-          </button>
         </div>
       )}
     </section>
