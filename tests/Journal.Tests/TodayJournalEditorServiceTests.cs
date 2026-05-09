@@ -208,10 +208,64 @@ public sealed class TodayJournalEditorServiceTests
         Assert.Equal("editor baseline does not exist.", exception.Message);
     }
 
+    [Fact]
+    public async Task SaveBlockDraftAsync_ThrowsArgumentExceptionWhenSectionsIsNull()
+    {
+        await AssertBlockRequestShapeThrowsAsync(
+            new JournalBlockEditRequest(null!),
+            "sections is required");
+    }
+
+    [Fact]
+    public async Task SaveBlockDraftAsync_ThrowsArgumentExceptionWhenSectionItemIsNull()
+    {
+        await AssertBlockRequestShapeThrowsAsync(
+            new JournalBlockEditRequest([null!]),
+            "section is required");
+    }
+
+    [Fact]
+    public async Task SaveBlockDraftAsync_ThrowsArgumentExceptionWhenSectionIdIsBlank()
+    {
+        await AssertBlockRequestShapeThrowsAsync(
+            new JournalBlockEditRequest([new(" ", "- content")]),
+            "section id is required");
+    }
+
+    [Fact]
+    public async Task SaveBlockDraftAsync_ThrowsArgumentExceptionWhenSectionContentIsNull()
+    {
+        await AssertBlockRequestShapeThrowsAsync(
+            new JournalBlockEditRequest([new("today-focus", null!)]),
+            "section content is required");
+    }
+
     private static JmfSection GetSection(string markdown, string sectionId)
     {
         var parseResult = JmfMarkdownParser.Parse(markdown);
         return parseResult.Document.Sections.Single(section => section.Id == sectionId);
+    }
+
+    private static async Task AssertBlockRequestShapeThrowsAsync(
+        JournalBlockEditRequest request,
+        string expectedMessage)
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var service = CreateService(paths);
+        await service.AddInputAsync("今天准备验证 block request shape #Journal", "text", CancellationToken.None);
+        var date = JournalDate.From(FixedDay);
+        var originalDraft = (await new DraftStore(paths).ReadAsync(date, CancellationToken.None))!;
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.SaveBlockDraftAsync(request, CancellationToken.None));
+
+        var storedDraft = (await new DraftStore(paths).ReadAsync(date, CancellationToken.None))!;
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+        Assert.Equal(originalDraft.Status, storedDraft.Status);
+        Assert.Equal(originalDraft.Markdown, storedDraft.Markdown);
+        Assert.Equal(originalDraft.SourceRawInputIds, storedDraft.SourceRawInputIds);
+        Assert.Equal(originalDraft.Errors, storedDraft.Errors);
     }
 
     private static TodayJournalService CreateService(LocalJournalPaths paths, IJournalAiProvider? aiProvider = null) =>

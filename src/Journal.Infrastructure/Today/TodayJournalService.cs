@@ -130,6 +130,7 @@ public sealed class TodayJournalService
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ValidateBlockDraftRequestShape(request);
 
         var baseline = await ReadEditorBaselineAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(baseline.Markdown))
@@ -303,6 +304,32 @@ public sealed class TodayJournalService
 
     private static IReadOnlyList<string> ToMessages(IReadOnlyList<JmfValidationIssue> issues) =>
         issues.Select(issue => issue.Message).ToArray();
+
+    private static void ValidateBlockDraftRequestShape(JournalBlockEditRequest request)
+    {
+        if (request.Sections is null)
+        {
+            throw new ArgumentException("sections is required", nameof(request));
+        }
+
+        foreach (var section in request.Sections)
+        {
+            if (section is null)
+            {
+                throw new ArgumentException("section is required", nameof(request));
+            }
+
+            if (string.IsNullOrWhiteSpace(section.Id))
+            {
+                throw new ArgumentException("section id is required", nameof(request));
+            }
+
+            if (section.Content is null)
+            {
+                throw new ArgumentException("section content is required", nameof(request));
+            }
+        }
+    }
 
     private static string RenderAttentionMarkdown(IReadOnlyList<string> errors)
     {
