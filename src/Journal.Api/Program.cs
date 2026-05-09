@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Journal.Domain.Application;
+using Journal.Domain.Entries;
 using Journal.Infrastructure.Ai;
 using Journal.Infrastructure.Clock;
 using Journal.Infrastructure.Storage;
@@ -81,6 +82,46 @@ app.MapPost("/journal/today/draft/confirm", async (TodayJournalService service, 
     {
         return Results.Conflict(new { error = exception.Message });
     }
+});
+
+app.MapGet("/journal/today/editor", async (TodayJournalService service, CancellationToken cancellationToken) =>
+{
+    var state = await service.GetTodayEditorAsync(cancellationToken);
+    return Results.Ok(state);
+});
+
+app.MapPut("/journal/today/editor/blocks", async (
+    JournalBlockEditRequest request,
+    TodayJournalService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var state = await service.SaveBlockDraftAsync(request, cancellationToken);
+        return Results.Ok(state);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
+});
+
+app.MapPut("/journal/today/editor/source", async (
+    JournalSourceEditRequest request,
+    TodayJournalService service,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Markdown))
+    {
+        return Results.BadRequest(new { error = "markdown is required" });
+    }
+
+    var state = await service.SaveSourceDraftAsync(request, cancellationToken);
+    return Results.Ok(state);
 });
 
 app.Run();
