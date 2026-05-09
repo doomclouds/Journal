@@ -834,6 +834,41 @@ describe("JournalEditor", () => {
     ]);
   });
 
+  test("resets local block edits when the authoritative editor snapshot changes", () => {
+    const initialEditor = createEditorState();
+    const refreshedEditor = createEditorState({
+      status: "processed",
+      markdown: initialEditor.markdown,
+      sections: initialEditor.sections,
+      canConfirm: false,
+      today: processedToday()
+    });
+    const { rerender } = render(
+      <JournalEditor
+        editor={initialEditor}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+      target: { value: "未保存的本地区块内容" }
+    });
+
+    rerender(
+      <JournalEditor
+        editor={refreshedEditor}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.queryByDisplayValue("未保存的本地区块内容")).not.toBeInTheDocument();
+  });
+
   test("saves full markdown in source mode", () => {
     const onSaveSource = vi.fn();
     render(
@@ -852,6 +887,51 @@ describe("JournalEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
 
     expect(onSaveSource).toHaveBeenCalledWith("# 2026-05-08\n\n更新后的源码");
+  });
+
+  test("resets local source edits when the authoritative editor snapshot changes", () => {
+    const initialEditor = createEditorState();
+    const refreshedEditor = createEditorState({
+      status: "attention",
+      markdown: initialEditor.markdown,
+      sections: initialEditor.sections,
+      validation: {
+        isValid: false,
+        issues: [
+          {
+            code: "unknown-section",
+            message: "存在未知区块",
+            repairHint: "删除未知区块后再保存。"
+          }
+        ]
+      },
+      canConfirm: false
+    });
+    const { rerender } = render(
+      <JournalEditor
+        editor={initialEditor}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: "# 未保存的本地源码" }
+    });
+
+    rerender(
+      <JournalEditor
+        editor={refreshedEditor}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(editorMarkdown);
+    expect(screen.queryByDisplayValue("# 未保存的本地源码")).not.toBeInTheDocument();
   });
 
   test("shows attention validation issue message and repair hint", () => {

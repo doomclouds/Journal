@@ -68,7 +68,7 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
   useEffect(() => {
     setSections(editor.sections);
     setSourceMarkdown(editor.markdown);
-  }, [editor.date.isoDate, editor.markdown]);
+  }, [editor]);
 
   const orderById = useMemo(() => {
     const orders = new Map(jmfSectionCatalogOrder);
