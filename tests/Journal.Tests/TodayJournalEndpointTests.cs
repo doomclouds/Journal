@@ -272,6 +272,58 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PutTodayEditorSource_WithInvalidSectionIdReturnsAttentionWithUnknownSection()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        const string markdown = """
+            ---
+            schema: journal-entry/v1
+            date: "2026-05-08"
+            ---
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+
+            - source mode
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section yesterday-review -->
+            ## 昨日回顾
+
+            - keep review
+            <!-- /journal:section yesterday-review -->
+
+            <!-- journal:section today-focus -->
+            ## 今日重点
+
+            - keep editing
+            <!-- /journal:section today-focus -->
+
+            <!-- journal:section Custom -->
+            ## Custom
+
+            - invalid id shape
+            <!-- /journal:section Custom -->
+            """;
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/source",
+            new { markdown });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal("attention", root.GetProperty("status").GetString());
+        Assert.False(root.GetProperty("validation").GetProperty("isValid").GetBoolean());
+        Assert.Contains(
+            root.GetProperty("validation").GetProperty("issues").EnumerateArray(),
+            issue => issue.GetProperty("code").GetString() == "unknown-section");
+    }
+
+    [Fact]
     public async Task PutTodayEditorSource_WithBlankMarkdownReturnsBadRequest()
     {
         using var workspace = TempWorkspace.Create();

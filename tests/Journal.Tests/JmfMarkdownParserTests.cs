@@ -123,4 +123,48 @@ public sealed class JmfMarkdownParserTests
         Assert.False(validationResult.IsValid);
         Assert.Contains(validationResult.Issues, issue => issue.Code == "unmatched-section-marker");
     }
+
+    [Theory]
+    [InlineData("Custom")]
+    [InlineData("custom_section")]
+    public void Parse_CapturesInvalidSectionIdsForValidation(string invalidSectionId)
+    {
+        var markdown = $$"""
+            ---
+            schema: journal-entry/v1
+            date: "2026-05-09"
+            ---
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+
+            - raw
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section yesterday-review -->
+            ## 昨日回顾
+
+            - review
+            <!-- /journal:section yesterday-review -->
+
+            <!-- journal:section today-focus -->
+            ## 今日重点
+
+            - focus
+            <!-- /journal:section today-focus -->
+
+            <!-- journal:section {{invalidSectionId}} -->
+            ## Invalid
+
+            - should be rejected
+            <!-- /journal:section {{invalidSectionId}} -->
+            """;
+
+        var parseResult = JmfMarkdownParser.Parse(markdown);
+        var validationResult = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
+
+        Assert.Contains(parseResult.Document.Sections, section => section.Id == invalidSectionId);
+        Assert.False(validationResult.IsValid);
+        Assert.Contains(validationResult.Issues, issue => issue.Code == "unknown-section");
+    }
 }

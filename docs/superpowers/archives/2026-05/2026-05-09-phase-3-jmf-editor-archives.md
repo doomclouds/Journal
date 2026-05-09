@@ -27,11 +27,11 @@
 
 ## Verification Snapshot
 
-- `dotnet test Journal.slnx`：78/78 .NET tests passed。
+- `dotnet test Journal.slnx`：81/81 .NET tests passed。
 - `npm test --prefix apps/desktop`：28/28 frontend tests passed。
 - `npm run build --prefix apps/desktop`：TypeScript + Vite build passed。
 - Playwright 运行态验证：临时 API `http://localhost:5091` + Vite `http://127.0.0.1:5173` 加载 Today Workbench，JMF block editor 可见，顶部保存动作进入首屏。
-- Code review checkpoints：Task 1-7 均经过 spec compliance 和 code quality review；parser 补齐孤立 end marker 与嵌套 start marker 回归，前端补齐 pending 禁用和 stale response 回归。
+- Code review checkpoints：Task 1-7 均经过 spec compliance 和 code quality review；parser 补齐孤立 end marker、嵌套 start marker、非法 section id 回归，前端补齐 pending 禁用和 stale response 回归。
 
 ## Source Documents
 

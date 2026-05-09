@@ -169,10 +169,10 @@ public static partial class JmfMarkdownParser
     private static JmfValidationIssue CreateIssue(string code, string message, string repairHint) =>
         new(code, message, repairHint);
 
-    [GeneratedRegex(@"<!--\s*journal:section\s+(?<id>[a-z0-9-]+)\s*-->")]
+    [GeneratedRegex(@"<!--\s*journal:section\s+(?<id>[^>\s]+)\s*-->")]
     private static partial Regex SectionStartRegex();
 
-    [GeneratedRegex(@"<!--\s*/journal:section\s+(?<id>[a-z0-9-]+)\s*-->")]
+    [GeneratedRegex(@"<!--\s*/journal:section\s+(?<id>[^>\s]+)\s*-->")]
     private static partial Regex SectionEndRegex();
 
     [GeneratedRegex(@"^\s*##\s+.+$")]
