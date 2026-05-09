@@ -65,6 +65,19 @@ public static partial class JmfMarkdownParser
         while (searchIndex < body.Length)
         {
             var start = SectionStartRegex().Match(body, searchIndex);
+            var standaloneEnd = SectionEndRegex().Match(body, searchIndex);
+
+            if (standaloneEnd.Success && (!start.Success || standaloneEnd.Index < start.Index))
+            {
+                var standaloneEndSectionId = standaloneEnd.Groups["id"].Value;
+                issues.Add(CreateIssue(
+                    "unmatched-section-marker",
+                    $"Section '{standaloneEndSectionId}' has an end marker without a matching start marker.",
+                    "Remove the extra JMF section end marker or add the matching start marker."));
+                searchIndex = standaloneEnd.Index + standaloneEnd.Length;
+                continue;
+            }
+
             if (!start.Success)
             {
                 break;

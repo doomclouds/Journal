@@ -77,6 +77,8 @@ public sealed class JmfMarkdownParserTests
     [Theory]
     [InlineData("<!-- journal:section today-focus -->\n## 今日重点\n- item")]
     [InlineData("<!-- journal:section today-focus -->\n## 今日重点\n- item\n<!-- /journal:section raw-inputs -->")]
+    [InlineData("<!-- /journal:section today-focus -->")]
+    [InlineData("<!-- journal:section today-focus -->\n## 今日重点\n- item\n<!-- /journal:section today-focus -->\n<!-- /journal:section today-focus -->")]
     public void Parse_ReturnsIssueForUnmatchedMarkers(string markdown)
     {
         var result = JmfMarkdownParser.Parse(markdown);
