@@ -67,7 +67,7 @@ public sealed class TodayJournalService
         var now = _clock.Now;
         var input = new RawInput(
             $"raw-{Guid.NewGuid():N}",
-            baseline.Date,
+            date,
             now,
             string.IsNullOrWhiteSpace(source) ? "text" : source.Trim(),
             text);
@@ -81,7 +81,7 @@ public sealed class TodayJournalService
         if (!validation.IsValid)
         {
             var attentionDraft = new JournalDraft(
-                baseline.Date,
+                date,
                 JournalStatus.Attention,
                 RenderAttentionMarkdown(validation.Errors),
                 sourceRawInputIds,
@@ -94,7 +94,7 @@ public sealed class TodayJournalService
 
         var markdown = JmfMarkdownRenderer.Render(aiJson, now);
         var draft = new JournalDraft(
-            baseline.Date,
+            date,
             JournalStatus.Reviewing,
             markdown,
             sourceRawInputIds,

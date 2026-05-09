@@ -234,6 +234,10 @@ public sealed class TodayJournalEndpointTests
         using var workspace = TempWorkspace.Create();
         using var factory = CreateFactory(workspace.Root);
         using var client = factory.CreateClient();
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天先建立 source editor baseline #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
         const string markdown = """
             ---
             schema: journal-entry/v1
@@ -277,6 +281,10 @@ public sealed class TodayJournalEndpointTests
         using var workspace = TempWorkspace.Create();
         using var factory = CreateFactory(workspace.Root);
         using var client = factory.CreateClient();
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天先建立 invalid section baseline #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
         const string markdown = """
             ---
             schema: journal-entry/v1
@@ -321,6 +329,22 @@ public sealed class TodayJournalEndpointTests
         Assert.Contains(
             root.GetProperty("validation").GetProperty("issues").EnumerateArray(),
             issue => issue.GetProperty("code").GetString() == "unknown-section");
+    }
+
+    [Fact]
+    public async Task PutTodayEditorSource_WithoutBaselineReturnsConflict()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/source",
+            new { markdown = "# no baseline" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("editor baseline does not exist.", document.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]

@@ -120,8 +120,15 @@ app.MapPut("/journal/today/editor/source", async (
         return Results.BadRequest(new { error = "markdown is required" });
     }
 
-    var state = await service.SaveSourceDraftAsync(request, cancellationToken);
-    return Results.Ok(state);
+    try
+    {
+        var state = await service.SaveSourceDraftAsync(request, cancellationToken);
+        return Results.Ok(state);
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
 });
 
 app.Run();
