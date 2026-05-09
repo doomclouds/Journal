@@ -72,7 +72,7 @@ const reviewingToday: TodayJournalState = {
   draft: reviewingDraft
 };
 
-function processedToday(entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md") {
+function processedToday(entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md"): TodayJournalState {
   return {
     ...reviewingToday,
     status: "processed",
@@ -198,15 +198,17 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  test("prevents stale initial load race by disabling submit until getToday resolves", async () => {
+  test("prevents stale initial load race by disabling submit until editor state resolves", async () => {
     const healthDeferred = createDeferred<Response>();
-    const todayDeferred = createDeferred<Response>();
-    const submitDeferred = createDeferred<Response>();
+    const editorDeferred = createDeferred<Response>();
+    const postInputDeferred = createDeferred<Response>();
+    const refreshedEditorDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
       .mockReturnValueOnce(healthDeferred.promise)
-      .mockReturnValueOnce(todayDeferred.promise)
-      .mockReturnValueOnce(submitDeferred.promise);
+      .mockReturnValueOnce(editorDeferred.promise)
+      .mockReturnValueOnce(postInputDeferred.promise)
+      .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -225,10 +227,17 @@ describe("App", () => {
       status: 200,
       json: async () => healthResponse
     } as Response);
-    todayDeferred.resolve({
+    editorDeferred.resolve({
       ok: true,
       status: 200,
-      json: async () => emptyToday
+      json: async () => createEditorState({
+        status: "empty",
+        markdown: "",
+        sections: [],
+        availableOptionalSections: [],
+        canConfirm: false,
+        today: emptyToday
+      })
     } as Response);
 
     await waitFor(() => expect(submitButton).toBeEnabled());
@@ -239,16 +248,26 @@ describe("App", () => {
     expect(submitButton).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(3);
 
-    submitDeferred.resolve(mockJsonResponse(reviewingToday));
+    postInputDeferred.resolve(mockJsonResponse(emptyToday));
+    refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
     expect(await screen.findByText("reviewing")).toBeInTheDocument();
-    expect(screen.getByTestId("markdown-preview")).toHaveTextContent("今天完成 Phase 2 API 连接");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
   });
 
-  test("renders empty today workbench", async () => {
+  test("loads health and today editor state on initial render", async () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
-      { body: emptyToday }
+      {
+        body: createEditorState({
+          status: "empty",
+          markdown: "",
+          sections: [],
+          availableOptionalSections: [],
+          canConfirm: false,
+          today: emptyToday
+        })
+      }
     ]);
 
     render(<App />);
@@ -258,16 +277,27 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("empty")).toBeInTheDocument();
     expect(screen.getByLabelText("补充今天的自然语言输入")).toBeInTheDocument();
-    expect(screen.getByText("还没有草稿")).toBeInTheDocument();
+    expect(screen.getByText("还没有可编辑的 JMF 草稿")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:5057/health", undefined);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today/editor", undefined);
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today", undefined);
   });
 
-  test("shows reviewing draft after submitting input", async () => {
-    mockFetchSequence([
+  test("submits raw input and refreshes from today editor state", async () => {
+    const fetchMock = mockFetchSequence([
       { body: healthResponse },
+      {
+        body: createEditorState({
+          status: "empty",
+          markdown: "",
+          sections: [],
+          availableOptionalSections: [],
+          canConfirm: false,
+          today: emptyToday
+        })
+      },
       { body: emptyToday },
-      { body: reviewingToday }
+      { body: createEditorState() }
     ]);
 
     render(<App />);
@@ -278,16 +308,33 @@ describe("App", () => {
 
     expect(await screen.findByText("reviewing")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认写入正式日记" })).toBeInTheDocument();
-    expect(screen.getByTestId("markdown-preview")).toHaveTextContent("今天完成 Phase 2 API 连接");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/journal/today/inputs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text: "今天完成 Phase 2 API 连接", source: "text" })
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor", undefined);
   });
 
-  test("disables submit while draft generation is pending", async () => {
-    const submitDeferred = createDeferred<Response>();
+  test("disables input action while draft generation and editor refresh are pending", async () => {
+    const postInputDeferred = createDeferred<Response>();
+    const refreshedEditorDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(emptyToday))
-      .mockReturnValueOnce(submitDeferred.promise);
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState({
+        status: "empty",
+        markdown: "",
+        sections: [],
+        availableOptionalSections: [],
+        canConfirm: false,
+        today: emptyToday
+      })))
+      .mockReturnValueOnce(postInputDeferred.promise)
+      .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -301,7 +348,11 @@ describe("App", () => {
 
     expect(submitButton).toBeDisabled();
 
-    submitDeferred.resolve(mockJsonResponse(reviewingToday));
+    postInputDeferred.resolve(mockJsonResponse(emptyToday));
+    await Promise.resolve();
+    expect(submitButton).toBeDisabled();
+
+    refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
     expect(await screen.findByText("reviewing")).toBeInTheDocument();
     expect(submitButton).toBeEnabled();
@@ -310,7 +361,14 @@ describe("App", () => {
   test("shows validation message for empty input", async () => {
     mockFetchSequence([
       { body: healthResponse },
-      { body: emptyToday }
+      { body: createEditorState({
+        status: "empty",
+        markdown: "",
+        sections: [],
+        availableOptionalSections: [],
+        canConfirm: false,
+        today: emptyToday
+      }) }
     ]);
 
     render(<App />);
@@ -324,7 +382,14 @@ describe("App", () => {
   test("keeps api error visible when empty input validation fails", async () => {
     mockFetchSequence([
       { body: healthResponse },
-      { body: emptyToday },
+      { body: createEditorState({
+        status: "empty",
+        markdown: "",
+        sections: [],
+        availableOptionalSections: [],
+        canConfirm: false,
+        today: emptyToday
+      }) },
       { ok: false, status: 500, body: { error: "submit failed" } }
     ]);
 
@@ -346,22 +411,43 @@ describe("App", () => {
   test("shows attention errors without confirm action", async () => {
     mockFetchSequence([
       { body: healthResponse },
-      { body: attentionToday }
+      { body: createEditorState({
+        status: "attention",
+        validation: {
+          isValid: false,
+          issues: [
+            {
+              code: "missing-title",
+              message: "title is required",
+              repairHint: "补齐标题后再确认。"
+            }
+          ]
+        },
+        canConfirm: false,
+        today: attentionToday
+      }) }
     ]);
 
     render(<App />);
 
-    expect(await screen.findByText("attention")).toBeInTheDocument();
+    expect((await screen.findAllByText("attention")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "确认写入正式日记" })).not.toBeInTheDocument();
   });
 
-  test("shows processed entry path after confirming reviewing draft", async () => {
+  test("confirms draft and refreshes from today editor state", async () => {
     const entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md";
-    mockFetchSequence([
+    const fetchMock = mockFetchSequence([
       { body: healthResponse },
-      { body: reviewingToday },
-      { body: processedToday(entryPath) }
+      { body: createEditorState() },
+      { body: processedToday(entryPath) },
+      {
+        body: createEditorState({
+          status: "processed",
+          canConfirm: false,
+          today: processedToday(entryPath)
+        })
+      }
     ]);
 
     render(<App />);
@@ -370,15 +456,23 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
     expect(screen.getByText(entryPath)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:5057/journal/today/draft/confirm",
+      { method: "POST" }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor", undefined);
   });
 
-  test("disables confirm while draft confirmation is pending", async () => {
+  test("disables confirm while draft confirmation and editor refresh are pending", async () => {
     const confirmDeferred = createDeferred<Response>();
+    const refreshedEditorDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(reviewingToday))
-      .mockReturnValueOnce(confirmDeferred.promise);
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockReturnValueOnce(confirmDeferred.promise)
+      .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -392,9 +486,119 @@ describe("App", () => {
 
     const entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md";
     confirmDeferred.resolve(mockJsonResponse(processedToday(entryPath)));
+    await Promise.resolve();
+    expect(confirmButton).toBeDisabled();
+
+    refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState({
+      status: "processed",
+      canConfirm: false,
+      today: processedToday(entryPath)
+    })));
 
     await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
     expect(screen.getByText(entryPath)).toBeInTheDocument();
+  });
+
+  test("saves block edits through editor endpoint and updates editor state", async () => {
+    const updatedEditor = createEditorState({
+      markdown: editorMarkdown.replace("推进 Phase 3", "保存后的区块内容"),
+      sections: [
+        {
+          id: "today-focus",
+          title: "今日重点",
+          content: "保存后的区块内容",
+          kind: "required",
+          isEditableInBlockMode: true
+        }
+      ]
+    });
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: updatedEditor }
+    ]);
+
+    render(<App />);
+
+    const focusEditor = await screen.findByRole("textbox", { name: "编辑 今日重点" });
+    fireEvent.change(focusEditor, { target: { value: "保存后的区块内容" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("保存后的区块内容")
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/journal/today/editor/blocks", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ sections: [{ id: "today-focus", content: "保存后的区块内容" }] })
+    });
+  });
+
+  test("saves source edits through editor endpoint and updates editor state", async () => {
+    const updatedMarkdown = "# 2026-05-08\n\n源码保存后的内容";
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: createEditorState({
+        markdown: updatedMarkdown,
+        sections: [
+          {
+            id: "today-focus",
+            title: "今日重点",
+            content: "源码保存后的内容",
+            kind: "required",
+            isEditableInBlockMode: true
+          }
+        ]
+      }) }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "源码模式" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: updatedMarkdown }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown)
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/journal/today/editor/source", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ markdown: updatedMarkdown })
+    });
+  });
+
+  test("disables editor save and confirm actions while block save is pending", async () => {
+    const blockSaveDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockReturnValueOnce(blockSaveDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const saveButton = await screen.findByRole("button", { name: "保存块编辑草稿" });
+    const confirmButton = screen.getByRole("button", { name: "确认写入正式日记" });
+
+    fireEvent.click(saveButton);
+
+    expect(saveButton).toBeDisabled();
+    expect(confirmButton).toBeDisabled();
+    expect(screen.getByRole("button", { name: "插入 情绪感受" })).toBeDisabled();
+
+    blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
+
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    expect(confirmButton).toBeEnabled();
   });
 
   test("restores mocked fetch between tests", () => {

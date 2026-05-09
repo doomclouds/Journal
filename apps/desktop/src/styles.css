@@ -1,6 +1,6 @@
 :root {
-  color: #26221d;
-  background: #f4eee5;
+  color: #252525;
+  background: #f3f1eb;
   font-family: Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -14,9 +14,7 @@ body {
   margin: 0;
   min-width: 960px;
   min-height: 100vh;
-  background:
-    linear-gradient(115deg, rgba(243, 238, 226, 0.94), rgba(232, 241, 234, 0.9)),
-    linear-gradient(180deg, #faf6ef 0%, #e7efe9 56%, #f5efe6 100%);
+  background: #f3f1eb;
 }
 
 button,
@@ -26,9 +24,10 @@ textarea {
 
 button {
   min-height: 40px;
-  border: 1px solid rgba(46, 39, 32, 0.18);
-  background: #fffaf2;
-  color: #26221d;
+  border: 1px solid #c9c5bb;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: #252525;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -42,15 +41,16 @@ textarea {
   width: 100%;
   min-height: 180px;
   resize: vertical;
-  border: 1px solid rgba(46, 39, 32, 0.18);
-  background: rgba(255, 252, 246, 0.96);
-  color: #26221d;
+  border: 1px solid #c9c5bb;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: #252525;
   line-height: 1.65;
 }
 
 textarea:focus,
 button:focus-visible {
-  outline: 3px solid rgba(31, 111, 100, 0.22);
+  outline: 3px solid rgba(43, 104, 96, 0.24);
   outline-offset: 2px;
 }
 
@@ -59,7 +59,7 @@ button:focus-visible {
   padding: 20px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
 }
 
 .top-context {
@@ -78,16 +78,16 @@ button:focus-visible {
 .rail-label {
   display: block;
   margin-bottom: 6px;
-  color: #1f6f64;
+  color: #2b6860;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .top-context h1 {
   margin: 0;
-  color: #26221d;
+  color: #252525;
   font-size: 28px;
   line-height: 1.16;
   letter-spacing: 0;
@@ -106,10 +106,11 @@ button:focus-visible {
   min-height: 32px;
   display: inline-flex;
   align-items: center;
-  border: 1px solid rgba(46, 39, 32, 0.12);
+  border: 1px solid #d3cfc5;
+  border-radius: 6px;
   padding: 6px 10px;
-  background: rgba(255, 252, 246, 0.76);
-  color: #4f4940;
+  background: #fffdf8;
+  color: #4d4a44;
   font-size: 13px;
   font-weight: 700;
 }
@@ -160,11 +161,9 @@ button:focus-visible {
 .workspace {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  grid-template-areas:
-    "rail dock"
-    "paper dock";
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr) 330px;
+  grid-template-areas: "rail paper dock";
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -172,15 +171,17 @@ button:focus-visible {
   grid-area: rail;
   min-width: 0;
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 1fr;
+  align-content: start;
   gap: 12px;
 }
 
 .rail-block,
 .dock-block,
 .confirm-panel {
-  border: 1px solid rgba(46, 39, 32, 0.12);
-  background: rgba(255, 252, 246, 0.68);
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fffdf8;
 }
 
 .rail-block,
@@ -190,7 +191,7 @@ button:focus-visible {
 
 .date-block strong {
   display: block;
-  color: #26221d;
+  color: #252525;
   font-size: 42px;
   line-height: 1;
 }
@@ -223,7 +224,6 @@ button:focus-visible {
 
 .raw-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
   padding: 0;
@@ -232,12 +232,12 @@ button:focus-visible {
 
 .raw-list li {
   min-width: 0;
-  border-left: 3px solid #7aa494;
+  border-left: 3px solid #6f938b;
   padding: 4px 0 4px 10px;
 }
 
 .raw-list strong {
-  color: #1f6f64;
+  color: #2b6860;
   font-size: 12px;
 }
 
@@ -263,11 +263,9 @@ button:focus-visible {
 .journal-paper {
   min-height: 0;
   overflow: auto;
-  border: 1px solid rgba(52, 45, 37, 0.12);
-  background:
-    linear-gradient(90deg, rgba(122, 164, 148, 0.12) 0 1px, transparent 1px),
-    #fffdf8;
-  box-shadow: 0 24px 70px rgba(86, 75, 56, 0.13);
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fbfaf6;
 }
 
 .markdown-preview,
@@ -344,13 +342,13 @@ button:focus-visible {
 }
 
 .primary-action {
-  border-color: #1f6f64;
-  background: #1f6f64;
-  color: #fffaf2;
+  border-color: #2b6860;
+  background: #2b6860;
+  color: #fffdf8;
 }
 
 .secondary-action {
-  background: rgba(255, 252, 246, 0.82);
+  background: #fffdf8;
 }
 
 .attention-panel {
@@ -367,7 +365,7 @@ button:focus-visible {
 
 .confirm-panel {
   padding: 16px;
-  background: #edf5ee;
+  background: #eef5f1;
 }
 
 .confirm-panel strong {
@@ -379,21 +377,111 @@ button:focus-visible {
   margin-top: 12px;
 }
 
-@media (min-width: 1360px) {
-  .workspace {
-    grid-template-columns: 280px minmax(0, 1fr) 350px;
-    grid-template-areas: "rail paper dock";
-    grid-template-rows: minmax(0, 1fr);
-  }
+.journal-editor {
+  min-height: 100%;
+  padding: 20px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+}
 
-  .context-rail {
-    grid-template-columns: 1fr;
-    align-content: start;
-  }
+.journal-editor [role="tablist"] {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid #c9c5bb;
+  border-radius: 8px;
+  background: #ece8de;
+  padding: 3px;
+  gap: 3px;
+}
 
-  .raw-list {
-    grid-template-columns: 1fr;
-  }
+.journal-editor [role="tab"] {
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 14px;
+  background: transparent;
+  color: #4d4a44;
+  font-weight: 800;
+}
+
+.journal-editor [role="tab"][aria-selected="true"] {
+  background: #fffdf8;
+  color: #252525;
+  box-shadow: 0 1px 2px rgba(44, 40, 34, 0.1);
+}
+
+.journal-editor-blocks,
+.journal-editor-source {
+  min-height: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.insert-block-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.insert-block-menu button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: #2b6860;
+  font-weight: 800;
+}
+
+.journal-block-card {
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 14px;
+}
+
+.journal-block-card textarea {
+  min-height: 150px;
+}
+
+.journal-block-readonly {
+  min-height: 96px;
+  border: 1px solid #d8d4ca;
+  border-radius: 6px;
+  background: #f4f2ec;
+  padding: 10px 12px;
+  color: #4d4a44;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.journal-block-readonly p {
+  margin: 0 0 8px;
+}
+
+.journal-block-readonly p:last-child {
+  margin-bottom: 0;
+}
+
+.journal-editor-blocks > button,
+.journal-editor-source > button {
+  justify-self: end;
+  min-width: 150px;
+  border-color: #2b6860;
+  background: #2b6860;
+  color: #fffdf8;
+  font-weight: 800;
+}
+
+.journal-editor-source textarea {
+  min-height: 430px;
+  font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.journal-editor .attention-panel {
+  margin: 0;
+  padding: 14px;
 }
 
 @media (max-width: 1080px) {
@@ -421,6 +509,10 @@ button:focus-visible {
 
   .context-rail {
     grid-template-columns: minmax(160px, 0.42fr) minmax(0, 1fr);
+  }
+
+  .raw-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .input-dock {
