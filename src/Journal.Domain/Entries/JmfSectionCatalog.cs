@@ -1,8 +1,11 @@
+using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
+
 namespace Journal.Domain.Entries;
 
 public static class JmfSectionCatalog
 {
-    private static readonly IReadOnlyList<JmfSectionDefinition> Definitions =
+    private static readonly JmfSectionDefinition[] DefinitionItems =
     [
         new("raw-inputs", "原始输入", 1, JmfSectionKind.Required, false),
         new("mood", "情绪状态", 2, JmfSectionKind.OptionalSingleton, true),
@@ -20,19 +23,22 @@ public static class JmfSectionCatalog
         new("metadata-note", "生成信息", 14, JmfSectionKind.System, false)
     ];
 
+    private static readonly ReadOnlyCollection<JmfSectionDefinition> Definitions =
+        Array.AsReadOnly(DefinitionItems);
+
     private static readonly IReadOnlyDictionary<string, JmfSectionDefinition> DefinitionsById =
         Definitions.ToDictionary(item => item.Id, StringComparer.Ordinal);
 
     public static IReadOnlyList<JmfSectionDefinition> All => Definitions;
 
-    public static IReadOnlyList<JmfSectionDefinition> Required { get; } =
-        Definitions.Where(item => item.Kind == JmfSectionKind.Required).ToArray();
+    public static IReadOnlyList<JmfSectionDefinition> Required { get; } = Array.AsReadOnly(
+        Definitions.Where(item => item.Kind == JmfSectionKind.Required).ToArray());
 
-    public static IReadOnlyList<JmfSectionDefinition> OptionalSingleton { get; } =
-        Definitions.Where(item => item.Kind == JmfSectionKind.OptionalSingleton).ToArray();
+    public static IReadOnlyList<JmfSectionDefinition> OptionalSingleton { get; } = Array.AsReadOnly(
+        Definitions.Where(item => item.Kind == JmfSectionKind.OptionalSingleton).ToArray());
 
-    public static bool TryGet(string id, out JmfSectionDefinition definition) =>
-        DefinitionsById.TryGetValue(id, out definition!);
+    public static bool TryGet(string id, [NotNullWhen(true)] out JmfSectionDefinition? definition) =>
+        DefinitionsById.TryGetValue(id, out definition);
 
     public static JmfSectionDefinition Require(string id) =>
         TryGet(id, out var definition)
