@@ -1,6 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
+import {
+  saveBlockDraft,
+  saveSourceDraft,
+  type JournalDraft,
+  type TodayJournalState,
+  type TodayEditorState
+} from "./api";
+import { JournalEditor } from "./JournalEditor";
 
 type MockResponse = {
   ok?: boolean;
@@ -30,7 +38,7 @@ const journalDate = {
   markdownFileName: "2026-05-08.md"
 };
 
-const emptyToday = {
+const emptyToday: TodayJournalState = {
   date: journalDate,
   status: "empty",
   rawInputs: [],
@@ -39,7 +47,16 @@ const emptyToday = {
   errors: []
 };
 
-const reviewingToday = {
+const reviewingDraft: JournalDraft = {
+  date: journalDate,
+  status: "reviewing",
+  markdown: "# 2026-05-08\n\n## 晨间记录\n\n今天完成 Phase 2 API 连接",
+  sourceRawInputIds: ["raw-1"],
+  errors: [],
+  updatedAt: "2026-05-08T08:05:00+08:00"
+};
+
+const reviewingToday: TodayJournalState = {
   ...emptyToday,
   status: "reviewing",
   rawInputs: [
@@ -51,14 +68,7 @@ const reviewingToday = {
       text: "今天完成 Phase 2 API 连接"
     }
   ],
-  draft: {
-    date: journalDate,
-    status: "reviewing",
-    markdown: "# 2026-05-08\n\n## 晨间记录\n\n今天完成 Phase 2 API 连接",
-    sourceRawInputIds: ["raw-1"],
-    errors: [],
-    updatedAt: "2026-05-08T08:05:00+08:00"
-  }
+  draft: reviewingDraft
 };
 
 function processedToday(entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md") {
@@ -66,29 +76,84 @@ function processedToday(entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.
     ...reviewingToday,
     status: "processed",
     draft: {
-      ...reviewingToday.draft,
+      ...reviewingDraft,
       status: "processed"
     },
     entry: {
       date: journalDate,
-      markdown: reviewingToday.draft.markdown,
+      markdown: reviewingDraft.markdown,
       path: entryPath,
       updatedAt: "2026-05-08T08:06:00+08:00"
     }
   };
 }
 
-const attentionToday = {
+const attentionToday: TodayJournalState = {
   ...reviewingToday,
   status: "attention",
   draft: {
-    ...reviewingToday.draft,
+    ...reviewingDraft,
     status: "attention",
     markdown: "# AI JSON validation failed\n\n## Errors\n\n- title is required",
     errors: ["title is required"]
   },
   errors: ["title is required"]
 };
+
+const editorMarkdown = `# 2026-05-08
+
+<!-- jmf:section id="today-focus" -->
+## 今日重点
+
+推进 Phase 3
+<!-- /jmf:section -->
+
+<!-- jmf:section id="raw-inputs" -->
+## 原始输入
+
+今天要保留原始表达
+<!-- /jmf:section -->
+`;
+
+function createEditorState(overrides: Partial<TodayEditorState> = {}): TodayEditorState {
+  return {
+    date: journalDate,
+    status: "reviewing",
+    markdown: editorMarkdown,
+    sections: [
+      {
+        id: "today-focus",
+        title: "今日重点",
+        content: "推进 Phase 3",
+        kind: "required",
+        isEditableInBlockMode: true
+      },
+      {
+        id: "raw-inputs",
+        title: "原始输入",
+        content: "今天要保留原始表达",
+        kind: "system",
+        isEditableInBlockMode: false
+      }
+    ],
+    availableOptionalSections: [
+      {
+        id: "mood",
+        title: "情绪感受",
+        order: 30,
+        kind: "optionalSingleton",
+        isEditableInBlockMode: true
+      }
+    ],
+    validation: {
+      isValid: true,
+      issues: []
+    },
+    canConfirm: true,
+    today: reviewingToday,
+    ...overrides
+  };
+}
 
 function mockFetchSequence(responses: MockResponse[]) {
   const fetchMock = vi.fn(async () => {
@@ -333,5 +398,148 @@ describe("App", () => {
 
   test("restores mocked fetch between tests", () => {
     expect(fetch).not.toHaveProperty("mock");
+  });
+});
+
+describe("JournalEditor", () => {
+  test("shows editable today focus textarea in default block mode", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+  });
+
+  test("shows raw inputs without exposing an editable control", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("今天要保留原始表达")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 原始输入" })).not.toBeInTheDocument();
+  });
+
+  test("inserts an available optional block into the page", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
+
+    expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+  });
+
+  test("saves current editable block sections", () => {
+    const onSaveBlocks = vi.fn();
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={onSaveBlocks}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+      target: { value: "完成前端编辑器组件" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
+
+    expect(onSaveBlocks).toHaveBeenCalledWith([
+      { id: "today-focus", content: "完成前端编辑器组件" }
+    ]);
+  });
+
+  test("saves full markdown in source mode", () => {
+    const onSaveSource = vi.fn();
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={onSaveSource}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: "# 2026-05-08\n\n更新后的源码" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+
+    expect(onSaveSource).toHaveBeenCalledWith("# 2026-05-08\n\n更新后的源码");
+  });
+
+  test("shows attention validation issue message and repair hint", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          status: "attention",
+          validation: {
+            isValid: false,
+            issues: [
+              {
+                code: "missing-section",
+                message: "缺少今日重点区块",
+                repairHint: "请补回 today-focus 区块后再保存。"
+              }
+            ]
+          }
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("缺少今日重点区块")).toBeInTheDocument();
+    expect(screen.getByText("请补回 today-focus 区块后再保存。")).toBeInTheDocument();
+  });
+});
+
+describe("editor API client", () => {
+  test("saveBlockDraft sends editable sections to editor blocks endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(createEditorState()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveBlockDraft([{ id: "today-focus", content: "更新重点" }]);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/editor/blocks", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ sections: [{ id: "today-focus", content: "更新重点" }] })
+    });
+  });
+
+  test("saveSourceDraft sends markdown to editor source endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(createEditorState()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveSourceDraft("# 2026-05-08\n\n更新源码");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/editor/source", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ markdown: "# 2026-05-08\n\n更新源码" })
+    });
   });
 });
