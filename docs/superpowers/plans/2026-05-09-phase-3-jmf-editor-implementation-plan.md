@@ -234,6 +234,7 @@ Create `tests/Journal.Tests/JmfMarkdownValidatorTests.cs` covering:
 - unknown section id -> `unknown-section`
 - duplicate `inspiration` -> `duplicate-section`
 - block edit request containing `raw-inputs` -> `raw-inputs-is-readonly`
+- block edit request containing system readonly sections `keywords` or `metadata-note` -> `readonly-section`
 
 - [ ] **Step 3: Run parser and validator tests and verify they fail**
 
@@ -272,9 +273,10 @@ Validation rules:
 - every section id must be known
 - no section id may appear more than once
 - optional singleton ids may appear at most once
-- block edit request may not contain `raw-inputs`, `keywords`, or `metadata-note`
+- block edit request may not contain `raw-inputs` -> `raw-inputs-is-readonly`
+- block edit request may not contain `keywords` or `metadata-note` -> `readonly-section`
 
-Use issue codes from the spec exactly: `missing-front-matter`, `missing-schema`, `invalid-schema`, `missing-required-section`, `unknown-section`, `duplicate-section`, `unmatched-section-marker`, `raw-inputs-is-readonly`.
+Use issue codes from the spec exactly where listed: `missing-front-matter`, `missing-schema`, `invalid-schema`, `missing-required-section`, `unknown-section`, `duplicate-section`, `unmatched-section-marker`, `raw-inputs-is-readonly`. Use `readonly-section` for system readonly sections that are not `raw-inputs`.
 
 - [ ] **Step 6: Run focused tests and verify they pass**
 
