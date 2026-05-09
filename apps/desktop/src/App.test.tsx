@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
+  getTodayEditor,
   saveBlockDraft,
   saveSourceDraft,
   type JournalDraft,
@@ -444,6 +445,59 @@ describe("JournalEditor", () => {
     expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
   });
 
+  test("keeps inserted optional blocks in catalog order after required sections", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "raw-inputs",
+              title: "原始输入",
+              content: "今天要保留原始表达",
+              kind: "system",
+              isEditableInBlockMode: false
+            },
+            {
+              id: "yesterday-review",
+              title: "昨日回顾",
+              content: "昨天完成 Phase 2",
+              kind: "required",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "推进 Phase 3",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ],
+          availableOptionalSections: [
+            {
+              id: "work",
+              title: "工作推进",
+              order: 5,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "插入 工作推进" }));
+
+    expect(screen.getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual([
+      "原始输入",
+      "昨日回顾",
+      "今日重点",
+      "工作推进"
+    ]);
+  });
+
   test("saves current editable block sections", () => {
     const onSaveBlocks = vi.fn();
     render(
@@ -513,6 +567,15 @@ describe("JournalEditor", () => {
 });
 
 describe("editor API client", () => {
+  test("getTodayEditor calls editor endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(createEditorState()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getTodayEditor();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/editor", undefined);
+  });
+
   test("saveBlockDraft sends editable sections to editor blocks endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(createEditorState()));
     vi.stubGlobal("fetch", fetchMock);

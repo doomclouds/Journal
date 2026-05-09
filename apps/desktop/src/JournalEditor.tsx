@@ -18,6 +18,23 @@ type JournalEditorProps = {
   onSaveSource: (markdown: string) => void;
 };
 
+const jmfSectionCatalogOrder = new Map<string, number>([
+  ["raw-inputs", 1],
+  ["mood", 2],
+  ["yesterday-review", 3],
+  ["today-focus", 4],
+  ["work", 5],
+  ["learning", 6],
+  ["health", 7],
+  ["relationship", 8],
+  ["money", 9],
+  ["inspiration", 10],
+  ["future-notes", 11],
+  ["gratitude", 12],
+  ["keywords", 13],
+  ["metadata-note", 14]
+]);
+
 function createSectionFromDefinition(definition: JmfSectionDefinition): JmfSection {
   return {
     id: definition.id,
@@ -54,8 +71,12 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
   }, [editor.date.isoDate, editor.markdown]);
 
   const orderById = useMemo(() => {
-    const orders = new Map<string, number>();
-    editor.sections.forEach((section, index) => orders.set(section.id, index * 10));
+    const orders = new Map(jmfSectionCatalogOrder);
+    editor.sections.forEach((section, index) => {
+      if (!orders.has(section.id)) {
+        orders.set(section.id, Number.MAX_SAFE_INTEGER - editor.sections.length + index);
+      }
+    });
     editor.availableOptionalSections.forEach(section => orders.set(section.id, section.order));
     return orders;
   }, [editor.availableOptionalSections, editor.sections]);
