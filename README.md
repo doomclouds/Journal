@@ -7,6 +7,9 @@
 - [项目愿景](./PROJECT_VISION.md)
 - [阶段 1 设计](./docs/superpowers/specs/2026-05-07-phase-1-skeleton-design.md)
 - [阶段 2 设计](./docs/superpowers/specs/2026-05-08-phase-2-jmf-generation-confirmation-design.md)
+- [阶段 3 设计](./docs/superpowers/specs/2026-05-09-phase-3-jmf-editor-design.md)
+- [阶段 3 实施计划](./docs/superpowers/plans/2026-05-09-phase-3-jmf-editor-implementation-plan.md)
+- [阶段 3 高保真原型](./docs/superpowers/specs/2026-05-09-phase-3-jmf-editor-prototype.html)
 - [产品故事演示](./docs/product/journal-product-story.html)
 
 ## 阶段 1：应用框架骨架
@@ -49,6 +52,39 @@ POST http://localhost:5057/journal/today/draft/confirm
 今日工作台仍然是只读 Markdown 预览，不提供块编辑和源码编辑。
 
 阶段 2 不包含版本快照、SQLite 索引和真实 AI Provider。这些能力按新路线图进入后续阶段。
+
+## 阶段 3：JMF 编辑模式与结构校验
+
+阶段 3 在阶段 2 的草稿确认链路上补上安全编辑层：
+
+```text
+读取今日 draft / entry Markdown
+  -> 解析为 JMF document
+  -> 块编辑或源码编辑
+  -> JMF 结构校验
+  -> 保存为 reviewing draft
+  -> 用户确认
+  -> 更新当天正式 Markdown
+```
+
+阶段 3 API：
+
+```text
+GET http://localhost:5057/journal/today/editor
+PUT http://localhost:5057/journal/today/editor/blocks
+PUT http://localhost:5057/journal/today/editor/source
+```
+
+编辑边界：
+
+- 块编辑模式保护 `raw-inputs`，只展示原始表达，不允许直接改写。
+- 新增块只允许从 JMF v1 已知可选单例块中选择，并按固定顺序插入。
+- 源码模式可以编辑完整 Markdown，但保存前必须通过 JMF 结构校验。
+- 块编辑和源码编辑成功后只保存为 `reviewing` draft。
+- 校验失败会写入 `attention` draft 和修复提示，不覆盖正式 entry。
+- 只有点击“确认写入正式日记”后才会更新 `entries/` 下的正式 Markdown。
+
+阶段 3 仍不包含版本快照、SQLite 索引、真实 AI Provider、AI 改写、自动保存和多日期浏览。
 
 ## 环境要求
 
