@@ -1,5 +1,85 @@
 # AGENTS
 
+## Project Orientation
+
+Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
+
+Current delivered scope is Phase 2:
+
+```text
+Natural language input -> Mock AI JSON -> JMF Markdown draft -> user confirmation -> formal Markdown file
+```
+
+Do not assume these are implemented yet unless the code or docs say so: real AI providers, SQLite indexing, version snapshots, block/source editing, in-app recording, speech-to-text, installers, delete flows.
+
+## Tech Stack
+
+- Backend: .NET 10, minimal API in `src/Journal.Api`.
+- Domain model: `src/Journal.Domain`.
+- Infrastructure: storage, clock, AI abstraction, JMF validation/rendering in `src/Journal.Infrastructure`.
+- Desktop app: Electron + React + Vite + TypeScript in `apps/desktop`.
+- Backend tests: xUnit in `tests/Journal.Tests`.
+- Frontend tests: Vitest + Testing Library in `apps/desktop`.
+
+## Key Code Paths
+
+- API composition and endpoints: `src/Journal.Api/Program.cs`.
+- Today's main workflow: `src/Journal.Infrastructure/Today/TodayJournalService.cs`.
+- AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementation is `MockAiProvider`.
+- JMF validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
+- Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
+- Main desktop screen: `apps/desktop/src/App.tsx`.
+- API client: `apps/desktop/src/api.ts`.
+
+## Product Invariants
+
+- Raw user input is the source material and must not be overwritten by summaries.
+- Formal Markdown is the durable human-readable source of truth; generated caches or indexes must be rebuildable.
+- AI output should stay behind the JSON validation and preview/confirmation boundary before it becomes a formal entry.
+- The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
+- Keep the UI quiet, tool-like, fast to scan, and focused on the daily writing workflow.
+
+## Development Commands
+
+Use PowerShell from the repository root.
+
+```powershell
+dotnet test Journal.slnx
+npm test --prefix apps/desktop
+npm run build --prefix apps/desktop
+```
+
+Development run:
+
+```powershell
+dotnet run --project src/Journal.Api
+npm install --prefix apps/desktop
+npm run desktop --prefix apps/desktop
+```
+
+The development flow is two-process: start the .NET API first, then start the Electron/Vite desktop app. Vite is configured for `127.0.0.1:5173` with `strictPort`; backend CORS currently allows `http://localhost:5173` and `http://127.0.0.1:5173`.
+
+## Data Locations
+
+Phase 2 development data is written under `%LocalAppData%/Journal`:
+
+```text
+entries/yyyy/MM/yyyy-MM-dd.md
+.journal/raw-inputs/yyyy/MM/yyyy-MM-dd.jsonl
+.journal/drafts/yyyy/MM/yyyy-MM-dd.md
+.journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
+```
+
+Be careful with changes that alter these paths or formats; update docs and tests together.
+
+## Working Rules
+
+- Prefer Chinese for repository docs and user-facing explanation. Keep code comments in English.
+- Keep `.NET` changes nullable-clean and aligned with the existing minimal API/service style.
+- Keep frontend changes consistent with the current dense desktop tool layout; do not turn the app into a marketing landing page.
+- When changing behavior, update or add focused tests in the relevant test project before calling the work complete.
+- Before continuing feature work, explaining prior decisions, or checking delivery status, search the Superpowers assets below before guessing from memory.
+
 <!-- asset-compounding-guidance:start -->
 ## Asset Compounding Retrieval Guide
 
