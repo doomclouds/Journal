@@ -3,11 +3,14 @@ import {
   addTodayInput,
   confirmTodayDraft,
   getHealth,
-  getToday,
+  getTodayEditor,
+  saveBlockDraft,
+  saveSourceDraft,
+  type JournalBlockEditSection,
   type HealthResponse,
-  type TodayJournalState
+  type TodayEditorState
 } from "./api";
-import { MarkdownPreview } from "./MarkdownPreview";
+import { JournalEditor } from "./JournalEditor";
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
@@ -25,7 +28,7 @@ export default function App() {
   const requestIdRef = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [today, setToday] = useState<TodayJournalState | null>(null);
+  const [editor, setEditor] = useState<TodayEditorState | null>(null);
   const [input, setInput] = useState("");
   const [apiError, setApiError] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -38,10 +41,10 @@ export default function App() {
 
     async function load() {
       try {
-        const [healthResult, todayResult] = await Promise.all([getHealth(), getToday()]);
+        const [healthResult, editorResult] = await Promise.all([getHealth(), getTodayEditor()]);
         if (!cancelled && requestId === requestIdRef.current) {
           setHealth(healthResult);
-          setToday(todayResult);
+          setEditor(editorResult);
           setLoadState("ready");
           setApiError("");
         }
@@ -60,21 +63,24 @@ export default function App() {
     };
   }, []);
 
+  const today = editor?.today ?? null;
+
   const title = useMemo(() => {
     return today ? `${today.date.isoDate} 晨间日记` : "今日晨间日记";
   }, [today]);
 
-  const canConfirm = today?.status === "reviewing" && today.draft !== null;
-  const markdown = today?.draft?.markdown ?? today?.entry?.markdown ?? "";
+  const canConfirm = Boolean(editor?.canConfirm && today?.draft && today.status !== "attention");
   const statusLabel = today?.status ?? loadState;
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
   const attentionErrors = [
     ...(today?.errors ?? []),
-    ...(today?.draft?.status === "attention" ? today.draft.errors : [])
+    ...(today?.draft?.status === "attention" ? today.draft.errors : []),
+    ...(editor?.validation.isValid === false ? editor.validation.issues.map(issue => issue.message) : [])
   ];
   const uniqueAttentionErrors = Array.from(new Set(attentionErrors));
+  const hasEditableJournal = Boolean(editor && (editor.markdown.trim() || editor.sections.length > 0));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,9 +96,10 @@ export default function App() {
     setValidationError("");
     setIsSubmitting(true);
     try {
-      const next = await addTodayInput(trimmedInput);
+      await addTodayInput(trimmedInput);
+      const next = await getTodayEditor();
       if (requestId === requestIdRef.current) {
-        setToday(next);
+        setEditor(next);
         setInput("");
         setApiError("");
         setLoadState("ready");
@@ -114,9 +121,56 @@ export default function App() {
     setValidationError("");
     setIsSubmitting(true);
     try {
-      const next = await confirmTodayDraft();
+      await confirmTodayDraft();
+      const next = await getTodayEditor();
       if (requestId === requestIdRef.current) {
-        setToday(next);
+        setEditor(next);
+        setApiError("");
+        setLoadState("ready");
+      }
+    } catch (caught) {
+      if (requestId === requestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsSubmitting(false);
+      }
+    }
+  }
+
+  async function handleSaveBlocks(sections: JournalBlockEditSection[]) {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setValidationError("");
+    setIsSubmitting(true);
+    try {
+      const next = await saveBlockDraft(sections);
+      if (requestId === requestIdRef.current) {
+        setEditor(next);
+        setApiError("");
+        setLoadState("ready");
+      }
+    } catch (caught) {
+      if (requestId === requestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsSubmitting(false);
+      }
+    }
+  }
+
+  async function handleSaveSource(markdown: string) {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setValidationError("");
+    setIsSubmitting(true);
+    try {
+      const next = await saveSourceDraft(markdown);
+      if (requestId === requestIdRef.current) {
+        setEditor(next);
         setApiError("");
         setLoadState("ready");
       }
@@ -188,7 +242,7 @@ export default function App() {
           </section>
         </aside>
 
-        <section className="journal-stage" aria-label="日记预览">
+        <section className="journal-stage" aria-label="JMF 日记编辑">
           <div className="compact-actions" aria-label="紧凑窗口操作">
             <button type="button" className="secondary-action" onClick={focusInput}>
               补充输入
@@ -202,10 +256,17 @@ export default function App() {
 
           <article className="journal-paper">
             {loadState === "loading" ? <p className="empty-paper">正在读取今天的日记状态...</p> : null}
-            {loadState === "error" && !markdown ? <p className="empty-paper">还没有草稿</p> : null}
-            {markdown ? <MarkdownPreview markdown={markdown} /> : null}
-            {loadState !== "loading" && loadState !== "error" && !markdown ? (
-              <p className="empty-paper">还没有草稿</p>
+            {loadState === "error" && !hasEditableJournal ? <p className="empty-paper">还没有可编辑的 JMF 草稿</p> : null}
+            {hasEditableJournal && editor ? (
+              <JournalEditor
+                editor={editor}
+                isBusy={isBusy}
+                onSaveBlocks={handleSaveBlocks}
+                onSaveSource={handleSaveSource}
+              />
+            ) : null}
+            {loadState !== "loading" && loadState !== "error" && !hasEditableJournal ? (
+              <p className="empty-paper">还没有可编辑的 JMF 草稿</p>
             ) : null}
           </article>
         </section>
@@ -224,6 +285,7 @@ export default function App() {
                 onChange={event => setInput(event.target.value)}
                 placeholder="例如：昨天把阶段 1 跑通了，今天准备做 JMF 主链路。"
                 rows={8}
+                disabled={isBusy}
               />
               <button type="submit" className="primary-action" disabled={isBusy}>
                 生成草稿

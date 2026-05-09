@@ -48,6 +48,51 @@ export type TodayJournalState = {
   errors: string[];
 };
 
+export type JmfSectionKind = "required" | "optionalSingleton" | "system";
+
+export type JmfSectionDefinition = {
+  id: string;
+  title: string;
+  order: number;
+  kind: JmfSectionKind;
+  isEditableInBlockMode: boolean;
+};
+
+export type JmfSection = {
+  id: string;
+  title: string;
+  content: string;
+  kind: JmfSectionKind;
+  isEditableInBlockMode: boolean;
+};
+
+export type JmfValidationIssue = {
+  code: string;
+  message: string;
+  repairHint: string;
+};
+
+export type JmfValidationResult = {
+  isValid: boolean;
+  issues: JmfValidationIssue[];
+};
+
+export type TodayEditorState = {
+  date: JournalDate;
+  status: JournalStatus;
+  markdown: string;
+  sections: JmfSection[];
+  availableOptionalSections: JmfSectionDefinition[];
+  validation: JmfValidationResult;
+  canConfirm: boolean;
+  today: TodayJournalState;
+};
+
+export type JournalBlockEditSection = {
+  id: string;
+  content: string;
+};
+
 export type HealthResponse = {
   app: string;
   status: string;
@@ -85,8 +130,8 @@ export function getHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
 }
 
-export function getToday(): Promise<TodayJournalState> {
-  return requestJson<TodayJournalState>("/journal/today");
+export function getTodayEditor(): Promise<TodayEditorState> {
+  return requestJson<TodayEditorState>("/journal/today/editor");
 }
 
 export function addTodayInput(text: string, source = "text"): Promise<TodayJournalState> {
@@ -102,5 +147,25 @@ export function addTodayInput(text: string, source = "text"): Promise<TodayJourn
 export function confirmTodayDraft(): Promise<TodayJournalState> {
   return requestJson<TodayJournalState>("/journal/today/draft/confirm", {
     method: "POST"
+  });
+}
+
+export function saveBlockDraft(sections: JournalBlockEditSection[]): Promise<TodayEditorState> {
+  return requestJson<TodayEditorState>("/journal/today/editor/blocks", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ sections })
+  });
+}
+
+export function saveSourceDraft(markdown: string): Promise<TodayEditorState> {
+  return requestJson<TodayEditorState>("/journal/today/editor/source", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ markdown })
   });
 }

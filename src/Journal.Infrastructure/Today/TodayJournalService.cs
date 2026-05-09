@@ -35,6 +35,27 @@ public sealed class TodayJournalService
         return BuildStateAsync(date, statusOverride: null, cancellationToken);
     }
 
+    public async Task<TodayEditorState> GetTodayEditorAsync(CancellationToken cancellationToken)
+    {
+        var baseline = await ReadEditorBaselineAsync(cancellationToken);
+        var parseResult = JmfMarkdownParser.Parse(baseline.Markdown);
+        var validation = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
+        var today = await BuildStateAsync(baseline.Date, statusOverride: null, cancellationToken);
+        var availableOptionalSections = JmfSectionCatalog.GetAvailableOptionalSections(
+            parseResult.Document.Sections.Select(section => section.Id));
+        var canConfirm = today.Status == JournalStatus.Reviewing && validation.IsValid;
+
+        return new TodayEditorState(
+            baseline.Date,
+            today.Status,
+            baseline.Markdown,
+            parseResult.Document.Sections,
+            availableOptionalSections,
+            validation,
+            canConfirm,
+            today);
+    }
+
     public async Task<TodayJournalState> AddInputAsync(string text, string source, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -104,6 +125,88 @@ public sealed class TodayJournalService
         return await BuildStateAsync(date, status, cancellationToken);
     }
 
+    public async Task<TodayEditorState> SaveBlockDraftAsync(
+        JournalBlockEditRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ValidateBlockDraftRequestShape(request);
+
+        var baseline = await ReadEditorBaselineAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(baseline.Markdown))
+        {
+            throw new InvalidOperationException("editor baseline does not exist.");
+        }
+
+        var sourceRawInputIds = await GetDraftSourceRawInputIdsAsync(baseline.Date, baseline.Draft, cancellationToken);
+        var requestValidation = JmfMarkdownValidator.ValidateBlockEditRequest(request);
+        if (!requestValidation.IsValid)
+        {
+            await WriteEditorDraftAsync(
+                baseline.Date,
+                JournalStatus.Attention,
+                baseline.Markdown,
+                sourceRawInputIds,
+                ToMessages(requestValidation.Issues),
+                cancellationToken);
+
+            return await GetTodayEditorAsync(cancellationToken);
+        }
+
+        var parseResult = JmfMarkdownParser.Parse(baseline.Markdown);
+        _ = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
+        var mergedSections = MergeBlockSections(parseResult.Document.Sections, request.Sections);
+        var composedMarkdown = JmfMarkdownComposer.Compose(parseResult.Document with { Sections = mergedSections });
+        var composedParseResult = JmfMarkdownParser.Parse(composedMarkdown);
+        var composedValidation = JmfMarkdownValidator.Validate(composedParseResult.Document, composedParseResult.Issues);
+        var status = composedValidation.IsValid ? JournalStatus.Reviewing : JournalStatus.Attention;
+        var errors = composedValidation.IsValid ? Array.Empty<string>() : ToMessages(composedValidation.Issues);
+
+        await WriteEditorDraftAsync(
+            baseline.Date,
+            status,
+            composedMarkdown,
+            sourceRawInputIds,
+            errors,
+            cancellationToken);
+
+        return await GetTodayEditorAsync(cancellationToken);
+    }
+
+    public async Task<TodayEditorState> SaveSourceDraftAsync(
+        JournalSourceEditRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(request.Markdown))
+        {
+            throw new ArgumentException("markdown is required", nameof(request.Markdown));
+        }
+
+        var baseline = await ReadEditorBaselineAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(baseline.Markdown))
+        {
+            throw new InvalidOperationException("editor baseline does not exist.");
+        }
+
+        var sourceRawInputIds = await GetDraftSourceRawInputIdsAsync(baseline.Date, baseline.Draft, cancellationToken);
+        var parseResult = JmfMarkdownParser.Parse(request.Markdown);
+        var validation = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
+        var status = validation.IsValid ? JournalStatus.Reviewing : JournalStatus.Attention;
+        var errors = validation.IsValid ? Array.Empty<string>() : ToMessages(validation.Issues);
+
+        await WriteEditorDraftAsync(
+            baseline.Date,
+            status,
+            request.Markdown,
+            sourceRawInputIds,
+            errors,
+            cancellationToken);
+
+        return await GetTodayEditorAsync(cancellationToken);
+    }
+
     private async Task<TodayJournalState> BuildStateAsync(
         JournalDate date,
         JournalStatus? statusOverride,
@@ -118,6 +221,118 @@ public sealed class TodayJournalService
         var errors = draft?.Errors ?? Array.Empty<string>();
 
         return new TodayJournalState(date, status, inputs, draft, entry, errors);
+    }
+
+    private async Task<(JournalDate Date, string Markdown, JournalDraft? Draft, JournalEntry? Entry)> ReadEditorBaselineAsync(
+        CancellationToken cancellationToken)
+    {
+        var date = JournalDate.From(_clock.Today);
+        var draft = await _draftStore.ReadAsync(date, cancellationToken);
+        var entry = await _entryStore.ReadAsync(date, cancellationToken);
+        var markdown = draft?.Markdown ?? entry?.Markdown ?? string.Empty;
+
+        return (date, markdown, draft, entry);
+    }
+
+    private async Task<IReadOnlyList<string>> GetDraftSourceRawInputIdsAsync(
+        JournalDate date,
+        JournalDraft? draft,
+        CancellationToken cancellationToken)
+    {
+        if (draft is not null)
+        {
+            return draft.SourceRawInputIds;
+        }
+
+        var rawInputs = await _rawInputStore.ReadAsync(date, cancellationToken);
+        return rawInputs.Select(rawInput => rawInput.Id).ToArray();
+    }
+
+    private async Task WriteEditorDraftAsync(
+        JournalDate date,
+        JournalStatus status,
+        string markdown,
+        IReadOnlyList<string> sourceRawInputIds,
+        IReadOnlyList<string> errors,
+        CancellationToken cancellationToken)
+    {
+        var draft = new JournalDraft(
+            date,
+            status,
+            markdown,
+            sourceRawInputIds,
+            errors,
+            _clock.Now);
+
+        await _draftStore.WriteAsync(draft, cancellationToken);
+    }
+
+    private static IReadOnlyList<JmfSection> MergeBlockSections(
+        IReadOnlyList<JmfSection> baselineSections,
+        IReadOnlyList<JournalBlockEditSection> requestSections)
+    {
+        var merged = baselineSections.ToList();
+        var indexes = merged
+            .Select((section, index) => new { section.Id, Index = index })
+            .ToDictionary(item => item.Id, item => item.Index, StringComparer.Ordinal);
+
+        foreach (var requestSection in requestSections)
+        {
+            if (!JmfSectionCatalog.TryGet(requestSection.Id, out var definition)
+                || !definition.IsEditableInBlockMode
+                || definition.Kind == JmfSectionKind.System)
+            {
+                continue;
+            }
+
+            var section = new JmfSection(
+                definition.Id,
+                definition.Title,
+                requestSection.Content,
+                definition.Kind,
+                definition.IsEditableInBlockMode);
+
+            if (indexes.TryGetValue(definition.Id, out var index))
+            {
+                merged[index] = section;
+            }
+            else
+            {
+                indexes[definition.Id] = merged.Count;
+                merged.Add(section);
+            }
+        }
+
+        return merged;
+    }
+
+    private static IReadOnlyList<string> ToMessages(IReadOnlyList<JmfValidationIssue> issues) =>
+        issues.Select(issue => issue.Message).ToArray();
+
+    private static void ValidateBlockDraftRequestShape(JournalBlockEditRequest request)
+    {
+        if (request.Sections is null)
+        {
+            throw new ArgumentException("sections is required", nameof(request));
+        }
+
+        foreach (var section in request.Sections)
+        {
+            if (section is null)
+            {
+                throw new ArgumentException("section is required", nameof(request));
+            }
+
+            if (string.IsNullOrWhiteSpace(section.Id))
+            {
+                throw new ArgumentException("section id is required", nameof(request));
+            }
+
+            if (section.Content is null)
+            {
+                throw new ArgumentException("section content is required", nameof(request));
+            }
+        }
     }
 
     private static string RenderAttentionMarkdown(IReadOnlyList<string> errors)

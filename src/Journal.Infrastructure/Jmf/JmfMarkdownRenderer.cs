@@ -34,18 +34,18 @@ public static class JmfMarkdownRenderer
         builder.AppendLine("---");
         builder.AppendLine();
 
-        AppendSection(builder, "raw-inputs", "原始输入", aiJson.RawInputs);
-        AppendSection(builder, "yesterday-review", "昨日回顾", aiJson.YesterdayReview);
-        AppendSection(builder, "today-focus", "今日重点", aiJson.TodayFocus);
+        AppendSection(builder, "raw-inputs", aiJson.RawInputs);
+        AppendSection(builder, "yesterday-review", aiJson.YesterdayReview);
+        AppendSection(builder, "today-focus", aiJson.TodayFocus);
 
         if (!string.IsNullOrWhiteSpace(aiJson.Mood) && !string.Equals(aiJson.Mood, "未标注", StringComparison.Ordinal))
         {
-            AppendSection(builder, "mood", "情绪", [aiJson.Mood]);
+            AppendSection(builder, "mood", [aiJson.Mood]);
         }
 
         if (aiJson.Inspiration.Count > 0 && aiJson.Inspiration.Any(item => !string.IsNullOrWhiteSpace(item)))
         {
-            AppendSection(builder, "inspiration", "灵感", aiJson.Inspiration);
+            AppendSection(builder, "inspiration", aiJson.Inspiration);
         }
 
         return builder.ToString();
@@ -70,8 +70,10 @@ public static class JmfMarkdownRenderer
         }
     }
 
-    private static void AppendSection(StringBuilder builder, string marker, string title, IReadOnlyList<string> items)
+    private static void AppendSection(StringBuilder builder, string marker, IReadOnlyList<string> items)
     {
+        var title = JmfSectionCatalog.Require(marker).Title;
+
         builder.AppendLine($"<!-- journal:section {marker} -->");
         builder.AppendLine($"## {title}");
         builder.AppendLine();

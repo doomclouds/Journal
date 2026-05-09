@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Clock;
@@ -109,6 +110,257 @@ public sealed class TodayJournalEndpointTests
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("draft does not exist", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetTodayEditor_ReturnsEditorStateWithNestedToday()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "昨天完成了 API，今天准备编辑 JMF #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.GetAsync("/journal/today/editor");
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal("reviewing", root.GetProperty("status").GetString());
+        Assert.True(root.GetProperty("canConfirm").GetBoolean());
+        Assert.True(root.GetProperty("validation").GetProperty("isValid").GetBoolean());
+        Assert.Equal("reviewing", root.GetProperty("today").GetProperty("status").GetString());
+        Assert.Contains(
+            root.GetProperty("sections").EnumerateArray(),
+            section => section.GetProperty("id").GetString() == "today-focus");
+        Assert.True(root.GetProperty("availableOptionalSections").ValueKind == JsonValueKind.Array);
+    }
+
+    [Fact]
+    public async Task PutTodayEditorBlocks_UpdatesTodayFocusAndReturnsReviewingEditorState()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "昨天完成了草稿，今天准备 block save #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/blocks",
+            new { sections = new[] { new { id = "today-focus", content = "- updated" } } });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal("reviewing", root.GetProperty("status").GetString());
+        Assert.Equal("reviewing", root.GetProperty("today").GetProperty("status").GetString());
+        Assert.True(root.GetProperty("validation").GetProperty("isValid").GetBoolean());
+        Assert.Contains(
+            root.GetProperty("sections").EnumerateArray(),
+            section =>
+                section.GetProperty("id").GetString() == "today-focus"
+                && section.GetProperty("content").GetString() == "- updated");
+    }
+
+    [Fact]
+    public async Task PutTodayEditorBlocks_WithRawInputsReturnsAttentionAndDoesNotOverwriteEntry()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天确认正式 entry，再验证 raw inputs 安全 #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+
+        using var confirmResponse = await client.PostAsync("/journal/today/draft/confirm", content: null);
+        confirmResponse.EnsureSuccessStatusCode();
+
+        var entryPath = paths.EntryPath(date);
+        var originalEntryText = await File.ReadAllTextAsync(entryPath, Encoding.UTF8);
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/blocks",
+            new { sections = new[] { new { id = "raw-inputs", content = "- unsafe overwrite" } } });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+        var currentEntryText = await File.ReadAllTextAsync(entryPath, Encoding.UTF8);
+
+        Assert.Equal("attention", root.GetProperty("status").GetString());
+        Assert.Equal("attention", root.GetProperty("today").GetProperty("status").GetString());
+        Assert.Contains(
+            root.GetProperty("today").GetProperty("errors").EnumerateArray(),
+            error => error.GetString()!.Contains("Raw inputs cannot be edited", StringComparison.Ordinal));
+        Assert.Equal(originalEntryText, currentEntryText);
+    }
+
+    [Fact]
+    public async Task PutTodayEditorBlocks_WithMalformedShapeReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天验证 malformed block request #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PutAsync(
+            "/journal/today/editor/blocks",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Contains("sections is required", document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PutTodayEditorSource_WithInvalidMarkerReturnsAttentionWithValidationIssue()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天先建立 source editor baseline #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+        const string markdown = """
+            ---
+            schema: journal-entry/v1
+            date: "2026-05-08"
+            ---
+
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+
+            - source mode
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section today-focus -->
+            ## 今日重点
+
+            - keep editing
+            <!-- /journal:section today-focus -->
+            """;
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/source",
+            new { markdown });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal("attention", root.GetProperty("status").GetString());
+        Assert.Equal("attention", root.GetProperty("today").GetProperty("status").GetString());
+        Assert.False(root.GetProperty("validation").GetProperty("isValid").GetBoolean());
+        Assert.Contains(
+            root.GetProperty("validation").GetProperty("issues").EnumerateArray(),
+            issue => issue.GetProperty("code").GetString() == "unmatched-section-marker");
+    }
+
+    [Fact]
+    public async Task PutTodayEditorSource_WithInvalidSectionIdReturnsAttentionWithUnknownSection()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天先建立 invalid section baseline #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+        const string markdown = """
+            ---
+            schema: journal-entry/v1
+            date: "2026-05-08"
+            ---
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+
+            - source mode
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section yesterday-review -->
+            ## 昨日回顾
+
+            - keep review
+            <!-- /journal:section yesterday-review -->
+
+            <!-- journal:section today-focus -->
+            ## 今日重点
+
+            - keep editing
+            <!-- /journal:section today-focus -->
+
+            <!-- journal:section Custom -->
+            ## Custom
+
+            - invalid id shape
+            <!-- /journal:section Custom -->
+            """;
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/source",
+            new { markdown });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal("attention", root.GetProperty("status").GetString());
+        Assert.False(root.GetProperty("validation").GetProperty("isValid").GetBoolean());
+        Assert.Contains(
+            root.GetProperty("validation").GetProperty("issues").EnumerateArray(),
+            issue => issue.GetProperty("code").GetString() == "unknown-section");
+    }
+
+    [Fact]
+    public async Task PutTodayEditorSource_WithoutBaselineReturnsConflict()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/source",
+            new { markdown = "# no baseline" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("editor baseline does not exist.", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PutTodayEditorSource_WithBlankMarkdownReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PutAsJsonAsync(
+            "/journal/today/editor/source",
+            new { markdown = "   " });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("markdown is required", document.RootElement.GetProperty("error").GetString());
     }
 
     private static WebApplicationFactory<Program> CreateFactory(string root) =>
