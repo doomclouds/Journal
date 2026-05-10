@@ -21,6 +21,7 @@ import {
 } from "./api";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
+import { getProductJournalStatus, type ProductJournalStatusView } from "./todayWorkbenchView";
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
@@ -33,6 +34,8 @@ function formatRawInputTime(value: string) {
   const time = value.match(/T(\d{2}:\d{2})/);
   return time?.[1] ?? value;
 }
+
+const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补充或重新整理。";
 
 export default function App() {
   const requestIdRef = useRef(0);
@@ -48,6 +51,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
   const [pendingRegenerateDraft, setPendingRegenerateDraft] = useState(false);
+  const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,16 +87,36 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    setHasLocalUnsavedChanges(false);
+  }, [editor]);
+
+  useEffect(() => {
+    if (!hasLocalUnsavedChanges && validationError === localUnsavedChangeMessage) {
+      setValidationError("");
+    }
+  }, [hasLocalUnsavedChanges, validationError]);
+
   const today = editor?.today ?? null;
 
   const title = useMemo(() => {
     return today ? `${today.date.isoDate} 晨间日记` : "今日晨间日记";
   }, [today]);
 
-  const canConfirm = Boolean(editor?.canConfirm && today?.draft && today.status !== "attention");
-  const statusLabel = today?.status ?? loadState;
-  const activeProviderName = aiSettings?.providers.find(provider => provider.isActive)?.displayName
+  const canConfirm = Boolean(
+    editor?.canConfirm
+      && today?.draft
+      && today.status !== "attention"
+      && !hasLocalUnsavedChanges
+  );
+  const activeProvider = aiSettings?.providers.find(provider => provider.isActive);
+  const activeProviderName = activeProvider?.displayName
     ?? (aiSettings?.activeProviderId ? aiSettings.activeProviderId : "Mock");
+  const activeProviderStatus = activeProvider
+    ? `${activeProvider.displayName} 可用`
+    : aiSettings?.activeProviderId
+      ? `${aiSettings.activeProviderId} 需要配置`
+      : "Mock 可用";
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
@@ -103,6 +127,31 @@ export default function App() {
   ];
   const uniqueAttentionErrors = Array.from(new Set(attentionErrors));
   const hasEditableJournal = Boolean(editor && (editor.markdown.trim() || editor.sections.length > 0));
+  const productStatus: ProductJournalStatusView = editor
+    ? getProductJournalStatus(editor, hasLocalUnsavedChanges)
+    : {
+        id: loadState === "error" ? "needs-attention" : "organizing",
+        label: loadState === "error" ? "需要处理" : "整理中",
+        tone: loadState === "error" ? "danger" : "neutral",
+        nextStepTitle: loadState === "error" ? "检查连接状态" : "正在读取今天的状态",
+        nextStepText: loadState === "error" ? "读取今日状态失败，请查看上方错误后重试。" : "正在加载今天的日记、草稿和整理配置。"
+      };
+  const titleDescription = inputCount > 0
+    ? `已保留 ${inputCount} 条原始表达，当前整理稿可以继续确认或微调。`
+    : "今天还未记录。先写一句自然语言，Journal 会保留原话。";
+  const composeHint = hasLocalUnsavedChanges
+    ? localUnsavedChangeMessage
+    : pendingRegenerateDraft
+      ? "这会覆盖当前草稿内容，但不会影响正式日记。"
+      : "使用当前 LLM 重新整理当前草稿。";
+  const structureStatusText = loadState === "loading"
+    ? "正在读取今天的整理状态。"
+    : editor?.validation.isValid
+      ? "内容结构完整，可以保存。"
+      : "草稿结构需要处理。";
+  const saveTargetText = today?.entry
+    ? "正式 Markdown 已更新。"
+    : "保存后写入本地正式 Markdown。";
 
   function resetPendingRegenerateDraft() {
     setPendingRegenerateDraft(false);
@@ -111,6 +160,12 @@ export default function App() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetPendingRegenerateDraft();
+
+    if (hasLocalUnsavedChanges) {
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     const trimmedInput = input.trim();
 
     if (!trimmedInput) {
@@ -251,6 +306,12 @@ export default function App() {
   }
 
   async function handleRegenerateDraft(providerId?: string) {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     resetPendingRegenerateDraft();
@@ -291,6 +352,12 @@ export default function App() {
   }
 
   async function handleRegenerateCurrentDraft() {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     if (!pendingRegenerateDraft) {
       setPendingRegenerateDraft(true);
       return;
@@ -300,19 +367,16 @@ export default function App() {
     await handleRegenerateDraft();
   }
 
-  function focusInput() {
-    document.getElementById("today-input")?.focus();
-  }
-
   return (
-    <main className="today-shell">
+    <main className="today-shell productized-today-shell">
       <header className="top-context">
-        <div className="title-block">
+        <div className="title-block productized-title-block">
           <span className="eyebrow">Journal</span>
           <h1>{title}</h1>
+          <p>{titleDescription}</p>
         </div>
-        <div className="status-strip" aria-label="运行状态">
-          <span className={`status-pill status-${statusLabel}`}>{statusLabel}</span>
+        <div className="status-strip" aria-label="今日状态">
+          <span className={`status-pill product-status-${productStatus.tone}`}>{productStatus.label}</span>
           <span className="api-pill">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
           <button
             type="button"
@@ -323,7 +387,7 @@ export default function App() {
               setIsLlmPanelOpen(true);
             }}
           >
-            LLM {activeProviderName}
+            {activeProviderStatus}
           </button>
         </div>
       </header>
@@ -340,49 +404,16 @@ export default function App() {
         </p>
       ) : null}
 
-      <section className="workspace">
-        <aside className="context-rail" aria-label="今日上下文">
-          <section className="rail-block date-block">
-            <span className="rail-label">Today</span>
-            <strong>{today?.date.monthDay ?? "--"}</strong>
-            <p>{today?.date.markdownFileName ?? "读取中"}</p>
-          </section>
-
-          <section className="rail-block">
-            <div className="section-head">
-              <h2>Raw inputs</h2>
-              <span>{inputCount} 条</span>
-            </div>
-            {inputCount > 0 ? (
-              <ol className="raw-list">
-                {today?.rawInputs.map(raw => (
-                  <li key={raw.id}>
-                    <strong>{formatRawInputTime(raw.createdAt)}</strong>
-                    <p>{raw.text}</p>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="muted">今天还没有原始输入。</p>
-            )}
-          </section>
-        </aside>
-
-        <section className="journal-stage" aria-label="JMF 日记编辑">
-          <div className="compact-actions" aria-label="紧凑窗口操作">
-            <button type="button" className="secondary-action" onClick={focusInput}>
-              补充输入
-            </button>
-            {canConfirm ? (
-              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
-                确认保存
-              </button>
-            ) : null}
-          </div>
-
-          <article className="journal-paper">
+      <section className="workspace productized-workspace">
+        <section className="journal-stage productized-journal-stage" aria-label="日记纸面">
+          <article className="journal-paper productized-journal-paper">
             {loadState === "loading" ? <p className="empty-paper">正在读取今天的日记状态...</p> : null}
-            {loadState === "error" && !hasEditableJournal ? <p className="empty-paper">还没有可编辑的 JMF 草稿</p> : null}
+            {loadState === "error" && !hasEditableJournal ? (
+              <section className="empty-paper productized-empty-paper">
+                <h2>今天的状态暂时没读出来</h2>
+                <p>右侧会显示错误信息，正式日记和原始表达不会被这里覆盖。</p>
+              </section>
+            ) : null}
             {hasEditableJournal && editor ? (
               <JournalEditor
                 editor={editor}
@@ -390,20 +421,18 @@ export default function App() {
                 onSaveBlocks={handleSaveBlocks}
                 onSaveSource={handleSaveSource}
                 onLocalInteraction={resetPendingRegenerateDraft}
+                onDirtyChange={setHasLocalUnsavedChanges}
               />
             ) : null}
             {loadState !== "loading" && loadState !== "error" && !hasEditableJournal ? (
-              <p className="empty-paper">还没有可编辑的 JMF 草稿</p>
+              <section className="empty-paper productized-empty-paper">
+                <h2>今天先写一句</h2>
+                <p>不用先想结构。写一段自然语言，Journal 会保留原话，再帮你整理成可确认的日记草稿。</p>
+              </section>
             ) : null}
           </article>
-        </section>
 
-        <aside className="input-dock" aria-label="输入与确认">
-          <section className="dock-block input-block">
-            <div className="section-head">
-              <h2>补充今天</h2>
-              <span>raw input</span>
-            </div>
+          <section className="compose-bar" aria-label="底部输入和主操作">
             <form onSubmit={handleSubmit}>
               <label htmlFor="today-input">补充今天的自然语言输入</label>
               <textarea
@@ -413,22 +442,88 @@ export default function App() {
                   resetPendingRegenerateDraft();
                   setInput(event.target.value);
                 }}
-                placeholder="例如：昨天把阶段 1 跑通了，今天准备做 JMF 主链路。"
-                rows={8}
+                placeholder={hasEditableJournal ? "补充一句今天的事，或者让 AI 基于当前材料重新整理这一版..." : "今天发生了什么？直接写原话..."}
+                rows={3}
                 disabled={isBusy}
               />
-              <button type="submit" className="primary-action" disabled={isBusy}>
+              <button type="submit" className="primary-action" disabled={isBusy || hasLocalUnsavedChanges}>
                 生成草稿
               </button>
             </form>
+            {hasEditableJournal ? (
+              <div className="compose-secondary-actions">
+                <p className="compose-hint">{composeHint}</p>
+                <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy || hasLocalUnsavedChanges}>
+                  重新整理
+                </button>
+              </div>
+            ) : null}
+            {canConfirm ? (
+              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
+                保存日记
+              </button>
+            ) : null}
+          </section>
+        </section>
+
+        <aside className="today-assistant" aria-label="今日助手">
+          <section className={`assistant-panel assistant-panel-${productStatus.tone}`}>
+            <div className="section-head">
+              <h2>下一步</h2>
+              <span>{productStatus.label}</span>
+            </div>
+            <strong>{productStatus.nextStepTitle}</strong>
+            <p>{productStatus.nextStepText}</p>
+          </section>
+
+          <section className="assistant-panel">
+            <div className="section-head">
+              <h2>今日材料</h2>
+              <span>{inputCount} 条</span>
+            </div>
+            {inputCount > 0 ? (
+              <ol className="raw-list productized-raw-list">
+                {today?.rawInputs.map(raw => (
+                  <li key={raw.id}>
+                    <strong>{formatRawInputTime(raw.createdAt)}</strong>
+                    <p>{raw.text}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="muted">还没有输入。这里之后会显示原始表达摘要。</p>
+            )}
+          </section>
+
+          <section className="assistant-panel">
+            <div className="section-head">
+              <h2>整理状态</h2>
+              <span>{activeProviderName}</span>
+            </div>
+            <dl className="today-status-list">
+              <div>
+                <dt>结构</dt>
+                <dd>{structureStatusText}</dd>
+              </div>
+              <div>
+                <dt>整理方式</dt>
+                <dd>{activeProviderStatus}。</dd>
+              </div>
+              <div>
+                <dt>保存目标</dt>
+                <dd>{saveTargetText}</dd>
+              </div>
+            </dl>
           </section>
 
           {uniqueAttentionErrors.length > 0 ? (
-            <section className="dock-block attention-panel" aria-label="需要处理">
+            <section className="assistant-panel attention-panel productized-attention-panel" aria-label="需要处理">
               <div className="section-head">
-                <h2>需要处理</h2>
-                <span>需处理</span>
+                <h2>这篇草稿需要处理</h2>
+                <span>需要处理</span>
               </div>
+              <p>正式日记没有被覆盖，原始表达仍然保留。</p>
+              <p>这通常不是你的输入丢了，而是整理结果没有通过结构检查。</p>
               <ul>
                 {uniqueAttentionErrors.map(item => (
                   <li key={item}>{item}</li>
@@ -437,35 +532,8 @@ export default function App() {
             </section>
           ) : null}
 
-          {hasEditableJournal ? (
-            <section className="dock-block regenerate-panel" aria-label="重新整理">
-              <div className="section-head">
-                <h2>重新整理</h2>
-                <span>{activeProviderName}</span>
-              </div>
-              <p>
-                {pendingRegenerateDraft
-                  ? "这会覆盖当前草稿内容，但不会影响正式日记。"
-                  : "使用当前 LLM 重新整理 reviewing draft。"}
-              </p>
-              <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy}>
-                重新整理今日草稿
-              </button>
-            </section>
-          ) : null}
-
-          {canConfirm ? (
-            <section className="confirm-panel" aria-label="草稿确认">
-              <strong>草稿可以确认</strong>
-              <p>确认后更新当天正式 Markdown；当前版本不创建版本快照。</p>
-              <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
-                确认写入正式日记
-              </button>
-            </section>
-          ) : null}
-
           {today?.entry ? (
-            <section className="dock-block path-panel">
+            <section className="assistant-panel path-panel">
               <div className="section-head">
                 <h2>正式文件</h2>
                 <span>已写入</span>

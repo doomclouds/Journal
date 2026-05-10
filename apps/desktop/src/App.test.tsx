@@ -335,11 +335,14 @@ describe("App", () => {
     postInputDeferred.resolve(mockJsonResponse(emptyToday));
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    expect(await screen.findByText("reviewing")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
-  test("loads health and today editor state on initial render", async () => {
+  test("shows friendly empty productized state on initial render", async () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       {
@@ -360,13 +363,36 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "2026-05-08 晨间日记" })
     ).toBeInTheDocument();
-    expect(screen.getByText("empty")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("今日状态")).getByText("待开始")).toBeInTheDocument();
+    expect(screen.getByText("今天先写一句")).toBeInTheDocument();
+    expect(screen.getByText("不用先想结构。写一段自然语言，Journal 会保留原话，再帮你整理成可确认的日记草稿。")).toBeInTheDocument();
     expect(screen.getByLabelText("补充今天的自然语言输入")).toBeInTheDocument();
-    expect(screen.getByText("还没有可编辑的 JMF 草稿")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeInTheDocument();
+    expect(screen.queryByText("还没有可编辑的 JMF 草稿")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:5057/health", undefined);
     expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today/editor", undefined);
     expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/settings/ai", undefined);
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today", undefined);
+  });
+
+  test("shows productized draft language without backend status leaks", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
+    expect(screen.getAllByText("今日材料").length).toBeGreaterThan(0);
+    expect(screen.getByText("整理状态")).toBeInTheDocument();
+    expect(screen.getByText("下一步")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LLM Mock" })).toHaveTextContent("Mock 可用");
+    expect(screen.queryByText("reviewing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Raw inputs")).not.toBeInTheDocument();
   });
 
   test("shows current LLM provider in top status strip", async () => {
@@ -378,10 +404,22 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "LLM Mock" })).toHaveTextContent("Mock 可用");
   });
 
-  test("shows unknown active LLM id instead of falling back to Mock", async () => {
+  test("shows DeepSeek LLM provider as available in top status strip", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: deepSeekAiSettings }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "LLM DeepSeek" })).toHaveTextContent("DeepSeek 可用");
+  });
+
+  test("shows unknown active LLM id as needing configuration instead of falling back to Mock", async () => {
     mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
@@ -390,7 +428,9 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toHaveTextContent("missing-provider 需要配置");
+    expect(screen.getByText("missing-provider 需要配置。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LLM missing-provider" })).not.toHaveTextContent("missing-provider 可用");
     expect(screen.queryByRole("button", { name: "LLM Mock" })).not.toBeInTheDocument();
   });
 
@@ -571,9 +611,9 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重新整理" }));
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
@@ -611,12 +651,10 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "重新整理今日草稿" }));
-    fireEvent.click(screen.getByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重新整理" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("重新生成后的重点")
-    );
+    await waitFor(() => expect(screen.getByText("重新生成后的重点")).toBeInTheDocument());
     expect(screen.getByRole("alert")).toHaveTextContent("settings refresh failed");
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
   });
@@ -627,7 +665,7 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "重新整理今日草稿" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "重新整理" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /LLM/ }));
 
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
@@ -646,7 +684,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const button = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const button = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(button);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
@@ -667,7 +705,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
@@ -675,7 +713,7 @@ describe("App", () => {
       target: { value: "补充一点新上下文" }
     });
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -689,14 +727,14 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "LLM Mock" }));
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -704,26 +742,118 @@ describe("App", () => {
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
   });
 
-  test("editing journal content resets regenerate confirmation", async () => {
+  test("editing journal content resets regenerate confirmation and blocks refresh while dirty", async () => {
     const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "补充新的今日重点" }
     });
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("先保存或取消当前编辑，再继续补充或重新整理。")).toBeInTheDocument();
+    expect(regenerateButton).toBeDisabled();
 
     fireEvent.click(regenerateButton);
 
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
-    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("补充新的今日重点");
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
+    expect(regenerateButton).toBeEnabled();
+  });
+
+  test("dirty inline block status disables formal save until cancel", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存的本地改动" }
+    });
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  test("dirty inline block blocks raw input submit and regeneration refresh", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存的本地改动" }
+    });
+    fireEvent.change(screen.getByLabelText("补充今天的自然语言输入"), {
+      target: { value: "这条 raw input 不能刷新掉本地编辑" }
+    });
+
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+    expect(screen.getByText("先保存或取消当前编辑，再继续补充或重新整理。")).toBeInTheDocument();
+
+    const inputForm = screen.getByLabelText("补充今天的自然语言输入").closest("form");
+    if (!inputForm) {
+      throw new Error("Expected raw input form");
+    }
+
+    fireEvent.submit(inputForm);
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的本地改动");
+  });
+
+  test("dirty inline block disables advanced source save without clearing local edits", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存但不能丢" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
+
+    expect(screen.getByRole("button", { name: "保存源码草稿" })).toBeDisabled();
+    expect(screen.getByText("先保存或取消正在编辑的段落，再保存源码。")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存但不能丢");
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "收起高级源码" }));
+
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存但不能丢");
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
+
+    expect(screen.getByRole("button", { name: "保存源码草稿" })).toBeDisabled();
   });
 
   test("inserting optional block resets regenerate confirmation", async () => {
@@ -732,13 +862,13 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -752,14 +882,14 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("请输入一段今天的自然语言内容。");
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -791,9 +921,12 @@ describe("App", () => {
     fireEvent.change(input, { target: { value: "今天完成 Phase 2 API 连接" } });
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
-    expect(await screen.findByText("reviewing")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认写入正式日记" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/inputs", {
       method: "POST",
       headers: {
@@ -840,7 +973,9 @@ describe("App", () => {
 
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    expect(await screen.findByText("reviewing")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
     expect(submitButton).toBeEnabled();
   });
 
@@ -896,7 +1031,7 @@ describe("App", () => {
     expect(screen.getByText("请输入一段今天的自然语言内容。")).toBeInTheDocument();
   });
 
-  test("shows attention errors without confirm action", async () => {
+  test("shows needs-attention productized state without confirm action", async () => {
     mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState({
@@ -919,9 +1054,44 @@ describe("App", () => {
 
     render(<App />);
 
-    expect((await screen.findAllByText("attention")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("需要处理")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("正式日记没有被覆盖，原始表达仍然保留。").length).toBeGreaterThan(0);
     expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "确认写入正式日记" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+  });
+
+  test("keeps regenerate confirmation and action together in needs-attention state", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState({
+        status: "attention",
+        validation: {
+          isValid: false,
+          issues: [
+            {
+              code: "missing-title",
+              message: "title is required",
+              repairHint: "补齐标题后再确认。"
+            }
+          ]
+        },
+        canConfirm: false,
+        today: attentionToday
+      }) },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    expect((await screen.findAllByText("正式日记没有被覆盖，原始表达仍然保留。")).length).toBeGreaterThan(0);
+
+    expect(screen.getAllByRole("button", { name: "重新整理" })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "重新整理" })).toHaveLength(1);
   });
 
   test("confirms draft and refreshes from today editor state", async () => {
@@ -942,9 +1112,11 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "确认写入正式日记" }));
+    fireEvent.click(await screen.findByRole("button", { name: "保存日记" }));
 
-    await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("已保存")).toBeInTheDocument()
+    );
     expect(screen.getByText(entryPath)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
@@ -968,7 +1140,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const confirmButton = await screen.findByRole("button", { name: "确认写入正式日记" });
+    const confirmButton = await screen.findByRole("button", { name: "保存日记" });
     expect(confirmButton).toBeEnabled();
 
     fireEvent.click(confirmButton);
@@ -986,7 +1158,9 @@ describe("App", () => {
       today: processedToday(entryPath)
     })));
 
-    await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("已保存")).toBeInTheDocument()
+    );
     expect(screen.getByText(entryPath)).toBeInTheDocument();
   });
 
@@ -1012,13 +1186,19 @@ describe("App", () => {
 
     render(<App />);
 
-    const focusEditor = await screen.findByRole("textbox", { name: "编辑 今日重点" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     fireEvent.change(focusEditor, { target: { value: "保存后的区块内容" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
 
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("保存后的区块内容")
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
     );
+    expect(screen.getByText("保存后的区块内容")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/blocks", {
       method: "PUT",
       headers: {
@@ -1026,6 +1206,30 @@ describe("App", () => {
       },
       body: JSON.stringify({ sections: [{ id: "today-focus", content: "保存后的区块内容" }] })
     });
+  });
+
+  test("keeps failed block save inline dirty and unavailable for formal save", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { ok: false, status: 500, body: { error: "block save failed" } }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "保存失败时不要丢" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("block save failed");
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("保存失败时不要丢");
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认保存" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   test("saves source edits through editor endpoint and updates editor state", async () => {
@@ -1050,15 +1254,24 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "源码模式" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: updatedMarkdown }
     });
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+
     fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown)
-    );
+    await waitFor(() => expect(screen.getByText("源码保存后的内容")).toBeInTheDocument());
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeEnabled();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/source", {
       method: "PUT",
       headers: {
@@ -1068,7 +1281,34 @@ describe("App", () => {
     });
   });
 
-  test("disables editor save and confirm actions while block save is pending", async () => {
+  test("dirty source edits disable block editing and insertion until source is saved or reset", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: "# 2026-05-08\n\n源码本地改动还没保存" }
+    });
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
+
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue("# 2026-05-08\n\n源码本地改动还没保存");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  test("disables block actions and confirm actions while selected block save is pending", async () => {
     const blockSaveDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
@@ -1080,19 +1320,25 @@ describe("App", () => {
 
     render(<App />);
 
-    const saveButton = await screen.findByRole("button", { name: "保存块编辑草稿" });
-    const confirmButton = screen.getByRole("button", { name: "确认写入正式日记" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    const saveButton = screen.getByRole("button", { name: "保存这一段" });
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
+    const confirmButton = screen.getByRole("button", { name: "保存日记" });
 
     fireEvent.click(saveButton);
 
     expect(saveButton).toBeDisabled();
+    expect(focusEditor).toBeDisabled();
     expect(confirmButton).toBeDisabled();
-    expect(screen.getByRole("button", { name: "插入 情绪感受" })).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    await waitFor(() => expect(saveButton).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeEnabled()
+    );
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(confirmButton).toBeEnabled();
   });
 
@@ -1108,7 +1354,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "源码模式" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
     const sourceEditor = screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" });
     fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
 
@@ -1116,80 +1362,60 @@ describe("App", () => {
 
     sourceSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    await waitFor(() => expect(sourceEditor).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument()
+    );
   });
 
-  test("ignores stale block save response when a later raw input refresh wins", async () => {
-    const blockSaveDeferred = createDeferred<Response>();
-    const postInputDeferred = createDeferred<Response>();
-    const inputRefreshDeferred = createDeferred<Response>();
-    const staleEditor = createEditorState({
-      status: "reviewing",
-      markdown: editorMarkdown.replace("推进 Phase 3", "旧保存响应"),
-      sections: [
-        {
-          id: "today-focus",
-          title: "今日重点",
-          content: "旧保存响应",
-          kind: "required",
-          isEditableInBlockMode: true
-        }
-      ]
+  test("keeps advanced source drawer open with edited markdown when source save fails", async () => {
+    const updatedMarkdown = "# 2026-05-08\n\n保存失败时留在抽屉里";
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { ok: false, status: 500, body: { error: "source save failed" } }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: updatedMarkdown }
     });
-    const latestEditor = createEditorState({
-      status: "processed",
-      canConfirm: false,
-      today: processedToday(),
-      markdown: editorMarkdown.replace("推进 Phase 3", "最新输入刷新"),
-      sections: [
-        {
-          id: "today-focus",
-          title: "今日重点",
-          content: "最新输入刷新",
-          kind: "required",
-          isEditableInBlockMode: true
-        }
-      ]
-    });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
-      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
-      .mockReturnValueOnce(blockSaveDeferred.promise)
-      .mockReturnValueOnce(postInputDeferred.promise)
-      .mockReturnValueOnce(inputRefreshDeferred.promise);
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("source save failed");
+    expect(screen.getByRole("button", { name: "收起高级源码" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown);
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  test("blocks raw input refresh while inline dirty so local block edits stay visible", async () => {
+    const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
-    const focusEditor = await screen.findByRole("textbox", { name: "编辑 今日重点" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
     const input = screen.getByLabelText("补充今天的自然语言输入");
     const inputForm = input.closest("form");
     if (!inputForm) {
       throw new Error("Expected raw input form");
     }
 
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "准备保存的本地内容" }
+    });
     fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
-    fireEvent.change(focusEditor, { target: { value: "准备保存但会变旧" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
     fireEvent.submit(inputForm);
 
-    postInputDeferred.resolve(mockJsonResponse(reviewingToday));
-    await Promise.resolve();
-    inputRefreshDeferred.resolve(mockJsonResponse(latestEditor));
-
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("最新输入刷新")
-    );
-
-    blockSaveDeferred.resolve(mockJsonResponse(staleEditor));
-
-    await Promise.resolve();
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("最新输入刷新")
-    );
-    expect(screen.queryByDisplayValue("旧保存响应")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("准备保存的本地内容");
   });
 
   test("restores mocked fetch between tests", () => {
@@ -1198,7 +1424,7 @@ describe("App", () => {
 });
 
 describe("JournalEditor", () => {
-  test("shows editable today focus textarea in default block mode", () => {
+  test("reading-first preview shows product title and hides inline textarea by default", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1208,10 +1434,99 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.getByRole("heading", { name: "今天想推进" })).toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
-  test("shows raw inputs without exposing an editable control", () => {
+  test("selected block save only submits the inline block being edited", () => {
+    const onSaveBlocks = vi.fn();
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "推进 Phase 3",
+              kind: "required",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "yesterday-review",
+              title: "昨日回顾",
+              content: "昨天完成 Phase 2",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={onSaveBlocks}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
+    fireEvent.change(focusEditor, { target: { value: "完成前端编辑器组件" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+
+    expect(onSaveBlocks).toHaveBeenCalledTimes(1);
+    expect(onSaveBlocks).toHaveBeenCalledWith([
+      { id: "today-focus", content: "完成前端编辑器组件" }
+    ]);
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("完成前端编辑器组件");
+  });
+
+  test("switching sections keeps the dirty inline block active until it is saved or canceled", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "推进 Phase 3",
+              kind: "required",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "yesterday-review",
+              title: "昨日回顾",
+              content: "昨天完成 Phase 2",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "A 段未保存内容" }
+    });
+
+    const nextSectionEditButton = screen.getByRole("button", { name: "编辑 昨天回顾" });
+    const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
+    expect(nextSectionEditButton).toBeDisabled();
+    expect(insertButton).toBeDisabled();
+
+    fireEvent.click(nextSectionEditButton);
+    fireEvent.click(insertButton);
+
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("A 段未保存内容");
+    expect(screen.queryByRole("textbox", { name: "编辑 昨天回顾" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.getByText("昨天完成 Phase 2")).toBeInTheDocument();
+  });
+
+  test("cancels inline block editing and restores preview text", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1221,11 +1536,35 @@ describe("JournalEditor", () => {
       />
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "临时改动，不保存" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByText("临时改动，不保存")).not.toBeInTheDocument();
+  });
+
+  test("assistant-friendly system raw block shows product labels without edit action", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "今日材料" })).toBeInTheDocument();
+    expect(screen.getByText("保留原话")).toBeInTheDocument();
     expect(screen.getByText("今天要保留原始表达")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 原始输入" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "编辑 今日材料" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日材料" })).not.toBeInTheDocument();
   });
 
-  test("inserts an available optional block into the page", () => {
+  test("shows 添加 情绪感受 for optional inserts and opens the new inline block", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1235,9 +1574,29 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
 
     expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+  });
+
+  test("canceling a temporary optional inline block removes it and restores insert action", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
+    expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("heading", { name: "情绪感受" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeInTheDocument();
   });
 
   test("keeps inserted optional blocks in catalog order after required sections", () => {
@@ -1283,17 +1642,17 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "插入 工作推进" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 工作推进" }));
 
     expect(screen.getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual([
-      "原始输入",
-      "昨日回顾",
-      "今日重点",
+      "今日材料",
+      "昨天回顾",
+      "今天想推进",
       "工作推进"
     ]);
   });
 
-  test("keeps block save action before the section list", () => {
+  test("keeps optional insert action before the section list", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1303,31 +1662,10 @@ describe("JournalEditor", () => {
       />
     );
 
-    const saveButton = screen.getByRole("button", { name: "保存块编辑草稿" });
-    const firstSection = screen.getByRole("region", { name: "原始输入" });
+    const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
+    const firstSection = screen.getByRole("region", { name: "今天想推进" });
 
-    expect(saveButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  test("saves current editable block sections", () => {
-    const onSaveBlocks = vi.fn();
-    render(
-      <JournalEditor
-        editor={createEditorState()}
-        isBusy={false}
-        onSaveBlocks={onSaveBlocks}
-        onSaveSource={vi.fn()}
-      />
-    );
-
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
-      target: { value: "完成前端编辑器组件" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
-
-    expect(onSaveBlocks).toHaveBeenCalledWith([
-      { id: "today-focus", content: "完成前端编辑器组件" }
-    ]);
+    expect(insertButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   test("resets local block edits when the authoritative editor snapshot changes", () => {
@@ -1348,7 +1686,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "未保存的本地区块内容" }
     });
 
@@ -1361,11 +1700,46 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("未保存的本地区块内容")).not.toBeInTheDocument();
   });
 
-  test("saves full markdown in source mode", () => {
+  test("keeps advanced source drawer hidden until opened and collapses it again", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(editorMarkdown);
+
+    fireEvent.click(screen.getByRole("button", { name: "收起高级源码" }));
+
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
+  });
+
+  test("removes source mode tabs as the default editor interaction", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "区块模式" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "源码模式" })).not.toBeInTheDocument();
+  });
+
+  test("saves full markdown from advanced source drawer", () => {
     const onSaveSource = vi.fn();
     render(
       <JournalEditor
@@ -1376,7 +1750,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: "# 2026-05-08\n\n更新后的源码" }
     });
@@ -1412,7 +1786,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: "# 未保存的本地源码" }
     });
@@ -1426,11 +1800,11 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(editorMarkdown);
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("# 未保存的本地源码")).not.toBeInTheDocument();
   });
 
-  test("shows attention validation issue message and repair hint", () => {
+  test("shows needs-attention explanation with validation issue message and repair hint", () => {
     render(
       <JournalEditor
         editor={createEditorState({
@@ -1452,11 +1826,18 @@ describe("JournalEditor", () => {
       />
     );
 
+    expect(screen.getByRole("region", { name: "需要处理" })).toHaveClass(
+      "attention-panel",
+      "productized-attention-panel"
+    );
+    expect(screen.getByText("这篇草稿需要处理")).toBeInTheDocument();
+    expect(screen.getByText("需要处理")).toBeInTheDocument();
+    expect(screen.getByText("正式日记没有被覆盖，原始表达仍然保留。")).toBeInTheDocument();
     expect(screen.getByText("缺少今日重点区块")).toBeInTheDocument();
     expect(screen.getByText("请补回 today-focus 区块后再保存。")).toBeInTheDocument();
   });
 
-  test("disables editable block and source textareas while busy", () => {
+  test("disables editable block actions and source textareas while busy", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1466,9 +1847,10 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
 
     expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toBeDisabled();
   });

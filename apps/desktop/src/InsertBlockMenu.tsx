@@ -20,7 +20,7 @@ export function InsertBlockMenu({ sections, disabled = false, onInsert }: Insert
           disabled={disabled}
           onClick={() => onInsert(section)}
         >
-          插入 {section.title}
+          添加 {section.title}
         </button>
       ))}
     </section>
