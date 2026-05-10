@@ -2291,7 +2291,7 @@ export function LlmSettingsPanel({
               <input value={selected.baseUrl} onChange={event => updateSelected({ baseUrl: event.target.value })} />
             </label>
             <div className="llm-settings-actions">
-              <button type="button" className="secondary-action" onClick={handleTest} disabled={isBusy}>测试连接</button>
+              <button type="button" className="secondary-action" onClick={handleTest} disabled={isBusy}>测试已保存配置</button>
               <button type="submit" className="primary-action" disabled={isBusy}>启用 Provider</button>
             </div>
           </section>
@@ -2331,7 +2331,7 @@ export function LlmSettingsPanel({
           <section className={`llm-settings-card ${testResult?.isSuccess === false ? "attention-panel" : ""}`}>
             <span className="rail-label">Connection test</span>
             <h2>{testResult ? testResult.status : "最小 JSON 请求"}</h2>
-            <p>测试会向当前 Provider 发送一次最小请求，可能产生少量 token 消耗。</p>
+            <p>会使用已保存的 Provider 配置，不会测试当前未保存草稿。</p>
             {testResult?.error ? (
               <details>
                 <summary>安全技术详情</summary>
@@ -2629,7 +2629,7 @@ test("tests provider and shows safe technical details", async () => {
 
   fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
   fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-  fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+  fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
 
   expect(await screen.findByText("unauthorized")).toBeInTheDocument();
   expect(screen.getByText("安全技术详情")).toBeInTheDocument();

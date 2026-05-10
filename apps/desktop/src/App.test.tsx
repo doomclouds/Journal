@@ -1,15 +1,21 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
+  getAiSettings,
   getTodayEditor,
+  regenerateTodayDraft,
+  saveAiSettings,
   saveBlockDraft,
   saveSourceDraft,
+  testAiProvider,
+  type AiSettingsSaveRequest,
   type JournalDraft,
   type TodayJournalState,
   type TodayEditorState
 } from "./api";
 import { JournalEditor } from "./JournalEditor";
+import { LlmSettingsPanel } from "./LlmSettingsPanel";
 
 type MockResponse = {
   ok?: boolean;
@@ -28,6 +34,47 @@ const healthResponse = {
   version: "0.1.0",
   environment: "Development",
   serverTime: "2026-05-08T08:00:00+08:00"
+};
+
+const aiSettings = {
+  activeProviderId: "mock",
+  runtime: "OpenAI-compatible runtime · Agent Framework 1.5.0",
+  providers: [
+    {
+      id: "mock",
+      type: "mock",
+      displayName: "Mock",
+      preset: "mock",
+      baseUrl: "local",
+      model: "mock-journal",
+      isEnabled: true,
+      isActive: true,
+      hasApiKey: true,
+      source: "default",
+      timeoutSeconds: 1,
+      temperature: 0,
+      maxTokens: 0,
+      stylePreset: "faithful",
+      lastTestStatus: "not-tested"
+    },
+    {
+      id: "deepseek",
+      type: "openai-compatible",
+      displayName: "DeepSeek",
+      preset: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+      isEnabled: false,
+      isActive: false,
+      hasApiKey: false,
+      source: "preset",
+      timeoutSeconds: 45,
+      temperature: 0.2,
+      maxTokens: 1200,
+      stylePreset: "faithful",
+      lastTestStatus: "not-tested"
+    }
+  ]
 };
 
 const journalDate = {
@@ -978,7 +1025,320 @@ describe("JournalEditor", () => {
   });
 });
 
+describe("LlmSettingsPanel", () => {
+  test("shows LLM provider list and safe technical defaults", () => {
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={vi.fn()}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
+    const providerList = within(screen.getByRole("navigation", { name: "Provider 列表" }));
+    expect(providerList.getByRole("button", { name: /Mock/ })).toHaveAttribute("aria-pressed", "true");
+    expect(providerList.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
+    expect(screen.getByText("会使用已保存的 Provider 配置，不会测试当前未保存草稿。")).toBeInTheDocument();
+    expect(screen.getByLabelText("超时")).toHaveAttribute("type", "number");
+    expect(screen.getByLabelText("API Key 已加载，值不显示")).toHaveValue("");
+  });
+
+  test("tests selected provider and shows safe technical details", async () => {
+    const onTest = vi.fn().mockResolvedValue({
+      isSuccess: false,
+      status: "unauthorized",
+      safeResponseSnippet: "",
+      httpStatus: 401,
+      latency: "00:00:00.1200000",
+      error: {
+        stage: "provider-call",
+        code: "unauthorized",
+        message: "AI provider rejected the API key.",
+        technicalDetails: "httpStatus: 401 authorization: [redacted]"
+      }
+    });
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={onTest}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
+
+    expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+    expect(screen.getByText("安全技术详情")).toBeInTheDocument();
+    expect(screen.getByText("httpStatus: 401 authorization: [redacted]")).toBeInTheDocument();
+    expect(onTest).toHaveBeenCalledWith("deepseek");
+  });
+
+  test("clears stale connection result when editing unsaved provider fields", async () => {
+    const onTest = vi.fn().mockResolvedValue({
+      isSuccess: false,
+      status: "unauthorized",
+      safeResponseSnippet: "",
+      httpStatus: 401,
+      latency: "00:00:00.1200000",
+      error: {
+        stage: "provider-call",
+        code: "unauthorized",
+        message: "AI provider rejected the API key.",
+        technicalDetails: "httpStatus: 401 authorization: [redacted]"
+      }
+    });
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={onTest}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
+
+    expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("模型"), { target: { value: "deepseek-next" } });
+
+    expect(screen.queryByText("unauthorized")).not.toBeInTheDocument();
+    expect(screen.queryByText("安全技术详情")).not.toBeInTheDocument();
+  });
+
+  test("ignores stale connection result after switching provider", async () => {
+    const testDeferred = createDeferred<{
+      isSuccess: boolean;
+      status: string;
+      safeResponseSnippet: string;
+      httpStatus: number;
+      latency: string;
+      error: {
+        stage: string;
+        code: string;
+        message: string;
+        technicalDetails: string;
+      };
+    }>();
+    const onTest = vi.fn().mockReturnValue(testDeferred.promise);
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={onTest}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    const providerList = within(screen.getByRole("navigation", { name: "Provider 列表" }));
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
+    fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
+
+    testDeferred.resolve({
+      isSuccess: false,
+      status: "unauthorized",
+      safeResponseSnippet: "",
+      httpStatus: 401,
+      latency: "00:00:00.1200000",
+      error: {
+        stage: "provider-call",
+        code: "unauthorized",
+        message: "AI provider rejected the API key.",
+        technicalDetails: "httpStatus: 401 authorization: [redacted]"
+      }
+    });
+
+    await waitFor(() => expect(onTest).toHaveBeenCalledWith("deepseek"));
+    expect(screen.queryByText("unauthorized")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mock" })).toBeInTheDocument();
+  });
+
+  test("keeps numeric setting when a number input is cleared", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={onSave}
+        onTest={vi.fn()}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("超时"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "启用 Provider" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const request = onSave.mock.calls[0][0] as AiSettingsSaveRequest;
+    expect(request.providers.find(provider => provider.id === "mock")?.timeoutSeconds).toBe(1);
+  });
+
+  test("requires confirmation before regenerating draft", async () => {
+    const onRegenerate = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={vi.fn()}
+        onRegenerate={onRegenerate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+    expect(onRegenerate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+
+    await waitFor(() => expect(onRegenerate).toHaveBeenCalledWith(undefined));
+  });
+
+  test("does not reuse mock regenerate confirmation for current provider regenerate", async () => {
+    const onRegenerate = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={vi.fn()}
+        onRegenerate={onRegenerate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "用 Mock 生成一次" }));
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    expect(onRegenerate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    await waitFor(() => expect(onRegenerate).toHaveBeenCalledWith(undefined));
+  });
+});
+
 describe("editor API client", () => {
+  test("getAiSettings calls settings endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getAiSettings();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
+  });
+
+  test("saveAiSettings sends provider settings", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveAiSettings({
+      activeProviderId: "deepseek",
+      providers: [
+        {
+          id: "deepseek",
+          type: "openai-compatible",
+          displayName: "DeepSeek",
+          preset: "deepseek",
+          baseUrl: "https://api.deepseek.com",
+          model: "deepseek-v4-flash",
+          apiKey: "",
+          isEnabled: true,
+          timeoutSeconds: 45,
+          temperature: 0.2,
+          maxTokens: 1200,
+          stylePreset: "faithful"
+        }
+      ]
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        activeProviderId: "deepseek",
+        providers: [
+          {
+            id: "deepseek",
+            type: "openai-compatible",
+            displayName: "DeepSeek",
+            preset: "deepseek",
+            baseUrl: "https://api.deepseek.com",
+            model: "deepseek-v4-flash",
+            apiKey: "",
+            isEnabled: true,
+            timeoutSeconds: 45,
+            temperature: 0.2,
+            maxTokens: 1200,
+            stylePreset: "faithful"
+          }
+        ]
+      })
+    });
+  });
+
+  test("testAiProvider sends provider id to settings test endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({
+      isSuccess: true,
+      status: "success",
+      safeResponseSnippet: "{\"ok\":true}",
+      httpStatus: 200,
+      latency: "00:00:00",
+      error: null
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await testAiProvider("deepseek");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ providerId: "deepseek" })
+    });
+  });
+
+  test("regenerateTodayDraft sends optional provider override", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(reviewingToday));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await regenerateTodayDraft("mock");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ providerId: "mock" })
+    });
+  });
+
   test("getTodayEditor calls editor endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(createEditorState()));
     vi.stubGlobal("fetch", fetchMock);

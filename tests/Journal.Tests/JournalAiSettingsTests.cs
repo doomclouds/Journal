@@ -131,6 +131,59 @@ public sealed class JournalAiSettingsTests
     }
 
     [Fact]
+    public async Task SaveAsync_PreservesExistingFileBackedApiKeyWhenRequestApiKeyIsBlank()
+    {
+        using var workspace = TempWorkspace.Create();
+        var service = CreateService(workspace.Root, new Dictionary<string, string?>());
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var store = new JournalAiSettingsStore(paths);
+
+        await service.SaveAsync(new JournalAiSettingsSaveRequest(
+            "deepseek",
+            [
+                new JournalAiProviderSaveRequest(
+                    "deepseek",
+                    "openai-compatible",
+                    "DeepSeek",
+                    "deepseek",
+                    "https://api.deepseek.com",
+                    "deepseek-v4-flash",
+                    "file-backed-secret",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        await service.SaveAsync(new JournalAiSettingsSaveRequest(
+            "deepseek",
+            [
+                new JournalAiProviderSaveRequest(
+                    "deepseek",
+                    "openai-compatible",
+                    "DeepSeek",
+                    "deepseek",
+                    "https://api.deepseek.com",
+                    "deepseek-v4-flash",
+                    "",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var persisted = await store.ReadAsync(CancellationToken.None);
+        var provider = Assert.Single(persisted.Providers, item => item.Id == "deepseek");
+        Assert.Equal("file-backed-secret", provider.ApiKey);
+
+        var view = await service.ReadViewAsync(CancellationToken.None);
+        var providerView = Assert.Single(view.Providers, item => item.Id == "deepseek");
+        Assert.True(providerView.HasApiKey);
+    }
+
+    [Fact]
     public async Task SaveAsync_RejectsMalformedRequestsWithArgumentException()
     {
         using var workspace = TempWorkspace.Create();

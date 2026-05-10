@@ -45,7 +45,7 @@ raw inputs
 - 配置并启用 `OpenAI`、`DeepSeek`、`智谱 GLM` 或自定义 OpenAI-compatible Provider。
 - 使用环境变量覆盖本机配置。
 - 手填模型名，不依赖 Provider 一定支持 `/models`。
-- 点击“测试连接”发送最小 JSON 请求验证 base URL、API Key、model 和 JSON 输出能力。
+- 点击“测试已保存配置”发送最小 JSON 请求验证已保存的 base URL、API Key、model 和 JSON 输出能力。
 - 点击“重新整理草稿”用当前 Provider 重新生成当天 draft。
 - 在真实 Provider 失败时看到 `attention` 状态、友好摘要和可展开安全技术详情。
 
@@ -356,7 +356,7 @@ Provider 列表显示：
 - API Key 状态。
 - Model 手填框。
 - 启用 Provider。
-- 测试连接。
+- 测试已保存配置。
 - 重新整理今日草稿。
 
 高级配置包含：
@@ -371,7 +371,7 @@ Provider 列表显示：
 
 ## 9. 连接测试
 
-连接测试发送一次最小 JSON 请求：
+连接测试发送一次最小 JSON 请求。首版测试的是**已保存 Provider 配置**，不是当前表单里尚未保存的草稿；用户修改 model、base URL 或 API Key 后，需要先保存再测试。
 
 ```text
 system: "Return a JSON object only."
@@ -479,7 +479,7 @@ POST /journal/today/draft/regenerate
 - 五个 Provider 入口可见。
 - 环境变量来源显示为只读或“已加载”。
 - 手填 model、base URL、API Key 后可保存。
-- 测试连接显示成功或失败。
+- 测试已保存配置显示成功或失败。
 - 重新整理草稿有覆盖提示。
 - attention 显示摘要，可展开技术详情。
 
@@ -501,7 +501,7 @@ npm run build --prefix apps/desktop
 - 未配置时默认 Mock。
 - 真实 Provider 可通过环境变量或配置文件启用。
 - 配置页能保存本机配置文件。
-- 配置页能测试连接并展示安全结果。
+- 配置页能测试已保存配置并展示安全结果。
 - `AddInputAsync` 能使用 active Provider 生成 draft。
 - 真实 Provider 失败进入 attention，不自动回退 Mock。
 - 用户可手动用 Mock 生成一次。

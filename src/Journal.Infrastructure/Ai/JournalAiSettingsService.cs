@@ -50,6 +50,7 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateSaveRequest(request);
+        var currentFileSettings = (await _store.ReadWithMetadataAsync(cancellationToken)).Settings;
 
         var activeProviderId = string.IsNullOrWhiteSpace(request.ActiveProviderId)
             ? "mock"
@@ -62,7 +63,7 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
 
         var settings = new JournalAiSettings(
             activeProviderId,
-            request.Providers.Select(ToSettings).ToArray());
+            request.Providers.Select(provider => ToSettings(provider, currentFileSettings)).ToArray());
 
         await _store.WriteAsync(settings, cancellationToken);
     }
@@ -200,20 +201,30 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private static JournalAiProviderSettings ToSettings(JournalAiProviderSaveRequest provider) =>
-        new(
+    private static JournalAiProviderSettings ToSettings(
+        JournalAiProviderSaveRequest provider,
+        JournalAiSettings currentFileSettings)
+    {
+        var currentProvider = currentFileSettings.Providers.FirstOrDefault(item =>
+            string.Equals(item.Id, provider.Id.Trim(), StringComparison.OrdinalIgnoreCase));
+        var apiKey = string.IsNullOrWhiteSpace(provider.ApiKey) && !string.IsNullOrWhiteSpace(currentProvider?.ApiKey)
+            ? currentProvider.ApiKey
+            : provider.ApiKey.Trim();
+
+        return new JournalAiProviderSettings(
             provider.Id.Trim(),
             provider.Type.Trim(),
             provider.DisplayName.Trim(),
             provider.Preset.Trim(),
             provider.BaseUrl.Trim(),
             provider.Model.Trim(),
-            provider.ApiKey.Trim(),
+            apiKey,
             provider.IsEnabled,
             provider.TimeoutSeconds,
             provider.Temperature,
             provider.MaxTokens,
             provider.StylePreset.Trim());
+    }
 
     private static JournalAiProviderView ToView(JournalAiProviderSettings provider, string activeProviderId, string source) =>
         new(

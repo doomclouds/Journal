@@ -101,6 +101,64 @@ export type HealthResponse = {
   serverTime: string;
 };
 
+export type AiProviderView = {
+  id: string;
+  type: string;
+  displayName: string;
+  preset: string;
+  baseUrl: string;
+  model: string;
+  isEnabled: boolean;
+  isActive: boolean;
+  hasApiKey: boolean;
+  source: string;
+  timeoutSeconds: number;
+  temperature: number;
+  maxTokens: number;
+  stylePreset: string;
+  lastTestStatus: string;
+};
+
+export type AiSettingsView = {
+  activeProviderId: string;
+  runtime: string;
+  providers: AiProviderView[];
+};
+
+export type AiProviderSaveRequest = {
+  id: string;
+  type: string;
+  displayName: string;
+  preset: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  isEnabled: boolean;
+  timeoutSeconds: number;
+  temperature: number;
+  maxTokens: number;
+  stylePreset: string;
+};
+
+export type AiSettingsSaveRequest = {
+  activeProviderId: string;
+  providers: AiProviderSaveRequest[];
+};
+
+export type AiProviderHealthResult = {
+  isSuccess: boolean;
+  status: string;
+  safeResponseSnippet: string;
+  httpStatus: number | null;
+  latency: string | null;
+  error: {
+    stage: string;
+    code: string;
+    message: string;
+    technicalDetails: string;
+  } | null;
+};
+
 const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
 
 type ErrorResponse = {
@@ -134,6 +192,30 @@ export function getTodayEditor(): Promise<TodayEditorState> {
   return requestJson<TodayEditorState>("/journal/today/editor");
 }
 
+export function getAiSettings(): Promise<AiSettingsView> {
+  return requestJson<AiSettingsView>("/settings/ai");
+}
+
+export function saveAiSettings(request: AiSettingsSaveRequest): Promise<AiSettingsView> {
+  return requestJson<AiSettingsView>("/settings/ai", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+}
+
+export function testAiProvider(providerId: string): Promise<AiProviderHealthResult> {
+  return requestJson<AiProviderHealthResult>("/settings/ai/test", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ providerId })
+  });
+}
+
 export function addTodayInput(text: string, source = "text"): Promise<TodayJournalState> {
   return requestJson<TodayJournalState>("/journal/today/inputs", {
     method: "POST",
@@ -147,6 +229,16 @@ export function addTodayInput(text: string, source = "text"): Promise<TodayJourn
 export function confirmTodayDraft(): Promise<TodayJournalState> {
   return requestJson<TodayJournalState>("/journal/today/draft/confirm", {
     method: "POST"
+  });
+}
+
+export function regenerateTodayDraft(providerId?: string): Promise<TodayJournalState> {
+  return requestJson<TodayJournalState>("/journal/today/draft/regenerate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ providerId: providerId ?? null })
   });
 }
 
