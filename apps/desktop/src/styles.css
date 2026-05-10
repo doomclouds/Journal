@@ -688,9 +688,20 @@ button:focus-visible {
 .llm-advanced-summary {
   width: 100%;
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   text-align: left;
+  white-space: normal;
+}
+
+.llm-advanced-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.llm-advanced-summary strong {
+  flex: 0 0 auto;
 }
 
 .llm-diagnostics-list {
