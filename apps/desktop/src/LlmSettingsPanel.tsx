@@ -9,6 +9,7 @@ import {
   type AiSettingsSaveRequest,
   type AiSettingsView
 } from "./api";
+import { getStaticAiStyleLabel } from "./todayWorkbenchView";
 
 type LlmSettingsPanelProps = {
   settings: AiSettingsView;
@@ -278,6 +279,10 @@ export function LlmSettingsPanel({
 
       <div className="llm-settings-grid">
         <nav className="llm-provider-list" aria-label="LLM 列表">
+          <div className="llm-provider-list-head">
+            <span className="rail-label">模型来源</span>
+            <p>选择今天用于整理日记的模型。</p>
+          </div>
           {providers.map(provider => {
             const providerView = viewProvidersById.get(provider.id);
             const isSelected = provider.id === selectedId;
@@ -320,7 +325,7 @@ export function LlmSettingsPanel({
             </section>
 
             <section className="llm-settings-card">
-              <span className="rail-label">基础配置</span>
+              <span className="rail-label">连接信息</span>
               <label>
                 显示名称
                 <input
@@ -410,6 +415,25 @@ export function LlmSettingsPanel({
         {selected ? (
           <aside className="llm-settings-side">
             <section className="llm-settings-card">
+              <span className="rail-label">配置来源</span>
+              <h2>来源：{providerSourceLabel(selectedView?.source ?? "default")}</h2>
+              <p>
+                {selectedView?.source === "environment"
+                  ? "当前 provider 有环境变量覆盖，保存时只回写本机配置。"
+                  : selectedView?.source === "file"
+                    ? "当前 provider 来自本机配置文件，API Key 可按权限显式查看。"
+                    : "当前 provider 来自内置预设，保存后会写入本机配置。"}
+              </p>
+            </section>
+
+            <section className="llm-settings-card">
+              <span className="rail-label">整理方式</span>
+              <h2>{getStaticAiStyleLabel()}</h2>
+              <p>保留原话优先，轻度整理成日记块。</p>
+            </section>
+
+            <section className="llm-settings-card">
+              <span className="rail-label">高级参数</span>
               <button
                 type="button"
                 className="llm-advanced-summary"
@@ -461,7 +485,7 @@ export function LlmSettingsPanel({
             </section>
 
             <section className={`llm-settings-card ${testResult?.isSuccess === false ? "attention-panel" : ""}`}>
-              <span className="rail-label">诊断与下一步</span>
+              <span className="rail-label">最近诊断</span>
               {testResultIsStale ? <p>测试结果已过期</p> : null}
               {testResult?.isSuccess ? <h2>连接测试通过</h2> : null}
               {testResult && !testResult.isSuccess ? <h2>测试失败，配置没有保存</h2> : null}
@@ -494,7 +518,7 @@ export function LlmSettingsPanel({
         ) : (
           <aside className="llm-settings-side">
             <section className="llm-settings-card attention-panel">
-              <span className="rail-label">诊断与下一步</span>
+              <span className="rail-label">最近诊断</span>
               <p>选择一个已配置的 LLM 后才能测试连接。</p>
             </section>
           </aside>
