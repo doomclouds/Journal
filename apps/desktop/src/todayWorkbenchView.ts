@@ -8,12 +8,10 @@ export type ProductJournalStatus =
   | "needs-attention"
   | "saved";
 
-type ProductJournalStatusTone = "neutral" | "working" | "success" | "warning" | "danger";
-
 export type ProductJournalStatusView = {
   id: ProductJournalStatus;
   label: string;
-  tone: ProductJournalStatusTone;
+  tone: "neutral" | "good" | "warning" | "danger";
   nextStepTitle: string;
   nextStepText: string;
 };
@@ -29,14 +27,14 @@ const productStatusViews: Record<ProductJournalStatus, ProductJournalStatusView>
   organizing: {
     id: "organizing",
     label: "整理中",
-    tone: "working",
+    tone: "neutral",
     nextStepTitle: "继续整理草稿",
     nextStepText: "补充重点、调整结构，确认无误后再保存。"
   },
   "ready-to-save": {
     id: "ready-to-save",
     label: "可保存",
-    tone: "success",
+    tone: "good",
     nextStepTitle: "保存正式日记",
     nextStepText: "当前草稿已通过校验，可以写入正式 Markdown。"
   },
@@ -57,7 +55,7 @@ const productStatusViews: Record<ProductJournalStatus, ProductJournalStatusView>
   saved: {
     id: "saved",
     label: "已保存",
-    tone: "success",
+    tone: "good",
     nextStepTitle: "今天已归档",
     nextStepText: "正式 Markdown 已保存，后续补充会进入更新流程。"
   }
@@ -65,14 +63,16 @@ const productStatusViews: Record<ProductJournalStatus, ProductJournalStatusView>
 
 const sectionDisplayTitles: Record<string, string> = {
   "raw-inputs": "今日材料",
-  "today-focus": "今天想推进"
+  "today-focus": "今天想推进",
+  "yesterday-review": "昨天回顾",
+  "future-notes": "未来提醒"
 };
 
 export function getProductJournalStatus(
   editor: Pick<TodayEditorState, "status" | "validation" | "canConfirm">,
   hasLocalUnsavedChanges = false
 ): ProductJournalStatusView {
-  if (editor.status === "attention" || hasSourceDiagnostics(editor.validation)) {
+  if (editor.status === "attention" || !editor.validation.isValid) {
     return productStatusViews["needs-attention"];
   }
 
