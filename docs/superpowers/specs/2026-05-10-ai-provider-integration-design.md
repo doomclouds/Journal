@@ -1,7 +1,7 @@
 # Journal 阶段 5：真实 LLM Provider 接入设计
 
 > 日期：2026-05-10
-> 状态：待用户复核
+> 状态：已实现并归档
 > 对应愿景：`PROJECT_VISION.md` 阶段 5：真实 AI Provider
 > 上一阶段：[阶段 3：JMF 编辑模式与结构校验](./2026-05-09-phase-3-jmf-editor-design.md)
 > 界面原型：[2026-05-10-ai-provider-integration-prototype.html](./2026-05-10-ai-provider-integration-prototype.html)
