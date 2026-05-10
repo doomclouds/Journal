@@ -1582,6 +1582,59 @@ describe("LlmSettingsPanel", () => {
     expect(screen.getByTestId("environment-key-lock")).toBeInTheDocument();
   });
 
+  test("shows file-backed key reveal when only non-key fields come from environment", async () => {
+    const partialEnvironmentSettings = {
+      ...aiSettings,
+      activeProviderId: "openai",
+      providers: [
+        ...aiSettings.providers.map(provider => ({ ...provider, isActive: false })),
+        {
+          id: "openai",
+          type: "openai-compatible",
+          displayName: "OpenAI",
+          preset: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          model: "gpt-5.4-env",
+          isEnabled: true,
+          isActive: true,
+          hasApiKey: true,
+          apiKeyPreview: "sk-••••••••••••••••9D2A",
+          canRevealApiKey: true,
+          source: "environment",
+          timeoutSeconds: 45,
+          temperature: 0.2,
+          maxTokens: 1200,
+          stylePreset: "faithful",
+          lastTestStatus: "not-tested"
+        }
+      ]
+    };
+    const onRevealApiKey = vi.fn().mockResolvedValue({
+      providerId: "openai",
+      source: "file",
+      apiKey: "sk-file-secret-9D2A"
+    });
+
+    render(
+      <LlmSettingsPanel
+        settings={partialEnvironmentSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={vi.fn()}
+        onTest={vi.fn()}
+        onRevealApiKey={onRevealApiKey}
+      />
+    );
+
+    expect(screen.queryByText("已从环境变量加载，不在界面显示")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("sk-••••••••••••••••9D2A")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
+
+    expect(await screen.findByDisplayValue("sk-file-secret-9D2A")).toBeInTheDocument();
+    expect(onRevealApiKey).toHaveBeenCalledWith("openai");
+  });
+
   test("tests current form with candidate settings and marks old result stale after edits", async () => {
     const onTest = vi.fn().mockResolvedValue({
       isSuccess: true,

@@ -43,7 +43,15 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
         return new JournalAiSettingsView(
             effective.ActiveProviderId,
             Runtime,
-            effective.Providers.Select(provider => ToView(provider, effective.ActiveProviderId, SourceOf(provider, fileSettings, isFileBacked, overlay))).ToArray());
+            effective.Providers.Select(provider =>
+            {
+                var source = SourceOf(provider, fileSettings, isFileBacked, overlay);
+                var fileProvider = fileSettings.Providers.FirstOrDefault(item =>
+                    string.Equals(item.Id, provider.Id, StringComparison.OrdinalIgnoreCase));
+                var canRevealApiKey = CanRevealFileBackedApiKey(provider, fileProvider, isFileBacked);
+                var apiKeyPreview = canRevealApiKey ? MaskApiKey(fileProvider!.ApiKey) : string.Empty;
+                return ToView(provider, effective.ActiveProviderId, source, apiKeyPreview, canRevealApiKey);
+            }).ToArray());
     }
 
     public async Task SaveAsync(JournalAiSettingsSaveRequest request, CancellationToken cancellationToken)
@@ -76,8 +84,6 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             return null;
         }
 
-        var fileSettings = readResult.Settings;
-        var overlay = ResolveEnvironmentOverlay(fileSettings);
         var provider = readResult.Settings.Providers.FirstOrDefault(item =>
             string.Equals(item.Id, providerId.Trim(), StringComparison.OrdinalIgnoreCase));
         if (provider is null || provider.IsMock || string.IsNullOrWhiteSpace(provider.ApiKey))
@@ -85,8 +91,7 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             return null;
         }
 
-        var source = SourceOf(provider, fileSettings, readResult.IsFileBacked, overlay);
-        if (!string.Equals(source, "file", StringComparison.OrdinalIgnoreCase))
+        if (!CanRevealFileBackedApiKey(provider, provider, readResult.IsFileBacked))
         {
             return null;
         }
@@ -245,6 +250,10 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private bool HasEnvironmentApiKey(string providerId) =>
+        !string.IsNullOrWhiteSpace(GetTrimmed("JOURNAL_AI_API_KEY"))
+        || !string.IsNullOrWhiteSpace(FirstConfiguredProviderKeyValue(providerId));
+
     private static JournalAiProviderSettings ToSettings(
         JournalAiProviderSaveRequest provider,
         JournalAiSettings currentFileSettings)
@@ -270,12 +279,26 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             provider.StylePreset.Trim());
     }
 
-    private static JournalAiProviderView ToView(JournalAiProviderSettings provider, string activeProviderId, string source)
+    private bool CanRevealFileBackedApiKey(
+        JournalAiProviderSettings provider,
+        JournalAiProviderSettings? fileProvider,
+        bool isFileBacked)
+    {
+        return isFileBacked
+            && !provider.IsMock
+            && fileProvider is not null
+            && !string.IsNullOrWhiteSpace(fileProvider.ApiKey)
+            && !HasEnvironmentApiKey(provider.Id);
+    }
+
+    private static JournalAiProviderView ToView(
+        JournalAiProviderSettings provider,
+        string activeProviderId,
+        string source,
+        string apiKeyPreview,
+        bool canRevealApiKey)
     {
         var hasApiKey = provider.IsMock || !string.IsNullOrWhiteSpace(provider.ApiKey);
-        var isFileBackedKey = string.Equals(source, "file", StringComparison.OrdinalIgnoreCase)
-            && !provider.IsMock
-            && !string.IsNullOrWhiteSpace(provider.ApiKey);
 
         return new JournalAiProviderView(
             provider.Id,
@@ -287,8 +310,8 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             provider.IsEnabled,
             string.Equals(provider.Id, activeProviderId, StringComparison.OrdinalIgnoreCase),
             hasApiKey,
-            isFileBackedKey ? MaskApiKey(provider.ApiKey) : string.Empty,
-            isFileBackedKey,
+            apiKeyPreview,
+            canRevealApiKey,
             source,
             provider.TimeoutSeconds,
             provider.Temperature,

@@ -117,6 +117,11 @@ export function LlmSettingsPanel({
     [providers, selectedId]
   );
   const selectedView = currentViewSettings.providers.find(provider => provider.id === selectedId);
+  const selectedUsesEnvironmentKey = Boolean(
+    selectedView?.source === "environment"
+      && selectedView.hasApiKey
+      && !selectedView.canRevealApiKey
+  );
   const viewProvidersById = useMemo(
     () => new Map(currentViewSettings.providers.map(provider => [provider.id, provider])),
     [currentViewSettings.providers]
@@ -309,7 +314,7 @@ export function LlmSettingsPanel({
               <h2>{selected.displayName}</h2>
               <p>
                 {selectedView?.source === "environment"
-                  ? "当前配置来自环境变量，保存时不会回写 API Key。"
+                  ? "当前配置包含环境变量覆盖；环境变量字段不会回写配置文件。"
                   : "切换后会先做一次最小请求测试，通过后才会保存并启用。"}
               </p>
             </section>
@@ -340,7 +345,7 @@ export function LlmSettingsPanel({
               </label>
               <label>
                 API Key
-                {selectedView?.source === "environment" ? (
+                {selectedUsesEnvironmentKey ? (
                   <div className="llm-key-display" aria-label="API Key 已从环境变量加载">
                     <LockKeyhole size={16} strokeWidth={1.8} aria-hidden="true" data-testid="environment-key-lock" />
                     已从环境变量加载，不在界面显示

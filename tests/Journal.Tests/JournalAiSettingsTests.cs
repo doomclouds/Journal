@@ -428,6 +428,48 @@ public sealed class JournalAiSettingsTests
     }
 
     [Fact]
+    public async Task ReadFileApiKeyAsync_AllowsRevealWhenEnvironmentOverridesOnlyModel()
+    {
+        using var workspace = TempWorkspace.Create();
+        var fileService = CreateService(workspace.Root, new Dictionary<string, string?>());
+
+        await fileService.SaveAsync(new JournalAiSettingsSaveRequest(
+            "openai",
+            [
+                new JournalAiProviderSaveRequest(
+                    "openai",
+                    "openai-compatible",
+                    "OpenAI",
+                    "openai",
+                    "https://api.openai.com/v1",
+                    "gpt-5.4",
+                    "sk-file-secret-9D2A",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var envService = CreateService(workspace.Root, new Dictionary<string, string?>
+        {
+            ["JOURNAL_AI_MODEL"] = "gpt-5.4-env"
+        });
+
+        var view = await envService.ReadViewAsync(CancellationToken.None);
+        var provider = Assert.Single(view.Providers, item => item.Id == "openai");
+        var apiKey = await envService.ReadFileApiKeyAsync("openai", CancellationToken.None);
+
+        Assert.Equal("environment", provider.Source);
+        Assert.Equal("gpt-5.4-env", provider.Model);
+        Assert.True(provider.HasApiKey);
+        Assert.True(provider.CanRevealApiKey);
+        Assert.Equal("sk-••••••••••••••••9D2A", provider.ApiKeyPreview);
+        Assert.NotNull(apiKey);
+        Assert.Equal("sk-file-secret-9D2A", apiKey.ApiKey);
+    }
+
+    [Fact]
     public async Task BuildEffectiveCandidateAsync_PreservesBlankFileKeyAndAppliesEnvironmentOverlay()
     {
         using var workspace = TempWorkspace.Create();
