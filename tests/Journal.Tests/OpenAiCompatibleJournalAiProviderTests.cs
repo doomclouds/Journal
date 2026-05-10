@@ -33,6 +33,9 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
         var request = Assert.IsType<OpenAiCompatibleRunRequest>(runtime.CapturedRequest);
         Assert.Equal("deepseek-v4-flash", request.Model);
         Assert.Equal("json_object", request.ResponseFormat);
+        Assert.Contains("# Role", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("## Output Contract", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("只整理 `yesterdayReview`、`todayFocus` 和 `inspiration` 这三项正文结构", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("只输出 JSON", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("今天想把 AI provider 接上，先保留原始表达。", request.UserPrompt, StringComparison.Ordinal);
     }
