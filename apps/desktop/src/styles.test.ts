@@ -58,27 +58,24 @@ describe("Today workbench productized CSS contract", () => {
     expect(css).toMatch(/\.productized-workspace\s*\{/);
     expect(css).toMatch(/\.today-assistant\s*\{/);
     expect(css).toMatch(/\.compose-bar\s*\{/);
-    expect(css).toMatch(/\.journal-source-drawer\s*\{/);
   });
 
-  test("uses a dark monospace advanced source drawer", () => {
-    const drawer = getRuleBody("\\.journal-source-drawer");
-    const textarea = getRuleBody("\\.journal-source-drawer\\s+textarea");
-
-    expect(drawer).toMatch(/background:\s*#151a20;/);
-    expect(drawer).toMatch(/color:\s*#e9eef3;/);
-    expect(drawer).toMatch(/border:\s*1px\s+solid\s+rgba\(174,\s*190,\s*204,\s*0\.2\);/);
-    expect(textarea).toMatch(/background:\s*#0d1117;/);
-    expect(textarea).toMatch(/color:\s*#edf4fa;/);
-    expect(textarea).toMatch(/font-family:[^;}]*monospace;/);
+  test("does not expose advanced source drawer styles in the daily workbench", () => {
+    expect(css).not.toMatch(/\.journal-source-drawer\s*\{/);
+    expect(css).not.toMatch(/\.journal-editor-source\s*\{/);
   });
 
   test("styles existing inline block preview and editing states", () => {
+    const card = getRuleBody("\\.journal-block-card");
+    const cardButton = getRuleBody("\\.journal-block-card\\s*>\\s*button");
     const editingCard = getRuleBody("\\.journal-block-card:has\\(\\.journal-block-inline-editor\\)");
     const readonly = getRuleBody("\\.journal-block-readonly");
     const inlineEditor = getRuleBody("\\.journal-block-inline-editor");
     const inlineActions = getRuleBody("\\.journal-block-inline-actions");
 
+    expect(card).toMatch(/display:\s*grid;/);
+    expect(card).toMatch(/gap:\s*12px;/);
+    expect(cardButton).toMatch(/justify-self:\s*start;/);
     expect(editingCard).toMatch(/border-color:\s*rgba\(47,\s*111,\s*95,\s*0\.34\);/);
     expect(editingCard).toMatch(/background:\s*#f7fbf7;/);
     expect(editingCard).toMatch(/box-shadow:\s*0\s+12px\s+28px\s+rgba\(47,\s*111,\s*95,\s*0\.1\);/);

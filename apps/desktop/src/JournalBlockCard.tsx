@@ -63,7 +63,7 @@ export function JournalBlockCard({
           />
           <div className="journal-block-inline-actions">
             <button type="button" disabled={disabled} onClick={onSave}>
-              保存这一段
+              保存修改
             </button>
             <button type="button" disabled={disabled} onClick={onCancel}>
               取消

@@ -9,7 +9,6 @@ import {
   revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
-  saveSourceDraft,
   testAiProvider,
   type AiProviderSaveRequest,
   type AiSettingsSaveRequest,
@@ -823,39 +822,6 @@ describe("App", () => {
     expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的本地改动");
   });
 
-  test("dirty inline block disables advanced source save without clearing local edits", async () => {
-    const fetchMock = createInitialFetchMock();
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<App />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(await screen.findByRole("textbox", { name: "编辑 今天想推进" }), {
-      target: { value: "还没保存但不能丢" }
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
-
-    expect(screen.getByRole("button", { name: "保存源码草稿" })).toBeDisabled();
-    expect(screen.getByText("先保存或取消正在编辑的段落，再保存源码。")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存但不能丢");
-    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-
-    fireEvent.click(screen.getByRole("button", { name: "收起高级源码" }));
-
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存但不能丢");
-    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
-
-    expect(screen.getByRole("button", { name: "保存源码草稿" })).toBeDisabled();
-  });
-
   test("inserting optional block resets regenerate confirmation", async () => {
     const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
@@ -1192,7 +1158,7 @@ describe("App", () => {
     expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
     await waitFor(() =>
       expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
@@ -1222,7 +1188,7 @@ describe("App", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "保存失败时不要丢" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("block save failed");
     expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("保存失败时不要丢");
@@ -1230,82 +1196,6 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认保存" })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(4);
-  });
-
-  test("saves source edits through editor endpoint and updates editor state", async () => {
-    const updatedMarkdown = "# 2026-05-08\n\n源码保存后的内容";
-    const fetchMock = mockFetchSequence([
-      { body: healthResponse },
-      { body: createEditorState() },
-      { body: aiSettings },
-      { body: createEditorState({
-        markdown: updatedMarkdown,
-        sections: [
-          {
-            id: "today-focus",
-            title: "今日重点",
-            content: "源码保存后的内容",
-            kind: "required",
-            isEditableInBlockMode: true
-          }
-        ]
-      }) }
-    ]);
-
-    render(<App />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
-      target: { value: updatedMarkdown }
-    });
-
-    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
-
-    await waitFor(() => expect(screen.getByText("源码保存后的内容")).toBeInTheDocument());
-    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
-    expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成草稿" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "重新整理" })).toBeEnabled();
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/source", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ markdown: updatedMarkdown })
-    });
-  });
-
-  test("dirty source edits disable block editing and insertion until source is saved or reset", async () => {
-    const fetchMock = createInitialFetchMock();
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<App />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
-      target: { value: "# 2026-05-08\n\n源码本地改动还没保存" }
-    });
-
-    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
-
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue("# 2026-05-08\n\n源码本地改动还没保存");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   test("disables block actions and confirm actions while selected block save is pending", async () => {
@@ -1321,7 +1211,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    const saveButton = screen.getByRole("button", { name: "保存这一段" });
+    const saveButton = screen.getByRole("button", { name: "保存修改" });
     const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     const confirmButton = screen.getByRole("button", { name: "保存日记" });
 
@@ -1340,58 +1230,6 @@ describe("App", () => {
     );
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(confirmButton).toBeEnabled();
-  });
-
-  test("disables source editing while source save is pending", async () => {
-    const sourceSaveDeferred = createDeferred<Response>();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
-      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
-      .mockReturnValueOnce(sourceSaveDeferred.promise);
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<App />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
-    const sourceEditor = screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" });
-    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
-
-    expect(sourceEditor).toBeDisabled();
-
-    sourceSaveDeferred.resolve(mockJsonResponse(createEditorState()));
-
-    await waitFor(() =>
-      expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument()
-    );
-  });
-
-  test("keeps advanced source drawer open with edited markdown when source save fails", async () => {
-    const updatedMarkdown = "# 2026-05-08\n\n保存失败时留在抽屉里";
-    const fetchMock = mockFetchSequence([
-      { body: healthResponse },
-      { body: createEditorState() },
-      { body: aiSettings },
-      { ok: false, status: 500, body: { error: "source save failed" } }
-    ]);
-
-    render(<App />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
-      target: { value: updatedMarkdown }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("source save failed");
-    expect(screen.getByRole("button", { name: "收起高级源码" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown);
-    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   test("blocks raw input refresh while inline dirty so local block edits stay visible", async () => {
@@ -1430,7 +1268,6 @@ describe("JournalEditor", () => {
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1464,14 +1301,13 @@ describe("JournalEditor", () => {
         })}
         isBusy={false}
         onSaveBlocks={onSaveBlocks}
-        onSaveSource={vi.fn()}
       />
     );
 
     fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
     const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     fireEvent.change(focusEditor, { target: { value: "完成前端编辑器组件" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
     expect(onSaveBlocks).toHaveBeenCalledTimes(1);
     expect(onSaveBlocks).toHaveBeenCalledWith([
@@ -1503,7 +1339,6 @@ describe("JournalEditor", () => {
         })}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1532,7 +1367,6 @@ describe("JournalEditor", () => {
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1553,7 +1387,6 @@ describe("JournalEditor", () => {
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1570,7 +1403,6 @@ describe("JournalEditor", () => {
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1585,7 +1417,6 @@ describe("JournalEditor", () => {
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1638,7 +1469,6 @@ describe("JournalEditor", () => {
         })}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1658,7 +1488,6 @@ describe("JournalEditor", () => {
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1682,7 +1511,6 @@ describe("JournalEditor", () => {
         editor={initialEditor}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1696,7 +1524,6 @@ describe("JournalEditor", () => {
         editor={refreshedEditor}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1705,103 +1532,20 @@ describe("JournalEditor", () => {
     expect(screen.queryByDisplayValue("未保存的本地区块内容")).not.toBeInTheDocument();
   });
 
-  test("keeps advanced source drawer hidden until opened and collapses it again", () => {
+  test("does not expose source editing in the daily editor", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
-      />
-    );
-
-    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
-    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(editorMarkdown);
-
-    fireEvent.click(screen.getByRole("button", { name: "收起高级源码" }));
-
-    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
-  });
-
-  test("removes source mode tabs as the default editor interaction", () => {
-    render(
-      <JournalEditor
-        editor={createEditorState()}
-        isBusy={false}
-        onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "区块模式" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "源码模式" })).not.toBeInTheDocument();
-  });
-
-  test("saves full markdown from advanced source drawer", () => {
-    const onSaveSource = vi.fn();
-    render(
-      <JournalEditor
-        editor={createEditorState()}
-        isBusy={false}
-        onSaveBlocks={vi.fn()}
-        onSaveSource={onSaveSource}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
-      target: { value: "# 2026-05-08\n\n更新后的源码" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
-
-    expect(onSaveSource).toHaveBeenCalledWith("# 2026-05-08\n\n更新后的源码");
-  });
-
-  test("resets local source edits when the authoritative editor snapshot changes", () => {
-    const initialEditor = createEditorState();
-    const refreshedEditor = createEditorState({
-      status: "attention",
-      markdown: initialEditor.markdown,
-      sections: initialEditor.sections,
-      validation: {
-        isValid: false,
-        issues: [
-          {
-            code: "unknown-section",
-            message: "存在未知区块",
-            repairHint: "删除未知区块后再保存。"
-          }
-        ]
-      },
-      canConfirm: false
-    });
-    const { rerender } = render(
-      <JournalEditor
-        editor={initialEditor}
-        isBusy={false}
-        onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
-      target: { value: "# 未保存的本地源码" }
-    });
-
-    rerender(
-      <JournalEditor
-        editor={refreshedEditor}
-        isBusy={false}
-        onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
-      />
-    );
-
+    expect(screen.queryByRole("button", { name: "展开高级源码" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue("# 未保存的本地源码")).not.toBeInTheDocument();
   });
 
   test("shows needs-attention explanation with validation issue message and repair hint", () => {
@@ -1822,7 +1566,6 @@ describe("JournalEditor", () => {
         })}
         isBusy={false}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
@@ -1837,22 +1580,17 @@ describe("JournalEditor", () => {
     expect(screen.getByText("请补回 today-focus 区块后再保存。")).toBeInTheDocument();
   });
 
-  test("disables editable block actions and source textareas while busy", () => {
+  test("disables editable block actions while busy", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
         isBusy={true}
         onSaveBlocks={vi.fn()}
-        onSaveSource={vi.fn()}
       />
     );
 
     expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
-
-    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toBeDisabled();
   });
 });
 
@@ -2531,18 +2269,4 @@ describe("editor API client", () => {
     });
   });
 
-  test("saveSourceDraft sends markdown to editor source endpoint", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(createEditorState()));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await saveSourceDraft("# 2026-05-08\n\n更新源码");
-
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/editor/source", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ markdown: "# 2026-05-08\n\n更新源码" })
-    });
-  });
 });

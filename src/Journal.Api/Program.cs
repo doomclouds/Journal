@@ -226,27 +226,6 @@ app.MapPut("/journal/today/editor/blocks", async (
     }
 });
 
-app.MapPut("/journal/today/editor/source", async (
-    JournalSourceEditRequest request,
-    TodayJournalService service,
-    CancellationToken cancellationToken) =>
-{
-    if (string.IsNullOrWhiteSpace(request.Markdown))
-    {
-        return Results.BadRequest(new { error = "markdown is required" });
-    }
-
-    try
-    {
-        var state = await service.SaveSourceDraftAsync(request, cancellationToken);
-        return Results.Ok(state);
-    }
-    catch (InvalidOperationException exception)
-    {
-        return Results.Conflict(new { error = exception.Message });
-    }
-});
-
 app.Run();
 
 public partial class Program

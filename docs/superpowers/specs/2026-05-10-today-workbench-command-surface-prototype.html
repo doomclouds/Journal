@@ -1,0 +1,2118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Journal 今日工作台命令化界面原型</title>
+  <style>
+    :root {
+      --bg: #f0ede5;
+      --bg-soft: #f8f5ee;
+      --paper: #fffdf7;
+      --paper-soft: #faf6ed;
+      --ink: #24231f;
+      --ink-soft: #47433b;
+      --muted: #7d766b;
+      --line: rgba(52, 45, 36, 0.14);
+      --line-strong: rgba(52, 45, 36, 0.24);
+      --sage: #2f6f5f;
+      --sage-soft: rgba(47, 111, 95, 0.12);
+      --gold: #af7a30;
+      --danger: #a84e42;
+      --shadow-paper: 0 28px 80px rgba(47, 42, 32, 0.14);
+      --shadow-soft: 0 16px 40px rgba(43, 38, 30, 0.10);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 1100px;
+      min-height: 100vh;
+      background:
+        linear-gradient(120deg, rgba(47, 111, 95, 0.12), transparent 38%),
+        linear-gradient(180deg, #fbfaf5 0%, var(--bg) 48%, #e9eeeb 100%);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .desktop {
+      min-height: 100vh;
+      display: grid;
+      gap: 28px;
+      align-items: start;
+      padding: 18px;
+    }
+
+    .window {
+      height: calc(100vh - 36px);
+      min-height: 760px;
+      display: grid;
+      grid-template-rows: 32px 44px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: rgba(255, 253, 247, 0.72);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .llm-window {
+      height: auto;
+      min-height: calc(100vh - 36px);
+      grid-template-rows: 32px 44px auto;
+      overflow: visible;
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      color: #f3f0ea;
+      background: #20201e;
+      font-size: 13px;
+    }
+
+    .titlebar strong {
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 14px;
+      color: rgba(255, 255, 255, 0.72);
+      font-family: "Segoe UI Symbol", sans-serif;
+    }
+
+    .menubar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.88);
+      padding: 0 12px;
+    }
+
+    .menu {
+      position: relative;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .menu > button {
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 6px;
+      color: #3c3832;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .menu > button:hover,
+    .menu.is-open > button {
+      background: #ede7dc;
+    }
+
+    .menu-panel {
+      position: absolute;
+      top: 34px;
+      left: 0;
+      z-index: 20;
+      min-width: 236px;
+      display: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fffdf8;
+      box-shadow: 0 18px 40px rgba(43, 38, 30, 0.18);
+      padding: 6px;
+    }
+
+    .menu.is-open .menu-panel {
+      display: grid;
+      gap: 2px;
+    }
+
+    .menu-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 20px;
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: #2d2924;
+      font-size: 13px;
+      text-align: left;
+      background: transparent;
+    }
+
+    .menu-item:hover {
+      background: #f1ebe0;
+    }
+
+    .shortcut {
+      color: var(--muted);
+      font-size: 12px;
+      font-family: "Cascadia Code", Consolas, monospace;
+    }
+
+    .menu-divider {
+      height: 1px;
+      margin: 4px 6px;
+      background: var(--line);
+    }
+
+    .top-context {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(246, 242, 233, 0.82);
+      padding: 0 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand strong {
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .today-line {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--sage);
+      box-shadow: 0 0 0 4px var(--sage-soft);
+    }
+
+    .status-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      border: 1px solid rgba(47, 111, 95, 0.24);
+      border-radius: 999px;
+      padding: 0 11px;
+      color: var(--sage);
+      background: var(--sage-soft);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .pill.neutral {
+      border-color: rgba(70, 66, 59, 0.18);
+      color: #5d564d;
+      background: rgba(255, 253, 247, 0.78);
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 260px minmax(520px, 1fr) minmax(360px, 0.72fr);
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.45), transparent 24%, transparent 76%, rgba(255, 255, 255, 0.35)),
+        rgba(248, 246, 239, 0.84);
+    }
+
+    .context-rail {
+      min-height: 0;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: rgba(238, 232, 219, 0.78);
+    }
+
+    .date-card {
+      padding: 24px 20px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .date-card .month {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .date-card h1 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .date-card h1 span {
+      display: block;
+      margin-top: 12px;
+      color: var(--ink-soft);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .date-status-row {
+      display: flex;
+      margin-top: 18px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(70, 66, 59, 0.12);
+    }
+
+    .date-status-pill {
+      min-height: 30px;
+      height: auto;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: rgba(230, 243, 235, 0.72);
+      box-shadow: inset 0 0 0 1px rgba(255, 253, 247, 0.62);
+    }
+
+    .rail-section {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head,
+    .panel-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2,
+    .panel-head h2 {
+      margin: 0;
+      color: #2c2823;
+      font-size: 14px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .section-head span,
+    .panel-head span {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .raw-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .raw-fold {
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.72);
+      overflow: hidden;
+    }
+
+    .raw-fold summary {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      color: #2e2a25;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .raw-fold summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .raw-fold summary::before {
+      content: "›";
+      color: var(--gold);
+      font-size: 18px;
+      line-height: 1;
+      transform: rotate(0deg);
+      transition: transform 150ms ease;
+    }
+
+    .raw-fold[open] summary::before {
+      transform: rotate(90deg);
+    }
+
+    .raw-time {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .raw-title {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .raw-tags,
+    .raw-map,
+    .material-meta,
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .raw-tags {
+      margin-top: 7px;
+    }
+
+    .raw-tags span,
+    .material-meta span,
+    .tag-row span {
+      border-radius: 999px;
+      background: rgba(181, 127, 48, 0.12);
+      color: #8a621f;
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .raw-body {
+      border-top: 1px solid var(--line);
+      padding: 0 12px 12px 34px;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.75;
+    }
+
+    .raw-map {
+      margin-top: 10px;
+    }
+
+    .raw-map span {
+      border-radius: 999px;
+      background: rgba(47, 111, 95, 0.10);
+      color: var(--sage);
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.2;
+    }
+
+    .next-panel {
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 8px;
+      background: #fffdf7;
+      padding: 13px;
+    }
+
+    .next-panel strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--sage);
+      font-size: 14px;
+    }
+
+    .next-panel p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .journal-stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: rgba(248, 246, 239, 0.74);
+    }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 26px 12px;
+    }
+
+    .stage-title p {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-title h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .view-switch {
+      display: inline-flex;
+      gap: 4px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ebe5d9;
+      padding: 4px;
+    }
+
+    .view-switch button {
+      height: 30px;
+      min-width: 84px;
+      border-radius: 999px;
+      padding: 0 12px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .view-switch button[aria-pressed="true"] {
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: 0 8px 20px rgba(43, 38, 30, 0.08);
+    }
+
+    .document-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px 34px 36px;
+    }
+
+    .document {
+      width: min(760px, 100%);
+      min-height: 880px;
+      margin: 0 auto;
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      background: var(--paper);
+      box-shadow: var(--shadow-paper);
+      padding: 52px 66px 60px;
+    }
+
+    .document-header {
+      margin-bottom: 34px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid rgba(52, 45, 36, 0.14);
+    }
+
+    .kicker {
+      margin: 0 0 12px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .document h1 {
+      margin: 0;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+      font-size: 36px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 14px 0 0;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .doc-section {
+      position: relative;
+      margin: 0 0 30px;
+      padding: 2px 0 0;
+    }
+
+    .doc-section h2 {
+      margin: 0 0 13px;
+      color: var(--sage);
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .doc-section p,
+    .doc-section li {
+      color: #38362f;
+      font-size: 16px;
+      line-height: 1.95;
+    }
+
+    .doc-section p {
+      margin: 0;
+    }
+
+    .doc-section ul {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding-left: 1.2em;
+    }
+
+    .edit-chip {
+      position: absolute;
+      top: 0;
+      right: 0;
+      min-height: 28px;
+      border: 1px solid rgba(47, 111, 95, 0.20);
+      border-radius: 999px;
+      padding: 0 10px;
+      color: var(--sage);
+      background: rgba(255, 253, 247, 0.92);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .inline-editor {
+      display: grid;
+      gap: 12px;
+      border-left: 4px solid var(--sage);
+      border-radius: 8px;
+      background: #eff7f1;
+      padding: 14px;
+    }
+
+    .inline-editor textarea {
+      min-height: 118px;
+      resize: vertical;
+      border: 1px solid rgba(47, 111, 95, 0.24);
+      border-radius: 7px;
+      background: #fffdf8;
+      color: var(--ink);
+      padding: 12px;
+      line-height: 1.7;
+      outline: none;
+    }
+
+    .inline-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-top: 2px;
+    }
+
+    .primary,
+    .secondary,
+    .ghost {
+      min-height: 36px;
+      border-radius: 7px;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .primary {
+      color: #fffdf8;
+      background: var(--sage);
+    }
+
+    .secondary {
+      color: var(--ink);
+      border: 1px solid var(--line);
+      background: #ebe5d9;
+    }
+
+    .ghost {
+      color: var(--sage);
+      background: transparent;
+    }
+
+    .compose-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: end;
+      gap: 10px;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.82);
+      padding: 14px 22px;
+    }
+
+    .compose-bar label {
+      display: block;
+      margin-bottom: 6px;
+      color: #2d2823;
+      font-weight: 900;
+    }
+
+    .compose-bar textarea {
+      width: 100%;
+      min-height: 70px;
+      resize: vertical;
+      border: 1px solid rgba(52, 45, 36, 0.18);
+      border-radius: 8px;
+      background: #fffefa;
+      padding: 12px;
+      color: var(--ink);
+      line-height: 1.65;
+      outline: none;
+    }
+
+    .assistant-panel {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-left: 1px solid rgba(52, 45, 36, 0.13);
+      background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.84), rgba(239, 234, 222, 0.90)),
+        #efeadd;
+      color: var(--ink);
+    }
+
+    .assistant-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid rgba(52, 45, 36, 0.12);
+      margin: 0;
+      padding: 16px 18px 14px;
+    }
+
+    .assistant-head h2 {
+      margin: 4px 0 0;
+      color: #26231f;
+      font-size: 19px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .assistant-eyebrow {
+      margin: 0;
+      color: var(--sage);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .assistant-time {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .assistant-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .assistant-meta span {
+      border: 1px solid rgba(70, 66, 59, 0.14);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: #5d564d;
+      background: rgba(255, 253, 247, 0.70);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .assistant-body {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      min-height: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .assistant-card {
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 253, 247, 0.82);
+      box-shadow: 0 10px 28px rgba(56, 48, 35, 0.06);
+      padding: 12px;
+    }
+
+    .assistant-card h3 {
+      margin: 0;
+      color: #2d2823;
+      font-size: 14px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    .assistant-card p {
+      margin: 8px 0 0;
+      color: #6a6258;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .assistant-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .assistant-card-head span {
+      border-radius: 999px;
+      background: var(--sage-soft);
+      color: var(--sage);
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .next-step-card {
+      border-color: rgba(47, 111, 95, 0.22);
+      background: linear-gradient(135deg, rgba(230, 243, 235, 0.92), rgba(255, 253, 247, 0.92));
+    }
+
+    .next-step-title {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .next-step-title .status-dot {
+      margin-top: 6px;
+      background: var(--sage);
+      box-shadow: 0 0 0 4px rgba(47, 111, 95, 0.14);
+    }
+
+    .next-step-title strong {
+      display: block;
+      color: #1e2f2a;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .next-actions,
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 10px;
+    }
+
+    .next-actions button,
+    .quick-actions button {
+      min-height: 32px;
+      border-radius: 7px;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .assistant-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .assistant-stat {
+      border: 1px solid rgba(52, 45, 36, 0.10);
+      border-radius: 8px;
+      background: rgba(245, 240, 230, 0.78);
+      padding: 8px;
+    }
+
+    .assistant-stat strong {
+      display: block;
+      color: #2d2823;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .assistant-stat span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .insight-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 11px;
+    }
+
+    .insight-tags span {
+      border-radius: 999px;
+      background: rgba(181, 127, 48, 0.12);
+      color: #7c5520;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .tag-row {
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .tag-row strong {
+      color: var(--sage);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .tag-row span {
+      background: rgba(47, 111, 95, 0.10);
+      color: var(--sage);
+    }
+
+    .material-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .material-item {
+      border-left: 3px solid rgba(181, 127, 48, 0.34);
+      border-radius: 7px;
+      background: rgba(248, 244, 235, 0.86);
+      padding: 7px 9px;
+      color: #433d35;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .material-item strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #b57f30;
+      font-size: 11px;
+    }
+
+    .material-meta {
+      margin-bottom: 6px;
+    }
+
+    .material-meta span:first-child {
+      background: rgba(47, 111, 95, 0.10);
+      color: var(--sage);
+    }
+
+    .material-meta span:last-child {
+      background: rgba(70, 66, 59, 0.08);
+      color: #6a6258;
+    }
+
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .quick-actions button {
+      border: 1px solid rgba(52, 45, 36, 0.13);
+      background: rgba(245, 240, 230, 0.86);
+      color: #37322c;
+      text-align: left;
+    }
+
+    .llm-page {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.48), transparent 28%, transparent 72%, rgba(255, 255, 255, 0.34)),
+        rgba(248, 246, 239, 0.86);
+    }
+
+    .llm-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 22px;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding: 22px 24px;
+      background: rgba(255, 253, 247, 0.72);
+    }
+
+    .llm-kicker {
+      margin: 0 0 8px;
+      color: var(--sage);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .llm-hero h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .llm-hero p {
+      max-width: 760px;
+      margin: 9px 0 0;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .llm-status-orbit {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      min-width: 300px;
+      border: 1px solid rgba(47, 111, 95, 0.22);
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(230, 243, 235, 0.88), rgba(255, 253, 247, 0.88));
+      padding: 14px;
+    }
+
+    .llm-avatar,
+    .provider-avatar {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--sage);
+      color: #fffdf8;
+      font-weight: 900;
+      line-height: 1;
+      text-align: center;
+      box-shadow: 0 0 0 6px rgba(47, 111, 95, 0.10);
+    }
+
+    .llm-avatar {
+      width: 42px;
+      height: 42px;
+      font-size: 15px;
+    }
+
+    .llm-status-orbit strong {
+      display: block;
+      color: #1f352f;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .llm-status-orbit div > span {
+      display: block;
+      margin-top: 4px;
+      color: #60746e;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .llm-layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 300px minmax(460px, 1fr) 360px;
+      gap: 14px;
+      padding: 16px;
+      overflow: visible;
+    }
+
+    .llm-card,
+    .provider-card,
+    .llm-side-card {
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 253, 247, 0.84);
+      box-shadow: 0 10px 28px rgba(56, 48, 35, 0.06);
+    }
+
+    .provider-rail,
+    .llm-main,
+    .llm-side {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .llm-card,
+    .llm-side-card {
+      padding: 14px;
+    }
+
+    .llm-card-head,
+    .provider-card-head,
+    .llm-side-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .llm-card h2,
+    .llm-side-card h2,
+    .provider-rail h2 {
+      margin: 0;
+      color: #2d2823;
+      font-size: 15px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    .llm-card-head span,
+    .llm-side-head span {
+      border-radius: 999px;
+      background: var(--sage-soft);
+      color: var(--sage);
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .provider-rail {
+      border-right: 1px solid var(--line);
+      padding-right: 2px;
+    }
+
+    .provider-rail-header {
+      padding: 4px 2px 0;
+    }
+
+    .provider-rail-header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .provider-card {
+      display: grid;
+      gap: 9px;
+      padding: 12px;
+      text-align: left;
+    }
+
+    .provider-card.active {
+      border-color: rgba(47, 111, 95, 0.32);
+      background: linear-gradient(135deg, rgba(230, 243, 235, 0.88), rgba(255, 253, 247, 0.86));
+      box-shadow: inset 3px 0 0 var(--sage), 0 10px 28px rgba(56, 48, 35, 0.06);
+    }
+
+    .provider-card.warn {
+      border-color: rgba(181, 127, 48, 0.22);
+    }
+
+    .provider-card.error {
+      border-color: rgba(168, 78, 66, 0.24);
+    }
+
+    .provider-card-head {
+      margin-bottom: 0;
+    }
+
+    .provider-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .provider-avatar {
+      width: 34px;
+      height: 34px;
+      font-size: 13px;
+    }
+
+    .provider-card.warn .provider-avatar {
+      background: var(--gold);
+      box-shadow: 0 0 0 6px rgba(181, 127, 48, 0.10);
+    }
+
+    .provider-card.error .provider-avatar {
+      background: var(--danger);
+      box-shadow: 0 0 0 6px rgba(168, 78, 66, 0.10);
+    }
+
+    .provider-title strong {
+      display: block;
+      overflow: hidden;
+      color: #2f2a24;
+      font-size: 15px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .provider-title small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .provider-state {
+      border-radius: 999px;
+      background: rgba(47, 111, 95, 0.10);
+      color: var(--sage);
+      padding: 4px 7px;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .provider-card.warn .provider-state {
+      background: rgba(181, 127, 48, 0.12);
+      color: #8a621f;
+    }
+
+    .provider-card.error .provider-state {
+      background: rgba(168, 78, 66, 0.12);
+      color: var(--danger);
+    }
+
+    .provider-meta-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .provider-meta-line span,
+    .config-source-list span,
+    .diagnostic-pill {
+      border-radius: 999px;
+      background: rgba(70, 66, 59, 0.08);
+      color: #6a6258;
+      padding: 4px 7px;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.2;
+    }
+
+    .llm-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .llm-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .llm-field.full {
+      grid-column: 1 / -1;
+    }
+
+    .llm-field label {
+      color: #342f29;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .fake-input,
+    .secret-input {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid rgba(52, 45, 36, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.92);
+      color: #2f2a24;
+      padding: 0 11px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .fake-input small,
+    .secret-input small {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .secret-input button,
+    .llm-button-row button,
+    .side-action {
+      min-height: 32px;
+      border-radius: 7px;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .secret-input button,
+    .side-action {
+      border: 1px solid rgba(47, 111, 95, 0.20);
+      background: rgba(230, 243, 235, 0.72);
+      color: var(--sage);
+    }
+
+    .llm-note {
+      margin: 12px 0 0;
+      border-left: 3px solid rgba(47, 111, 95, 0.28);
+      border-radius: 8px;
+      background: rgba(230, 243, 235, 0.44);
+      color: #50625b;
+      padding: 9px 11px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .llm-button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .llm-button-row .primary {
+      min-height: 34px;
+    }
+
+    .profile-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .profile-chip {
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      border-radius: 9px;
+      background: rgba(248, 244, 235, 0.86);
+      padding: 10px;
+    }
+
+    .profile-chip strong {
+      display: block;
+      color: #2d2823;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .profile-chip span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .check-list,
+    .config-source-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .check-item,
+    .source-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 9px;
+      align-items: start;
+      border-radius: 8px;
+      background: rgba(248, 244, 235, 0.78);
+      padding: 9px;
+      color: #4c463e;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .check-dot {
+      width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--sage);
+      color: #fffdf8;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .source-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+
+    .source-row strong {
+      display: block;
+      color: #2d2823;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .source-row small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+
+    @media (max-width: 1320px) {
+      body {
+        min-width: 980px;
+      }
+
+      .workspace {
+        grid-template-columns: 230px minmax(500px, 1fr) minmax(320px, 0.68fr);
+      }
+
+      .document {
+        padding: 42px 48px 52px;
+      }
+    }
+
+    @media (max-width: 1120px) {
+      body {
+        min-width: 760px;
+      }
+
+      .window {
+        height: auto;
+        min-height: calc(100vh - 36px);
+        overflow: visible;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .context-rail {
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        overflow: visible;
+      }
+
+      .date-card {
+        border-right: 1px solid var(--line);
+      }
+
+      .rail-section:last-child {
+        grid-column: 1 / -1;
+      }
+
+      .assistant-panel {
+        border-left: 0;
+        border-top: 1px solid rgba(52, 45, 36, 0.13);
+        min-height: 520px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="desktop">
+    <section class="window" aria-label="Journal 今日工作台命令化界面原型">
+      <div class="titlebar">
+        <strong>Journal</strong>
+        <span>2026-05-10-today-workbench-command-surface-prototype</span>
+        <div class="window-controls" aria-hidden="true">
+          <span>─</span><span>□</span><span>×</span>
+        </div>
+      </div>
+
+      <nav class="menubar" aria-label="应用菜单">
+        <div class="menu">
+          <button type="button">文件</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>今日日记</span><span class="shortcut">Ctrl+1</span></button>
+            <button class="menu-item" type="button"><span>保存日记</span><span class="shortcut">Ctrl+S</span></button>
+            <button class="menu-item" type="button"><span>重新整理</span><span class="shortcut">Ctrl+R</span></button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" type="button"><span>LLM 配置</span><span class="shortcut">Ctrl+,</span></button>
+            <button class="menu-item" type="button"><span>打开数据目录</span><span class="shortcut">Ctrl+O</span></button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" type="button"><span>退出</span><span class="shortcut">Alt+F4</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button">编辑</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>保存当前修改</span><span class="shortcut">Ctrl+Enter</span></button>
+            <button class="menu-item" type="button"><span>取消当前编辑</span><span class="shortcut">Esc</span></button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" type="button"><span>展开/收起原始对话</span><span class="shortcut">Ctrl+M</span></button>
+          </div>
+        </div>
+        <div class="menu is-open">
+          <button type="button">插入</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>昨天回顾</span><span class="shortcut">Alt+1</span></button>
+            <button class="menu-item" type="button"><span>今天想推进</span><span class="shortcut">Alt+2</span></button>
+            <button class="menu-item" type="button"><span>情绪感受</span><span class="shortcut">Alt+3</span></button>
+            <button class="menu-item" type="button"><span>工作记录</span><span class="shortcut">Alt+4</span></button>
+            <button class="menu-item" type="button"><span>学习记录</span><span class="shortcut">Alt+5</span></button>
+            <button class="menu-item" type="button"><span>健康记录</span><span class="shortcut">Alt+6</span></button>
+            <button class="menu-item" type="button"><span>未来提醒</span><span class="shortcut">Alt+7</span></button>
+            <button class="menu-item" type="button"><span>感恩记录</span><span class="shortcut">Alt+8</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button">视图</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>只看日记</span><span class="shortcut">Ctrl+2</span></button>
+            <button class="menu-item" type="button"><span>日记 + 今日助手</span><span class="shortcut">Ctrl+3</span></button>
+            <button class="menu-item" type="button"><span>日记 + 今日材料</span><span class="shortcut">Ctrl+4</span></button>
+            <button class="menu-item" type="button"><span>显示/隐藏今日助手</span><span class="shortcut">Ctrl+B</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button">帮助</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>Journal 使用说明</span><span class="shortcut">F1</span></button>
+            <button class="menu-item" type="button"><span>关于 Journal</span><span class="shortcut"></span></button>
+          </div>
+        </div>
+      </nav>
+
+      <header class="top-context">
+        <div class="brand">
+          <strong>Journal</strong>
+          <span>本地优先晨间日记</span>
+        </div>
+        <div class="today-line">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span><strong>2026 年 5 月 10 日</strong> · 周日 · 原始表达已保留</span>
+        </div>
+        <div class="status-pills" aria-label="今日状态">
+          <span class="pill">可保存</span>
+          <span class="pill neutral">DeepSeek 可用</span>
+          <span class="pill neutral">本地 Markdown</span>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="context-rail" aria-label="今日上下文">
+          <section class="date-card">
+            <p class="month">May</p>
+            <h1>10<span>星期日 · 晨间日记</span></h1>
+            <div class="date-status-row">
+              <span class="pill date-status-pill">AI 整理稿待确认</span>
+            </div>
+          </section>
+
+          <section class="rail-section">
+            <div class="section-head">
+              <h2>原始对话</h2>
+              <span>3 条</span>
+            </div>
+            <div class="raw-stack">
+              <details class="raw-fold" open>
+                <summary>
+                  <span>
+                    <span class="raw-time">08:12</span>
+                    <span class="raw-title">昨天周六加班，但下班之后还是蛮放松的...</span>
+                    <span class="raw-tags">
+                      <span>#产品体验</span>
+                      <span>#Journal</span>
+                    </span>
+                  </span>
+                </summary>
+                <div class="raw-body">
+                  昨天周六加班，但下班之后还是蛮放松的。晚上回家整理了一下 Journal 的想法，感觉软件已经能跑起来，但界面还不像日记产品。#产品体验 #Journal
+                  <div class="raw-map">
+                    <span>已用于：昨天回顾</span>
+                    <span>已提取：主界面体验</span>
+                  </div>
+                </div>
+              </details>
+              <details class="raw-fold">
+                <summary>
+                  <span>
+                    <span class="raw-time">08:19</span>
+                    <span class="raw-title">今天想把主界面从调试面板改成真正的工作台...</span>
+                    <span class="raw-tags">
+                      <span>#界面设计</span>
+                      <span>#命令层</span>
+                    </span>
+                  </span>
+                </summary>
+                <div class="raw-body">
+                  今天想把主界面从调试面板改成真正的工作台，菜单栏也要用起来，插入块、今日助手、LLM 配置都可以走命令层。#界面设计 #命令层
+                  <div class="raw-map">
+                    <span>已用于：今天想推进</span>
+                    <span>已提取：菜单命令</span>
+                  </div>
+                </div>
+              </details>
+              <details class="raw-fold">
+                <summary>
+                  <span>
+                    <span class="raw-time">08:31</span>
+                    <span class="raw-title">右侧留给真正有用的今日助手和今日材料...</span>
+                    <span class="raw-tags">
+                      <span>#今日材料</span>
+                      <span>#工作台</span>
+                    </span>
+                  </span>
+                </summary>
+                <div class="raw-body">
+                  右侧留给真正有用的今日助手和今日材料。用户日常只需要看到当前材料从哪里来、写到了哪里，以及下一步该做什么。#今日材料 #工作台
+                  <div class="raw-map">
+                    <span>已用于：未来提醒</span>
+                    <span>已提取：界面聚焦</span>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <section class="rail-section">
+            <div class="section-head">
+              <h2>下一步</h2>
+              <span>可保存</span>
+            </div>
+            <div class="next-panel">
+              <strong>保存正式日记</strong>
+              <p>草稿已经通过结构校验。你可以直接保存，也可以先用菜单插入新的日记块。</p>
+            </div>
+          </section>
+        </aside>
+
+        <section class="journal-stage" aria-label="日记纸面">
+          <div class="stage-toolbar">
+            <div class="stage-title">
+              <p>日记纸面</p>
+              <h2>默认阅读，点击段落才编辑</h2>
+            </div>
+            <div class="view-switch" aria-label="视图切换">
+              <button type="button">只看日记</button>
+              <button type="button" aria-pressed="true">日记 + 助手</button>
+            </div>
+          </div>
+
+          <div class="document-scroll">
+            <article class="document">
+              <header class="document-header">
+                <p class="kicker">Morning Journal</p>
+                <h1>把 Journal 做回日记软件</h1>
+                <p class="subtitle">今天的目标不是继续堆功能，而是把已经跑通的能力变成一个每天愿意打开的界面。</p>
+              </header>
+
+              <section class="doc-section">
+                <h2>昨天回顾</h2>
+                <button class="edit-chip" type="button">编辑</button>
+                <p>昨天周六加班，但下班之后还是蛮放松的。晚上回来看 Journal，发现功能已经能跑通，但主界面越来越像调试面板：状态、原始输入、技术状态和文件路径都挤在一层。</p>
+              </section>
+
+              <section class="doc-section">
+                <h2>今天想推进</h2>
+                <div class="inline-editor">
+                  <textarea>把主界面升级成“日记纸面 + 命令菜单 + 原始对话折叠 + 今日助手”的工作台。先出原型，再写 spec 和 plan，最后走代理实现。</textarea>
+                  <div class="inline-actions">
+                    <button class="secondary" type="button">取消</button>
+                    <button class="primary" type="button">保存修改</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="doc-section">
+                <h2>值得庆祝</h2>
+                <button class="edit-chip" type="button">编辑</button>
+                <ul>
+                  <li>LLM 真实接入已经跑通，主流程不再只是 Mock。</li>
+                  <li>主界面的体验问题被明确暴露出来，这是产品进入可用阶段后的正常下一步。</li>
+                  <li>菜单栏可以变成真正的命令层，为后续快捷键和高级操作打基础。</li>
+                </ul>
+              </section>
+
+              <section class="doc-section">
+                <h2>未来提醒</h2>
+                <button class="edit-chip" type="button">编辑</button>
+                <p>后续不要再把工程状态直接扔给用户。默认界面应该回答“我现在该做什么”，技术细节进入设置或诊断页。</p>
+              </section>
+            </article>
+          </div>
+
+          <section class="compose-bar" aria-label="底部输入和主操作">
+            <div>
+              <label for="today-input">补充今天的自然语言输入</label>
+              <textarea id="today-input" placeholder="继续写一句今天的事，Journal 会保留原话，再更新草稿..."></textarea>
+            </div>
+            <button class="secondary" type="button">重新整理</button>
+            <button class="primary" type="button">保存日记</button>
+          </section>
+        </section>
+
+        <aside class="assistant-panel" aria-label="今日助手">
+          <div class="assistant-head">
+            <div>
+              <p class="assistant-eyebrow">Today Assistant</p>
+              <h2>把今天收好</h2>
+              <div class="assistant-meta">
+                <span>AI 整理完成</span>
+                <span>#Journal</span>
+                <span>草稿可保存</span>
+                <span>DeepSeek</span>
+              </div>
+            </div>
+            <span class="assistant-time">08:42</span>
+          </div>
+
+          <div class="assistant-body">
+            <section class="assistant-card next-step-card">
+              <div class="next-step-title">
+                <span class="status-dot" aria-hidden="true"></span>
+                <div>
+                  <strong>下一步：先保存当前段落</strong>
+                  <p>“今天想推进”还在编辑中。保存这一段后，正式日记就可以确认保存。</p>
+                </div>
+              </div>
+              <div class="next-actions">
+                <button class="primary" type="button">保存当前段落</button>
+                <button class="secondary" type="button">稍后再说</button>
+              </div>
+            </section>
+
+            <section class="assistant-card">
+              <div class="assistant-card-head">
+                <h3>AI 整理</h3>
+                <span>刚刚更新</span>
+              </div>
+              <p>从 3 条原始输入中整理出 4 个日记段落，重点集中在产品体验、界面结构和后续实现计划。</p>
+              <div class="assistant-stat-grid" aria-label="AI 整理统计">
+                <div class="assistant-stat">
+                  <strong>3</strong>
+                  <span>原始输入</span>
+                </div>
+                <div class="assistant-stat">
+                  <strong>4</strong>
+                  <span>日记段落</span>
+                </div>
+                <div class="assistant-stat">
+                  <strong>1</strong>
+                  <span>手动编辑</span>
+                </div>
+              </div>
+              <div class="tag-row" aria-label="今日标签">
+                <strong>今日标签</strong>
+                <span>#Journal</span>
+                <span>#产品体验</span>
+                <span>#界面设计</span>
+                <span>#今日材料</span>
+              </div>
+              <div class="insight-tags" aria-label="识别主题">
+                <span>主界面体验</span>
+                <span>菜单命令</span>
+                <span>界面聚焦</span>
+              </div>
+            </section>
+
+            <section class="assistant-card">
+              <div class="assistant-card-head">
+                <h3>今日材料</h3>
+                <span>可追溯</span>
+              </div>
+              <div class="material-list">
+                <div class="material-item">
+                  <div class="material-meta">
+                    <span>来源 08:12</span>
+                    <span>#产品体验</span>
+                    <span>写入 昨天回顾</span>
+                  </div>
+                  加班后回看 Journal，主界面还不像日记产品。
+                </div>
+                <div class="material-item">
+                  <div class="material-meta">
+                    <span>来源 08:19</span>
+                    <span>#命令层</span>
+                    <span>写入 今天想推进</span>
+                  </div>
+                  菜单和命令层承担工具入口，不把操作堆满界面。
+                </div>
+                <div class="material-item">
+                  <div class="material-meta">
+                    <span>来源 08:31</span>
+                    <span>#今日材料</span>
+                    <span>写入 未来提醒</span>
+                  </div>
+                  右侧用于展示今日材料、标签和可追溯关系。
+                </div>
+              </div>
+            </section>
+
+            <section class="assistant-card">
+              <div class="assistant-card-head">
+                <h3>快捷动作</h3>
+                <span>命令层</span>
+              </div>
+              <div class="quick-actions">
+                <button type="button">插入段落</button>
+                <button type="button">重新整理</button>
+                <button type="button">LLM 配置</button>
+                <button type="button">查看材料</button>
+              </div>
+            </section>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="window llm-window" id="llm-settings-rounded-prototype" aria-label="Journal LLM 配置圆角产品化原型">
+      <div class="titlebar">
+        <strong>Journal</strong>
+        <span>2026-05-10-llm-settings-rounded-product-prototype</span>
+        <div class="window-controls" aria-hidden="true">
+          <span>─</span><span>□</span><span>×</span>
+        </div>
+      </div>
+
+      <nav class="menubar" aria-label="LLM 配置菜单">
+        <div class="menu">
+          <button type="button">文件</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>返回今日日记</span><span class="shortcut">Ctrl+1</span></button>
+            <button class="menu-item" type="button"><span>保存配置</span><span class="shortcut">Ctrl+S</span></button>
+            <button class="menu-item" type="button"><span>打开配置文件</span><span class="shortcut">Ctrl+O</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button">编辑</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>显示/隐藏 Key</span><span class="shortcut">Ctrl+E</span></button>
+            <button class="menu-item" type="button"><span>恢复默认参数</span><span class="shortcut">Ctrl+Backspace</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button">视图</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>基础配置</span><span class="shortcut">Ctrl+2</span></button>
+            <button class="menu-item" type="button"><span>诊断详情</span><span class="shortcut">Ctrl+3</span></button>
+            <button class="menu-item" type="button"><span>高级参数</span><span class="shortcut">Ctrl+4</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button">帮助</button>
+          <div class="menu-panel">
+            <button class="menu-item" type="button"><span>配置说明</span><span class="shortcut">F1</span></button>
+          </div>
+        </div>
+      </nav>
+
+      <div class="llm-page">
+        <header class="llm-hero">
+          <div>
+            <p class="llm-kicker">LLM Settings</p>
+            <h1>配置大模型供应商与参数</h1>
+            <p>配置页只处理模型来源、连接信息、API Key、整理风格和诊断结果。</p>
+          </div>
+          <div class="llm-status-orbit">
+            <span class="llm-avatar">D</span>
+            <div>
+              <strong>DeepSeek 已从环境变量加载</strong>
+              <span>OpenAI-compatible · Agent Framework 1.5.0</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="llm-layout">
+          <aside class="provider-rail" aria-label="LLM 列表">
+            <div class="provider-rail-header">
+              <h2>模型来源</h2>
+              <p>选择要配置的供应商，查看连接状态，并编辑对应的模型参数。</p>
+            </div>
+
+            <button class="provider-card" type="button">
+              <div class="provider-card-head">
+                <div class="provider-title">
+                  <span class="provider-avatar">M</span>
+                  <span>
+                    <strong>本地演示</strong>
+                    <small>无需配置</small>
+                  </span>
+                </div>
+                <span class="provider-state">演示</span>
+              </div>
+              <div class="provider-meta-line">
+                <span>无需 Key</span>
+                <span>本地可用</span>
+              </div>
+            </button>
+
+            <button class="provider-card warn" type="button">
+              <div class="provider-card-head">
+                <div class="provider-title">
+                  <span class="provider-avatar">O</span>
+                  <span>
+                    <strong>OpenAI</strong>
+                    <small>gpt-5.4</small>
+                  </span>
+                </div>
+                <span class="provider-state">待配置</span>
+              </div>
+              <div class="provider-meta-line">
+                <span>官方端点</span>
+                <span>需要 Key</span>
+              </div>
+            </button>
+
+            <button class="provider-card active" type="button">
+              <div class="provider-card-head">
+                <div class="provider-title">
+                  <span class="provider-avatar">D</span>
+                  <span>
+                    <strong>DeepSeek</strong>
+                    <small>deepseek-v4-flash</small>
+                  </span>
+                </div>
+                <span class="provider-state">当前</span>
+              </div>
+              <div class="provider-meta-line">
+                <span>环境变量</span>
+                <span>已测试</span>
+              </div>
+            </button>
+
+            <button class="provider-card" type="button">
+              <div class="provider-card-head">
+                <div class="provider-title">
+                  <span class="provider-avatar">G</span>
+                  <span>
+                    <strong>智谱 GLM</strong>
+                    <small>glm-5.1</small>
+                  </span>
+                </div>
+                <span class="provider-state">可选择</span>
+              </div>
+              <div class="provider-meta-line">
+                <span>兼容接口</span>
+                <span>可测试</span>
+              </div>
+            </button>
+
+            <button class="provider-card error" type="button">
+              <div class="provider-card-head">
+                <div class="provider-title">
+                  <span class="provider-avatar">C</span>
+                  <span>
+                    <strong>Custom</strong>
+                    <small>自定义端点</small>
+                  </span>
+                </div>
+                <span class="provider-state">需要检查</span>
+              </div>
+              <div class="provider-meta-line">
+                <span>连接未通过</span>
+                <span>查看详情</span>
+              </div>
+            </button>
+          </aside>
+
+          <main class="llm-main" aria-label="DeepSeek 配置">
+            <section class="llm-card">
+              <div class="llm-card-head">
+                <h2>连接信息</h2>
+                <span>当前 LLM</span>
+              </div>
+              <div class="llm-form-grid">
+                <div class="llm-field">
+                  <label>显示名称</label>
+                  <div class="fake-input">DeepSeek <small>可编辑</small></div>
+                </div>
+                <div class="llm-field">
+                  <label>模型</label>
+                  <div class="fake-input">deepseek-v4-flash <small>默认</small></div>
+                </div>
+                <div class="llm-field full">
+                  <label>Base URL</label>
+                  <div class="fake-input">https://api.deepseek.com <small>OpenAI-compatible</small></div>
+                </div>
+                <div class="llm-field full">
+                  <label>API Key</label>
+                  <div class="secret-input">
+                    <span>••••••••••••••••••••••••••••2d9a</span>
+                    <small>来自环境变量</small>
+                    <button type="button">显示</button>
+                  </div>
+                </div>
+              </div>
+              <p class="llm-note">环境变量优先于配置文件。这里能确认 Key 已加载，但不会把环境变量里的 Key 写回本地配置文件。</p>
+              <div class="llm-button-row">
+                <button class="primary" type="button">测试当前配置</button>
+                <button class="secondary" type="button">保存并启用</button>
+                <button class="ghost" type="button">恢复上次可用配置</button>
+              </div>
+            </section>
+
+            <section class="llm-card">
+              <div class="llm-card-head">
+                <h2>整理风格</h2>
+                <span>参数预设</span>
+              </div>
+              <div class="profile-strip">
+                <div class="profile-chip">
+                  <strong>忠实整理</strong>
+                  <span>保留原话优先</span>
+                </div>
+                <div class="profile-chip">
+                  <strong>轻度润色</strong>
+                  <span>语气更顺</span>
+                </div>
+                <div class="profile-chip">
+                  <strong>结构优先</strong>
+                  <span>段落更清楚</span>
+                </div>
+                <div class="profile-chip">
+                  <strong>晨间温和</strong>
+                  <span>更像日记</span>
+                </div>
+              </div>
+              <div class="assistant-stat-grid" aria-label="高级参数">
+                <div class="assistant-stat">
+                  <strong>0.2</strong>
+                  <span>temperature</span>
+                </div>
+                <div class="assistant-stat">
+                  <strong>1200</strong>
+                  <span>max tokens</span>
+                </div>
+                <div class="assistant-stat">
+                  <strong>45s</strong>
+                  <span>timeout</span>
+                </div>
+              </div>
+            </section>
+          </main>
+
+          <aside class="llm-side" aria-label="配置来源与诊断">
+            <section class="llm-side-card">
+              <div class="llm-side-head">
+                <h2>配置来源</h2>
+                <span>加载顺序</span>
+              </div>
+              <div class="config-source-list">
+                <div class="source-row">
+                  <span>
+                    <strong>环境变量</strong>
+                    <small>JOURNAL_DEEPSEEK_API_KEY</small>
+                  </span>
+                  <span>已加载</span>
+                </div>
+                <div class="source-row">
+                  <span>
+                    <strong>本地配置文件</strong>
+                    <small>.journal/settings/ai-providers.json</small>
+                  </span>
+                  <span>可编辑</span>
+                </div>
+                <div class="source-row">
+                  <span>
+                    <strong>本地演示</strong>
+                    <small>无需真实 Key</small>
+                  </span>
+                  <span>可用</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="llm-side-card">
+              <div class="llm-side-head">
+                <h2>最近诊断</h2>
+                <span>12 秒前</span>
+              </div>
+              <div class="check-list">
+                <div class="check-item">
+                  <span class="check-dot">✓</span>
+                  <span>连接成功，JSON 模式可用。</span>
+                </div>
+                <div class="check-item">
+                  <span class="check-dot">✓</span>
+                  <span>响应时间 684ms，没有暴露 API Key。</span>
+                </div>
+                <div class="check-item">
+                  <span class="check-dot">!</span>
+                  <span>自定义模型上次连接失败，可以展开详情查看。</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="llm-side-card">
+              <div class="llm-side-head">
+                <h2>高级入口</h2>
+                <span>低频</span>
+              </div>
+              <p>高级参数默认收起。需要排查时再打开 request id、provider error code 和原始诊断详情。</p>
+              <button class="side-action" type="button">展开诊断详情</button>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const menus = document.querySelectorAll(".menu");
+    menus.forEach(menu => {
+      menu.querySelector(":scope > button").addEventListener("click", event => {
+        event.stopPropagation();
+        menus.forEach(other => {
+          if (other !== menu) {
+            other.classList.remove("is-open");
+          }
+        });
+        menu.classList.toggle("is-open");
+      });
+    });
+
+    document.addEventListener("click", () => {
+      menus.forEach(menu => menu.classList.remove("is-open"));
+    });
+  </script>
+</body>
+</html>

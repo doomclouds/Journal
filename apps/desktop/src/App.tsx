@@ -9,7 +9,6 @@ import {
   regenerateTodayDraft,
   revealAiProviderApiKey,
   saveBlockDraft,
-  saveSourceDraft,
   testAiProvider,
   type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
@@ -246,30 +245,6 @@ export default function App() {
     }
   }
 
-  async function handleSaveSource(markdown: string) {
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    resetPendingRegenerateDraft();
-    setValidationError("");
-    setIsSubmitting(true);
-    try {
-      const next = await saveSourceDraft(markdown);
-      if (requestId === requestIdRef.current) {
-        setEditor(next);
-        setApiError("");
-        setLoadState("ready");
-      }
-    } catch (caught) {
-      if (requestId === requestIdRef.current) {
-        setApiError(getErrorMessage(caught));
-      }
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setIsSubmitting(false);
-      }
-    }
-  }
-
   async function handleActivateAiSettings(request: AiSettingsSaveRequest): Promise<AiSettingsActivationResult> {
     const settingsRequestId = settingsRequestIdRef.current + 1;
     settingsRequestIdRef.current = settingsRequestId;
@@ -419,7 +394,6 @@ export default function App() {
                 editor={editor}
                 isBusy={isBusy}
                 onSaveBlocks={handleSaveBlocks}
-                onSaveSource={handleSaveSource}
                 onLocalInteraction={resetPendingRegenerateDraft}
                 onDirtyChange={setHasLocalUnsavedChanges}
               />

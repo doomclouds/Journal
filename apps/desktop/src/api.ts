@@ -282,13 +282,3 @@ export function saveBlockDraft(sections: JournalBlockEditSection[]): Promise<Tod
     body: JSON.stringify({ sections })
   });
 }
-
-export function saveSourceDraft(markdown: string): Promise<TodayEditorState> {
-  return requestJson<TodayEditorState>("/journal/today/editor/source", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ markdown })
-  });
-}

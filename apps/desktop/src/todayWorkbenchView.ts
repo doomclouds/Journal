@@ -50,7 +50,7 @@ const productStatusViews: Record<ProductJournalStatus, ProductJournalStatusView>
     label: "需要处理",
     tone: "danger",
     nextStepTitle: "修复校验问题",
-    nextStepText: "根据诊断提示修复 JMF 结构，再保存草稿。"
+    nextStepText: "根据诊断提示修复日记结构，再保存草稿。"
   },
   saved: {
     id: "saved",

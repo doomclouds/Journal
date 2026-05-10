@@ -13,7 +13,6 @@ type JournalEditorProps = {
   editor: TodayEditorState;
   isBusy: boolean;
   onSaveBlocks: (sections: JournalBlockEditSection[]) => void;
-  onSaveSource: (markdown: string) => void;
   onLocalInteraction?: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
 };
@@ -64,23 +63,18 @@ export function JournalEditor({
   editor,
   isBusy,
   onSaveBlocks,
-  onSaveSource,
   onLocalInteraction,
   onDirtyChange
 }: JournalEditorProps) {
-  const [isSourceOpen, setIsSourceOpen] = useState(false);
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
-  const [sourceMarkdown, setSourceMarkdown] = useState(editor.markdown);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const previousEditorRef = useRef<TodayEditorState>(editor);
 
   useEffect(() => {
     const isInitialEditor = previousEditorRef.current === editor;
     setSections(editor.sections);
-    setSourceMarkdown(editor.markdown);
     if (!isInitialEditor) {
       setEditingSectionId(null);
-      setIsSourceOpen(false);
     }
     previousEditorRef.current = editor;
   }, [editor]);
@@ -120,14 +114,12 @@ export function JournalEditor({
 
     return currentSection.content !== baselineSection.content;
   }, [editingSectionId, editor.sections, sections]);
-  const hasDirtySource = sourceMarkdown !== editor.markdown;
-  const hasLocalDirty = hasDirtyEditingSection || hasDirtySource;
+  const hasLocalDirty = hasDirtyEditingSection;
 
   useEffect(() => {
     onDirtyChange?.(hasLocalDirty);
   }, [hasLocalDirty, onDirtyChange]);
 
-  const isSourceSaveDisabled = isBusy || hasDirtyEditingSection;
   const areBlockSwitchActionsDisabled = isBusy || hasLocalDirty;
 
   function resetSectionToBaseline(current: JmfSection[], sectionId: string) {
@@ -195,31 +187,13 @@ export function JournalEditor({
     onSaveBlocks([{ id: section.id, content: section.content }]);
   }
 
-  function saveSourceMarkdown() {
-    if (hasDirtyEditingSection) {
-      return;
-    }
-
-    onSaveSource(sourceMarkdown);
-  }
-
   return (
-    <section className="journal-editor" aria-label="JMF 编辑器">
+    <section className="journal-editor" aria-label="日记编辑器">
       <div className="journal-editor-toolbar productized-editor-toolbar">
         <div>
           <span className="eyebrow">日记纸面</span>
           <p>默认阅读，点击段落即可编辑。</p>
         </div>
-        <button
-          type="button"
-          className="secondary-action"
-          onClick={() => {
-            onLocalInteraction?.();
-            setIsSourceOpen(current => !current);
-          }}
-        >
-          {isSourceOpen ? "收起高级源码" : "展开高级源码"}
-        </button>
       </div>
 
       <ValidationPanel validation={editor.validation} />
@@ -245,39 +219,6 @@ export function JournalEditor({
         ))}
       </div>
 
-      {isSourceOpen ? (
-        <section className="journal-source-drawer" aria-label="高级 JMF 源码">
-          <div className="source-drawer-head">
-            <div>
-              <h2>高级：JMF 源码</h2>
-              <p>这里显示 front matter、JMF marker 和技术细节。</p>
-            </div>
-          </div>
-          <textarea
-            aria-label="编辑完整 JMF Markdown"
-            value={sourceMarkdown}
-            disabled={isBusy || hasDirtyEditingSection}
-            onChange={event => {
-              onLocalInteraction?.();
-              setSourceMarkdown(event.target.value);
-            }}
-            rows={14}
-          />
-          <div className="source-actions">
-            {hasDirtyEditingSection ? (
-              <p className="source-save-hint">先保存或取消正在编辑的段落，再保存源码。</p>
-            ) : null}
-            <button
-              type="button"
-              className="editor-save-action"
-              onClick={saveSourceMarkdown}
-              disabled={isSourceSaveDisabled}
-            >
-              保存源码草稿
-            </button>
-          </div>
-        </section>
-      ) : null}
     </section>
   );
 }

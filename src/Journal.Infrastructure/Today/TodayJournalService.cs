@@ -203,40 +203,6 @@ public sealed class TodayJournalService
         return await GetTodayEditorAsync(cancellationToken);
     }
 
-    public async Task<TodayEditorState> SaveSourceDraftAsync(
-        JournalSourceEditRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (string.IsNullOrWhiteSpace(request.Markdown))
-        {
-            throw new ArgumentException("markdown is required", nameof(request.Markdown));
-        }
-
-        var baseline = await ReadEditorBaselineAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(baseline.Markdown))
-        {
-            throw new InvalidOperationException("editor baseline does not exist.");
-        }
-
-        var sourceRawInputIds = await GetDraftSourceRawInputIdsAsync(baseline.Date, baseline.Draft, cancellationToken);
-        var parseResult = JmfMarkdownParser.Parse(request.Markdown);
-        var validation = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
-        var status = validation.IsValid ? JournalStatus.Reviewing : JournalStatus.Attention;
-        var errors = validation.IsValid ? Array.Empty<string>() : ToMessages(validation.Issues);
-
-        await WriteEditorDraftAsync(
-            baseline.Date,
-            status,
-            request.Markdown,
-            sourceRawInputIds,
-            errors,
-            cancellationToken);
-
-        return await GetTodayEditorAsync(cancellationToken);
-    }
-
     private async Task<TodayJournalState> BuildStateAsync(
         JournalDate date,
         JournalStatus? statusOverride,

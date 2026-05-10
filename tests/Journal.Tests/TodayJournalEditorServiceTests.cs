@@ -121,62 +121,6 @@ public sealed class TodayJournalEditorServiceTests
     }
 
     [Fact]
-    public async Task SaveSourceDraftAsync_WritesReviewingDraftForValidMarkdown()
-    {
-        using var workspace = TempWorkspace.Create();
-        var paths = CreatePaths(workspace.Root);
-        var service = CreateService(paths);
-        await service.AddInputAsync("昨天完成了 parser，今天准备验证 source editor #Journal", "text", CancellationToken.None);
-        var originalDraft = (await new DraftStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None))!;
-        var sourceMarkdown = originalDraft.Markdown.Replace("今天准备验证 source editor #Journal", "source mode updated focus", StringComparison.Ordinal);
-
-        var editor = await service.SaveSourceDraftAsync(new JournalSourceEditRequest(sourceMarkdown), CancellationToken.None);
-
-        var storedDraft = (await new DraftStore(paths).ReadAsync(editor.Date, CancellationToken.None))!;
-        Assert.Equal(JournalStatus.Reviewing, editor.Status);
-        Assert.True(editor.Validation.IsValid);
-        Assert.True(editor.CanConfirm);
-        Assert.Equal(JournalStatus.Reviewing, storedDraft.Status);
-        Assert.Equal(sourceMarkdown, storedDraft.Markdown);
-        Assert.Empty(storedDraft.Errors);
-    }
-
-    [Fact]
-    public async Task SaveSourceDraftAsync_WritesAttentionDraftForInvalidMarkdownAndDoesNotOverwriteEntry()
-    {
-        using var workspace = TempWorkspace.Create();
-        var paths = CreatePaths(workspace.Root);
-        var service = CreateService(paths);
-        await service.AddInputAsync("昨天完成了确认，今天验证 invalid source 不覆盖 entry #Journal", "text", CancellationToken.None);
-        var confirmed = await service.ConfirmDraftAsync(CancellationToken.None);
-        var originalEntryMarkdown = confirmed.Entry!.Markdown;
-        const string invalidMarkdown = """
-            ---
-            schema: journal-entry/v1
-            date: "2026-05-08"
-            ---
-
-            <!-- journal:section raw-inputs -->
-            ## 原始输入
-
-            - 保留 provenance
-            <!-- /journal:section raw-inputs -->
-            """;
-
-        var editor = await service.SaveSourceDraftAsync(new JournalSourceEditRequest(invalidMarkdown), CancellationToken.None);
-
-        var storedDraft = (await new DraftStore(paths).ReadAsync(editor.Date, CancellationToken.None))!;
-        var entryMarkdown = await File.ReadAllTextAsync(paths.EntryPath(editor.Date), CancellationToken.None);
-        Assert.Equal(JournalStatus.Attention, editor.Status);
-        Assert.False(editor.Validation.IsValid);
-        Assert.False(editor.CanConfirm);
-        Assert.Equal(JournalStatus.Attention, storedDraft.Status);
-        Assert.Equal(invalidMarkdown, storedDraft.Markdown);
-        Assert.Contains(storedDraft.Errors, error => error.Contains("Required section 'today-focus' is missing", StringComparison.Ordinal));
-        Assert.Equal(originalEntryMarkdown, entryMarkdown);
-    }
-
-    [Fact]
     public async Task GetTodayEditorAsync_ReturnsEmptyInvalidStateWhenBaselineDoesNotExist()
     {
         using var workspace = TempWorkspace.Create();
@@ -203,22 +147,6 @@ public sealed class TodayJournalEditorServiceTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.SaveBlockDraftAsync(
                 new JournalBlockEditRequest([new("today-focus", "- cannot save without raw inputs")]),
-                CancellationToken.None));
-
-        Assert.Equal("editor baseline does not exist.", exception.Message);
-    }
-
-
-    [Fact]
-    public async Task SaveSourceDraftAsync_ThrowsWhenBaselineDoesNotExist()
-    {
-        using var workspace = TempWorkspace.Create();
-        var paths = CreatePaths(workspace.Root);
-        var service = CreateService(paths);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.SaveSourceDraftAsync(
-                new JournalSourceEditRequest("# no baseline"),
                 CancellationToken.None));
 
         Assert.Equal("editor baseline does not exist.", exception.Message);
