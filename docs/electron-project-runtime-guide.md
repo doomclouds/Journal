@@ -15,10 +15,10 @@ Electron 打开一个桌面窗口
         ↓
 窗口里加载 React 页面
         ↓
-React fetch 调用 .NET /health
+React fetch 调用 .NET 本地 API
 ```
 
-也就是说，Electron 现在只是桌面窗口容器，真正页面是 React，后端是 .NET API。
+也就是说，Electron 现在仍然是开发模式桌面窗口容器，真正页面是 React，后端是 .NET API。当前 React 已经不是阶段 1 占位页，而是包含今日工作台、JMF 编辑器和 LLM 设置页的真实应用界面。
 
 ## 目录为什么这样设计
 
@@ -130,8 +130,8 @@ src/main.tsx
   挂载 React 应用
 
 src/App.tsx
-  调用 http://localhost:5057/health
-  显示 online/offline
+  调用 http://localhost:5057/health、/journal/today、/settings/ai 等本地 API
+  显示今日日记工作台、JMF 编辑器、LLM 设置和在线状态
 ```
 
 当前窗口创建逻辑在：
@@ -150,7 +150,7 @@ mainWindow.loadURL("http://localhost:5173");
 
 ## 当前为什么要先启动 .NET API
 
-因为现在阶段 1 采用“双进程开发模式”。
+因为当前仍采用“双进程开发模式”。
 
 也就是说 Electron 目前不会自动启动 .NET 后端。你需要先运行：
 
@@ -168,9 +168,11 @@ React 页面会请求：
 
 ```text
 http://localhost:5057/health
+http://localhost:5057/journal/today
+http://localhost:5057/settings/ai
 ```
 
-如果 API 正常，页面显示 `online`。如果 API 没开，就显示 `offline`。
+如果 API 正常，页面显示 `online` 并可使用今日日记链路。API 没开时会显示 `offline` 或接口加载失败。
 
 ## preload 是干什么的
 
@@ -208,7 +210,7 @@ React 页面不能直接访问 Node / 文件系统
 
 ## 后期可以怎么改
 
-### 1. 做真正的页面功能
+### 1. 继续完善真实页面功能
 
 主要改：
 
@@ -216,17 +218,19 @@ React 页面不能直接访问 Node / 文件系统
 apps/desktop/src/
 ```
 
-比如：
+当前已经有：
 
 ```text
 日记输入页
 Markdown 预览页
 设置页
-历史列表
 AI 处理状态
+JMF 块编辑
+JMF 源码编辑
+LLM 参数配置
 ```
 
-后面可以引入：
+后面可以继续引入：
 
 ```text
 React Router
@@ -235,7 +239,7 @@ Zustand / Redux
 组件库
 ```
 
-但骨架阶段先保持薄一点是对的。
+但当前仍应保持桌面工具的密度和克制，不需要做成营销式页面。
 
 ### 2. 扩展 .NET API
 
@@ -247,13 +251,13 @@ src/Journal.Domain
 src/Journal.Infrastructure
 ```
 
-比如新增：
+当前已经包含今日链路、编辑器和 LLM 设置；后续可以新增：
 
 ```text
-POST /journal/parse
 GET /journal/recent
-POST /journal/save
-GET /settings
+GET /journal/by-date
+GET /journal/search
+POST /journal/index/rebuild
 ```
 
 React 继续通过 HTTP 调用本地 API。
@@ -318,15 +322,14 @@ Journal.exe
 卸载程序
 ```
 
-### 5. 做本地存储
+### 5. 扩展本地存储
 
-当前没有日记保存。
-
-后续可以走两条路线：
+当前已经有 Markdown 日记、原始输入、草稿和 LLM 配置文件。后续还要补：
 
 ```text
-Markdown 文件存储
 SQLite 索引
+版本快照
+备份 / 导出
 ```
 
 比较适合这个项目的是：
@@ -338,7 +341,7 @@ SQLite 做搜索、索引、元数据
 
 ### 6. 接 AI Provider
 
-建议不要让 React 直接调 AI。
+当前已经按这个方向实现：React 不直接调 AI，API Key、重试、模型切换和 LLM 调用都留在 .NET 后端。
 
 更稳的是：
 
@@ -385,6 +388,8 @@ http://127.0.0.1:5173     electron .
                                 │
                                 ▼
                    fetch localhost:5057/health
+                   fetch localhost:5057/journal/today
+                   fetch localhost:5057/settings/ai
                                 │
                                 ▼
                          .NET Journal.Api
@@ -392,7 +397,7 @@ http://127.0.0.1:5173     electron .
 
 ## 你现在最该记住的点
 
-这个 Electron 项目目前不是“Electron 里写所有业务”。
+这个 Electron 项目不是“Electron 里写所有业务”。
 
 它是：
 
@@ -404,7 +409,7 @@ preload = 安全桥
 Vite = 开发期前端服务器
 ```
 
-这个结构后期比较好扩，不容易乱。下一阶段真正要做功能时，优先思路应该是：
+这个结构后期比较好扩，不容易乱。继续做功能时，优先思路应该是：
 
 ```text
 UI 放 React

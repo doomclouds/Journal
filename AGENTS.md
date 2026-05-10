@@ -18,7 +18,11 @@ Phase 5 includes the Phase 3 generation/confirmation/editor workflow plus real O
 - Valid editor saves write a `reviewing` draft only.
 - Invalid editor saves write an `attention` draft and must not overwrite the formal entry.
 - The formal Markdown entry is updated only after the user confirms the current draft.
-- Real LLM providers are configured through `GET/PUT /settings/ai`, tested through `POST /settings/ai/test`, and can be used to regenerate the current draft through `POST /journal/today/draft/regenerate`.
+- Real LLM providers are configured through `GET/PUT /settings/ai`; the safe settings view must not return full API keys.
+- File-backed API keys can be revealed on explicit user action through `GET /settings/ai/{providerId}/api-key`; environment-backed keys are never revealable through the API.
+- `POST /settings/ai/test` supports candidate settings so the UI can test the current form before saving it.
+- `POST /settings/ai/activate` is the protected activation path: test first, then save/enable only on success.
+- `POST /journal/today/draft/regenerate` can regenerate the current draft through a selected LLM, but the settings panel remains configuration-only; user-facing regeneration belongs in the Today workflow.
 - Real LLM output must not overwrite `raw-inputs`; server-side raw input text remains the source of truth in draft and formal JMF.
 
 Do not assume these are implemented yet unless the code or docs say so: SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows.
@@ -37,12 +41,14 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - API composition and endpoints: `src/Journal.Api/Program.cs`.
 - Today's main workflow: `src/Journal.Infrastructure/Today/TodayJournalService.cs`.
 - AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementations are `MockAiProvider` and `OpenAiCompatibleJournalAiProvider`.
+- OpenAI-compatible runtime and settings: `src/Journal.Infrastructure/Ai/OpenAiCompatibleAgentRuntime.cs`, `JournalAiGenerationService.cs`, `JournalAiSettingsService.cs`, `JournalAiSettingsStore.cs`, and `JournalAiSettings.cs`.
 - AI JSON validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
 - JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, and editor request/state records.
 - JMF parse/validate/compose layer: `src/Journal.Infrastructure/Jmf/JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, and `JmfMarkdownComposer.cs`.
 - Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
 - Main desktop screen: `apps/desktop/src/App.tsx`.
 - JMF editor UI: `apps/desktop/src/JournalEditor.tsx`, `JournalBlockCard.tsx`, `InsertBlockMenu.tsx`, and `ValidationPanel.tsx`.
+- LLM settings UI: `apps/desktop/src/LlmSettingsPanel.tsx`.
 - API client and shared frontend contracts: `apps/desktop/src/api.ts`.
 - Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
@@ -55,6 +61,10 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - JMF validation protects the formal entry: invalid source or block requests should become `attention` drafts with repair information, not partial formal writes.
 - Block mode must not edit `raw-inputs`, `keywords`, or `metadata-note`; `raw-inputs` is preserved from the baseline draft/entry.
 - Source mode can edit full Markdown, including markers and front matter, but save must pass through parser/validator before it can become confirmable.
+- `GET /settings/ai` must only expose safe API key previews. Do not add full key values to settings views, Markdown, logs, generated metadata, screenshots, or archives.
+- Environment variables override file settings for the active/effective LLM provider. File settings are the fallback and the only source whose API key can be revealed through the UI.
+- Provider activation should remain protected: failed health checks should not switch the active provider or persist a broken candidate.
+- Regenerating a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
 - The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
 - Keep the UI quiet, tool-like, fast to scan, and focused on the daily writing workflow.
 
@@ -73,6 +83,7 @@ Useful focused checks:
 ```powershell
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter TodayJournalEditorServiceTests
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JmfMarkdownParserTests|JmfMarkdownValidatorTests|JmfMarkdownComposerTests"
+dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalAiSettingsTests|JournalAiGenerationServiceTests|OpenAiCompatibleJournalAiProviderTests|TodayJournalEndpointTests"
 npm test --prefix apps/desktop -- App.test.tsx
 ```
 
