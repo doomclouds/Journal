@@ -350,6 +350,16 @@ describe("App", () => {
           markdown: "",
           sections: [],
           availableOptionalSections: [],
+          validation: {
+            isValid: false,
+            issues: [
+              {
+                code: "missing-front-matter",
+                message: "JMF front matter is missing.",
+                repairHint: "Add the required YAML front matter block."
+              }
+            ]
+          },
           canConfirm: false,
           today: emptyToday
         })
@@ -359,12 +369,17 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(
-      await screen.findByRole("heading", { name: "2026-05-08 晨间日记" })
-    ).toBeInTheDocument();
+    const stage = await screen.findByLabelText("日记纸面");
+
+    expect(within(stage).getByRole("heading", { name: "今天先写一句", level: 1 })).toBeInTheDocument();
+    expect(screen.getByText("Journal")).toBeInTheDocument();
+    expect(screen.getByText("本地优先晨间日记")).toBeInTheDocument();
+    expect(screen.getByText(/2026年5月8日/)).toBeInTheDocument();
+    expect(screen.getByText("原始对话")).toBeInTheDocument();
+    expect(screen.getByText("Today Assistant")).toBeInTheDocument();
     expect(within(screen.getByLabelText("今日状态")).getByText("待开始")).toBeInTheDocument();
-    expect(screen.getByText("今天先写一句")).toBeInTheDocument();
-    expect(screen.getByText("不用先想结构。写一段自然语言，Journal 会保留原话，再帮你整理成可确认的日记草稿。")).toBeInTheDocument();
+    expect(screen.getAllByText("今天先写一句").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("不用先想结构。写一段自然语言，Journal 会保留原话，再帮你整理成可确认的日记草稿。").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("补充今天的自然语言输入")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成草稿" })).toBeInTheDocument();
     expect(screen.queryByText("还没有可编辑的 JMF 草稿")).not.toBeInTheDocument();
@@ -372,6 +387,54 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today/editor", undefined);
     expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/settings/ai", undefined);
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today", undefined);
+  });
+
+  test("renders the workbench directly without prototype window chrome or a web menu", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    const { container } = render(<App />);
+
+    const stage = await screen.findByLabelText("日记纸面");
+
+    expect(container.querySelector("main.desktop-shell")).toHaveAttribute("aria-label", "Journal 今日工作台");
+    expect(within(stage).getByRole("heading", { name: "把今天收好", level: 1 })).toBeInTheDocument();
+    expect(screen.getByLabelText("今日上下文")).toBeInTheDocument();
+    expect(screen.getByLabelText("今日助手")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "应用菜单" })).not.toBeInTheDocument();
+    expect(container.querySelector(".app-window")).toBeNull();
+    expect(container.querySelector(".titlebar")).toBeNull();
+    expect(container.querySelector(".window-controls")).toBeNull();
+    expect(container.querySelector(".menubar")).toBeNull();
+    expect(container.querySelector(".menu-panel")).toBeNull();
+  });
+
+  test("opens LLM settings panel from the native menu bridge", async () => {
+    const nativeMenuHandlers: Array<(command: string) => void> = [];
+    const unsubscribe = vi.fn();
+    vi.stubGlobal("journalDesktop", {
+      onNativeMenuCommand: (handler: (command: string) => void) => {
+        nativeMenuHandlers.push(handler);
+        return unsubscribe;
+      }
+    });
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "LLM Mock" });
+    nativeMenuHandlers[0]("open-llm-settings");
+
+    await waitFor(() =>
+      expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument()
+    );
   });
 
   test("shows productized draft language without backend status leaks", async () => {
@@ -454,7 +517,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /LLM/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
 
     const panel = screen.getByRole("region", { name: "LLM 配置面板" });
     expect(within(panel).getByText("模型来源")).toBeInTheDocument();
@@ -682,7 +745,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "重新整理" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /LLM/ }));
+    fireEvent.click(screen.getByRole("button", { name: "LLM Mock" }));
 
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
     expect(

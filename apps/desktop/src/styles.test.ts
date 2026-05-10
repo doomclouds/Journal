@@ -21,8 +21,8 @@ describe("LLM settings responsive styles", () => {
 describe("Today workbench productized CSS contract", () => {
   const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "styles.css"), "utf8");
 
-  function getNarrowLayoutCss() {
-    const mediaHeader = /@media\s*\(max-width:\s*1180px\)\s*\{/g;
+  function getMediaCss(maxWidth: number) {
+    const mediaHeader = new RegExp(`@media\\s*\\(max-width:\\s*${maxWidth}px\\)\\s*\\{`, "g");
     const blocks: string[] = [];
     let match: RegExpExecArray | null;
 
@@ -48,33 +48,34 @@ describe("Today workbench productized CSS contract", () => {
     return blocks.join("\n");
   }
 
-  function getRuleBody(selectorPattern: string, stylesheet = css) {
-    const match = new RegExp(`${selectorPattern}\\s*\\{([^}]*)\\}`, "s").exec(stylesheet);
-    expect(match).not.toBeNull();
-    return match?.[1] ?? "";
-  }
-
   test("defines command surface shell regions", () => {
     expect(css).toMatch(/\.desktop-shell\s*\{/);
-    expect(css).toMatch(/\.app-window\s*\{/);
-    expect(css).toMatch(/\.menubar\s*\{/);
+    expect(css).not.toMatch(/\.app-window\s*\{/);
+    expect(css).not.toMatch(/\.titlebar\s*\{/);
+    expect(css).not.toMatch(/\.window-controls\s*\{/);
+    expect(css).not.toMatch(/\.menubar\s*\{/);
+    expect(css).not.toMatch(/\.menu-panel\s*\{/);
     expect(css).toMatch(/\.command-workspace\s*\{/);
+    expect(css).toMatch(/\.context-rail\s*\{/);
+    expect(css).toMatch(/\.stage-toolbar\s*\{/);
+    expect(css).toMatch(/\.document-scroll\s*\{/);
+    expect(css).toMatch(/\.assistant-head\s*\{/);
     expect(css).toMatch(/\.today-assistant\s*\{/);
     expect(css).toMatch(/\.compose-bar\s*\{/);
   });
 
-  test("uses three columns on desktop and one column on narrow layouts", () => {
-    expect(css).toMatch(
-      /\.command-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(240px,\s*0\.78fr\)\s+minmax\(520px,\s*1\.45fr\)\s+minmax\(320px,\s*0\.95fr\);/s
-    );
-    expect(css).toMatch(/@media\s*\(max-width:\s*1120px\)/);
-    expect(css).toMatch(/\.command-workspace\s*\{[^}]*grid-template-columns:\s*1fr;/s);
+  test("uses the accepted three-column command surface layout", () => {
+    expect(css).toContain("grid-template-columns: 260px minmax(520px, 1fr) minmax(360px, 0.72fr);");
+    expect(css).toContain('grid-template-areas: "rail paper assistant";');
+    expect(css).toMatch(/@media\s*\(max-width:\s*1040px\)/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*820px\)/);
   });
 
   test("keeps feedback messages in a dedicated row before the workbench", () => {
-    expect(css).toMatch(/\.app-window\s*\{[^}]*grid-template-rows:\s*32px\s+44px\s+auto\s+auto\s+minmax\(0,\s*1fr\);/s);
+    expect(css).toMatch(/\.desktop-shell\s*\{[^}]*grid-template-rows:\s*auto\s+auto\s+minmax\(0,\s*1fr\);/s);
     expect(css).toMatch(/\.feedback-row\s*\{/);
     expect(css).toMatch(/\.feedback-row:empty\s*\{[^}]*display:\s*none;/s);
+    expect(css).toMatch(/\.command-workspace\s*\{[^}]*grid-row:\s*3;/s);
   });
 
   test("does not expose advanced source drawer styles in the daily workbench", () => {
@@ -83,40 +84,21 @@ describe("Today workbench productized CSS contract", () => {
   });
 
   test("styles existing inline block preview and editing states", () => {
-    const card = getRuleBody("\\.journal-block-card");
-    const cardButton = getRuleBody("\\.journal-block-card\\s*>\\s*button");
-    const editingCard = getRuleBody("\\.journal-block-card:has\\(\\.journal-block-inline-editor\\)");
-    const readonly = getRuleBody("\\.journal-block-readonly");
-    const inlineEditor = getRuleBody("\\.journal-block-inline-editor");
-    const inlineActions = getRuleBody("\\.journal-block-inline-actions");
-
-    expect(card).toMatch(/display:\s*grid;/);
-    expect(card).toMatch(/gap:\s*12px;/);
-    expect(cardButton).toMatch(/justify-self:\s*start;/);
-    expect(editingCard).toMatch(/border-color:\s*rgba\(47,\s*111,\s*95,\s*0\.34\);/);
-    expect(editingCard).toMatch(/background:\s*#f7fbf7;/);
-    expect(editingCard).toMatch(/box-shadow:\s*0\s+12px\s+28px\s+rgba\(47,\s*111,\s*95,\s*0\.1\);/);
-    expect(readonly).toMatch(/min-height:\s*72px;/);
-    expect(readonly).toMatch(/background:\s*#fbfaf5;/);
-    expect(readonly).toMatch(/color:\s*#3a352e;/);
-    expect(readonly).toMatch(/line-height:\s*1\.65;/);
-    expect(readonly).toMatch(/overflow-wrap:\s*anywhere;/);
-    expect(inlineEditor).toMatch(/display:\s*grid;/);
-    expect(inlineEditor).toMatch(/border-left:\s*4px\s+solid\s+#2f6f5f;/);
-    expect(inlineEditor).toMatch(/background:\s*#eff8f2;/);
-    expect(inlineEditor).toMatch(/padding:\s*12px;/);
-    expect(inlineActions).toMatch(/display:\s*flex;/);
-    expect(inlineActions).toMatch(/flex-wrap:\s*wrap;/);
-    expect(inlineActions).toMatch(/justify-content:\s*flex-end;/);
-    expect(inlineActions).toMatch(/gap:\s*8px;/);
+    expect(css).toMatch(/\.journal-block-card\s*\{[^}]*display:\s*grid;[^}]*border:\s*0;[^}]*background:\s*transparent;/s);
+    expect(css).toMatch(/\.journal-block-readonly\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*line-height:\s*1\.95;/s);
+    expect(css).toMatch(/\.edit-chip\s*\{[^}]*position:\s*absolute;[^}]*border-radius:\s*999px;/s);
+    expect(css).toMatch(/\.journal-block-inline-editor\s*\{[^}]*border-left:\s*4px\s+solid\s+var\(--sage\);[^}]*background:\s*#eff7f1;/s);
+    expect(css).toMatch(/\.journal-block-inline-actions\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;[^}]*gap:\s*10px;/s);
   });
 
-  test("collapses to one primary scroll column below 1180px", () => {
-    const narrowLayoutCss = getNarrowLayoutCss();
+  test("collapses without nested scroll traps on tablet and phone widths", () => {
+    const tabletCss = getMediaCss(1040);
+    const phoneCss = getMediaCss(820);
 
-    expect(css).toMatch(/@media\s*\(max-width:\s*1120px\)[\s\S]*\.command-workspace\s*\{[^}]*grid-template-columns:\s*1fr;/);
-    expect(narrowLayoutCss).toMatch(/\.productized-workspace\s*\{[^}]*grid-template-columns:\s*1fr;/s);
-    expect(narrowLayoutCss).toMatch(/\.today-assistant\s*\{[^}]*overflow:\s*visible;/s);
-    expect(narrowLayoutCss).toMatch(/\.compose-bar,\s*\.compose-bar\s+form\s*\{[^}]*grid-template-columns:\s*1fr;/s);
+    expect(tabletCss).toMatch(/\.desktop-shell\s*\{[^}]*overflow:\s*visible;/s);
+    expect(tabletCss).toContain('grid-template-areas:\n      "rail paper"\n      "assistant assistant";');
+    expect(tabletCss).toMatch(/\.command-workspace\s+\.assistant-panel\.today-assistant\s*\{[^}]*border-left:\s*0;/s);
+    expect(phoneCss).toContain('grid-template-areas:\n      "paper"\n      "rail"\n      "assistant";');
+    expect(phoneCss).toMatch(/\.compose-bar,\s*\.compose-bar\s+form\s*\{[^}]*grid-template-columns:\s*1fr;/s);
   });
 });

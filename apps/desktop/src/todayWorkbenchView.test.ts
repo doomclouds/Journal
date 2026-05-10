@@ -72,6 +72,25 @@ describe("todayWorkbenchView", () => {
     expect(status.label).toBe("需要处理");
   });
 
+  test("keeps an empty editor as not started even when empty markdown has validation diagnostics", () => {
+    const status = getProductJournalStatus(createEditor({
+      status: "empty",
+      validation: {
+        isValid: false,
+        issues: [
+          {
+            code: "missing-front-matter",
+            message: "JMF front matter is missing.",
+            repairHint: "Add the required YAML front matter block."
+          }
+        ]
+      }
+    }));
+
+    expect(status.id).toBe("not-started");
+    expect(status.label).toBe("待开始");
+  });
+
   test("uses product language for attention state", () => {
     const status = getProductJournalStatus(createEditor({
       status: "attention",

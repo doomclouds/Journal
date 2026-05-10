@@ -47,8 +47,8 @@ export function JournalBlockCard({
       {!isEditing && renderPreview(section.id, value)}
 
       {section.isEditableInBlockMode && !isEditing ? (
-        <button type="button" disabled={disabled} onClick={onEdit}>
-          编辑 {displayTitle}
+        <button type="button" className="edit-chip" aria-label={`编辑 ${displayTitle}`} disabled={disabled} onClick={onEdit}>
+          编辑
         </button>
       ) : null}
 
@@ -62,11 +62,11 @@ export function JournalBlockCard({
             rows={5}
           />
           <div className="journal-block-inline-actions">
-            <button type="button" disabled={disabled} onClick={onSave}>
-              保存修改
-            </button>
             <button type="button" disabled={disabled} onClick={onCancel}>
               取消
+            </button>
+            <button type="button" disabled={disabled} onClick={onSave}>
+              保存修改
             </button>
           </div>
         </div>

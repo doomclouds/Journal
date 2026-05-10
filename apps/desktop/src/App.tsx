@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   activateAiSettings,
   addTodayInput,
@@ -24,12 +24,23 @@ import {
   getAssistantSummary,
   getProductJournalStatus,
   getRawInputPreview,
+  getSectionDisplayTitle,
   getStaticAiStyleLabel,
   type ProductJournalStatusView
 } from "./todayWorkbenchView";
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
+type NativeMenuCommand = "open-llm-settings";
+
+declare global {
+  interface Window {
+    journalDesktop?: {
+      platform?: string;
+      onNativeMenuCommand?: (handler: (command: NativeMenuCommand) => void) => () => void;
+    };
+  }
+}
 
 function getErrorMessage(caught: unknown) {
   return caught instanceof Error ? caught.message : "unknown error";
@@ -38,6 +49,11 @@ function getErrorMessage(caught: unknown) {
 function formatRawInputTime(value: string) {
   const time = value.match(/T(\d{2}:\d{2})/);
   return time?.[1] ?? value;
+}
+
+function getRawInputTags(text: string): string[] {
+  const matches = text.match(/#[^\s#，。,.；;！!？?、]+/g) ?? [];
+  return Array.from(new Set(matches));
 }
 
 const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补充或重新整理。";
@@ -57,7 +73,6 @@ export default function App() {
   const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
   const [pendingRegenerateDraft, setPendingRegenerateDraft] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,11 +118,16 @@ export default function App() {
     }
   }, [hasLocalUnsavedChanges, validationError]);
 
-  const today = editor?.today ?? null;
+  useEffect(() => {
+    return window.journalDesktop?.onNativeMenuCommand?.(command => {
+      if (command === "open-llm-settings") {
+        resetPendingRegenerateDraft();
+        setIsLlmPanelOpen(true);
+      }
+    });
+  }, []);
 
-  const title = useMemo(() => {
-    return today ? `${today.date.isoDate} 晨间日记` : "今日晨间日记";
-  }, [today]);
+  const today = editor?.today ?? null;
 
   const canConfirm = Boolean(
     editor?.canConfirm
@@ -148,9 +168,6 @@ export default function App() {
         nextStepTitle: loadState === "error" ? "检查连接状态" : "正在读取今天的状态",
         nextStepText: loadState === "error" ? "读取今日状态失败，请查看上方错误后重试。" : "正在加载今天的日记、草稿和整理配置。"
       };
-  const titleDescription = inputCount > 0
-    ? `已保留 ${inputCount} 条原始表达，当前整理稿可以继续确认或微调。`
-    : "今天还未记录。先写一句自然语言，Journal 会保留原话。";
   const composeHint = hasLocalUnsavedChanges
     ? localUnsavedChangeMessage
     : pendingRegenerateDraft
@@ -168,13 +185,41 @@ export default function App() {
     ? new Date(`${today.date.isoDate}T00:00:00`).toLocaleString("en-US", { month: "short" })
     : "Today";
   const dayLabel = today?.date.isoDate.slice(-2) ?? "--";
+  const dateValue = today ? new Date(`${today.date.isoDate}T00:00:00`) : null;
+  const weekdayLabel = dateValue?.toLocaleDateString("zh-CN", { weekday: "long" }) ?? "今天";
+  const zhDateLabel = dateValue
+    ? dateValue.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" })
+    : "今天";
+  const latestRawInput = today?.rawInputs[today.rawInputs.length - 1];
+  const latestRawInputTime = latestRawInput?.createdAt
+    ? formatRawInputTime(latestRawInput.createdAt)
+    : "--:--";
+  const sectionTargets = editor?.sections
+    .filter(section => section.id !== "raw-inputs")
+    .map(section => getSectionDisplayTitle(section.id, section.title)) ?? [];
+  const rawInputViews = today?.rawInputs.map((raw, index) => ({
+    raw,
+    tags: getRawInputTags(raw.text),
+    target: sectionTargets[index % Math.max(sectionTargets.length, 1)] ?? "今日材料"
+  })) ?? [];
+  const todayTags = Array.from(new Set(rawInputViews.flatMap(item => item.tags)));
+  const visibleTodayTags = todayTags.length > 0 ? todayTags : ["#今日材料"];
+  const documentTitle = hasEditableJournal ? "把今天收好" : "今天先写一句";
+  const documentSubtitle = inputCount > 0
+    ? "今天的原始表达已经保留。先确认日记段落，再把它保存成本地 Markdown。"
+    : "不用先想结构。写一段自然语言，Journal 会保留原话，再帮你整理成可确认的日记草稿。";
+  const dateStatusText = productStatus.id === "ready-to-save"
+    ? "AI 整理稿待确认"
+    : productStatus.label;
 
   function resetPendingRegenerateDraft() {
     setPendingRegenerateDraft(false);
   }
 
-  function toggleMenu(menuId: string) {
-    setOpenMenu(current => current === menuId ? null : menuId);
+  function focusWorkbenchTarget(selector: string) {
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(selector)?.focus();
+    });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -363,107 +408,35 @@ export default function App() {
     await handleRegenerateDraft();
   }
 
-  function handleMenuConfirm() {
-    setOpenMenu(null);
-    void handleConfirm();
-  }
-
-  function handleMenuRegenerate() {
-    setOpenMenu(null);
-    void handleRegenerateCurrentDraft();
-  }
-
   return (
-    <main className="desktop-shell">
-      <section className="app-window" aria-label="Journal 今日工作台">
-        <div className="titlebar">
+    <main className="desktop-shell" aria-label="Journal 今日工作台">
+      <header className="top-context command-top-context">
+        <div className="brand">
           <strong>Journal</strong>
-          <span>{title}</span>
-          <div className="window-controls" aria-hidden="true">
-            <span>─</span>
-            <span>□</span>
-            <span>×</span>
-          </div>
+          <span>本地优先晨间日记</span>
         </div>
+        <div className="today-line">
+          <span className="status-dot" aria-hidden="true"></span>
+          <span><strong>{zhDateLabel}</strong> · {weekdayLabel} · {inputCount > 0 ? "原始表达已保留" : "等待第一句原始表达"}</span>
+        </div>
+        <div className="status-pills" aria-label="今日状态">
+          <span className={`pill product-status-${productStatus.tone}`}>{productStatus.label}</span>
+          <span className="pill neutral">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
+          <button
+            type="button"
+            className="pill neutral llm-status-pill"
+            aria-label={`LLM ${activeProviderName}`}
+            onClick={() => {
+              resetPendingRegenerateDraft();
+              setIsLlmPanelOpen(true);
+            }}
+          >
+            {activeProviderStatus}
+          </button>
+        </div>
+      </header>
 
-        <nav className="menubar" aria-label="应用菜单">
-          <div className="menu">
-            <button type="button" aria-expanded={openMenu === "file"} onClick={() => toggleMenu("file")}>文件</button>
-            {openMenu === "file" ? (
-              <div className="menu-panel">
-                <button type="button" disabled={!canConfirm || isBusy} onClick={handleMenuConfirm}>保存日记</button>
-                <button type="button" disabled={!hasEditableJournal || isBusy || hasLocalUnsavedChanges} onClick={handleMenuRegenerate}>重新整理</button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetPendingRegenerateDraft();
-                    setOpenMenu(null);
-                    setIsLlmPanelOpen(true);
-                  }}
-                >
-                  LLM 配置
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <div className="menu">
-            <button type="button" aria-expanded={openMenu === "edit"} onClick={() => toggleMenu("edit")}>编辑</button>
-            {openMenu === "edit" ? (
-              <div className="menu-panel">
-                <span className="menu-note">段落编辑在日记纸面内完成</span>
-              </div>
-            ) : null}
-          </div>
-          <div className="menu">
-            <button type="button" aria-expanded={openMenu === "insert"} onClick={() => toggleMenu("insert")}>插入</button>
-            {openMenu === "insert" ? (
-              <div className="menu-panel">
-                <span className="menu-note">在日记纸面中添加段落</span>
-              </div>
-            ) : null}
-          </div>
-          <div className="menu">
-            <button type="button" aria-expanded={openMenu === "view"} onClick={() => toggleMenu("view")}>视图</button>
-            {openMenu === "view" ? (
-              <div className="menu-panel">
-                <span className="menu-note">日记 + 今日助手</span>
-              </div>
-            ) : null}
-          </div>
-          <div className="menu">
-            <button type="button" aria-expanded={openMenu === "help"} onClick={() => toggleMenu("help")}>帮助</button>
-            {openMenu === "help" ? (
-              <div className="menu-panel">
-                <span className="menu-note">Journal 使用说明</span>
-              </div>
-            ) : null}
-          </div>
-        </nav>
-
-        <header className="top-context command-top-context">
-          <div className="title-block productized-title-block">
-            <span className="eyebrow">Journal</span>
-            <h1>{title}</h1>
-            <p>{titleDescription}</p>
-          </div>
-          <div className="status-strip" aria-label="今日状态">
-            <span className={`status-pill product-status-${productStatus.tone}`}>{productStatus.label}</span>
-            <span className="api-pill">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
-            <button
-              type="button"
-              className="llm-status-pill"
-              aria-label={`LLM ${activeProviderName}`}
-              onClick={() => {
-                resetPendingRegenerateDraft();
-                setIsLlmPanelOpen(true);
-              }}
-            >
-              {activeProviderStatus}
-            </button>
-          </div>
-        </header>
-
-        <section className="feedback-row" aria-label="提示信息">
+      <section className="feedback-row" aria-label="提示信息">
           {apiError ? (
             <p className="api-error" role="alert">
               {apiError}
@@ -475,52 +448,83 @@ export default function App() {
               {validationError}
             </p>
           ) : null}
-        </section>
+      </section>
 
-        <section className="workspace command-workspace">
-          <aside className="context-rail" aria-label="今日上下文">
-            <section className="date-card">
-              <p className="month">{monthLabel}</p>
-              <h1>{dayLabel}<span>晨间日记</span></h1>
-              <span className={`pill product-status-${productStatus.tone}`}>{productStatus.label}</span>
-            </section>
+      <section className="workspace command-workspace">
+        <aside className="context-rail" aria-label="今日上下文">
+          <section className="date-card">
+            <p className="month">{monthLabel}</p>
+            <h1>{dayLabel}<span>{weekdayLabel} · 晨间日记</span></h1>
+            <div className="date-status-row">
+              <span className={`pill date-status-pill product-status-${productStatus.tone}`}>{dateStatusText}</span>
+            </div>
+          </section>
 
-            <section className="rail-section">
-              <div className="section-head">
-                <h2>原始对话</h2>
-                <span>{inputCount} 条</span>
-              </div>
-              <div className="raw-stack">
-                {inputCount > 0 ? today?.rawInputs.map((raw, index) => (
-                  <details className="raw-fold" key={raw.id} open={index === 0}>
-                    <summary>
+          <section className="rail-section">
+            <div className="section-head">
+              <h2>原始对话</h2>
+              <span>{inputCount} 条</span>
+            </div>
+            <div className="raw-stack">
+              {rawInputViews.length > 0 ? rawInputViews.map(({ raw, tags, target }, index) => (
+                <details className="raw-fold" key={raw.id} open={index === 0}>
+                  <summary>
+                    <span>
                       <span className="raw-time">{formatRawInputTime(raw.createdAt)}</span>
                       <span className="raw-title">{getRawInputPreview(raw.text, 28)}</span>
-                    </summary>
-                    <div className="raw-body">
-                      {raw.text}
+                      {tags.length > 0 ? (
+                        <span className="raw-tags">
+                          {tags.map(tag => <span key={`${raw.id}-${tag}`}>{tag}</span>)}
+                        </span>
+                      ) : null}
+                    </span>
+                  </summary>
+                  <div className="raw-body">
+                    {raw.text}
+                    <div className="raw-map">
+                      <span>已用于：{target}</span>
+                      {tags[0] ? <span>已提取：{tags[0].replace(/^#/, "")}</span> : null}
                     </div>
-                  </details>
-                )) : (
-                  <p className="muted">还没有原始对话。先在下方写一句今天的事。</p>
-                )}
-              </div>
-            </section>
+                  </div>
+                </details>
+              )) : (
+                <p className="muted">还没有原始对话。先在下方写一句今天的事。</p>
+              )}
+            </div>
+          </section>
 
-            <section className="rail-section">
-              <div className="section-head">
-                <h2>下一步</h2>
-                <span>{productStatus.label}</span>
-              </div>
-              <div className="next-panel">
-                <strong>{productStatus.nextStepTitle}</strong>
-                <p>{productStatus.nextStepText}</p>
-              </div>
-            </section>
-          </aside>
+          <section className="rail-section">
+            <div className="section-head">
+              <h2>下一步</h2>
+              <span>{productStatus.label}</span>
+            </div>
+            <div className="next-panel">
+              <strong>{productStatus.nextStepTitle}</strong>
+              <p>{productStatus.nextStepText}</p>
+            </div>
+          </section>
+        </aside>
 
-          <section className="journal-stage productized-journal-stage" aria-label="日记纸面">
-            <article className="journal-paper productized-journal-paper">
+        <section className="journal-stage productized-journal-stage" aria-label="日记纸面" tabIndex={-1}>
+          <div className="stage-toolbar">
+            <div className="stage-title">
+              <p>日记纸面</p>
+              <h2>默认阅读，点击段落才编辑</h2>
+            </div>
+            <div className="view-switch" aria-label="视图切换">
+              <button type="button">只看日记</button>
+              <button type="button" aria-pressed="true">日记 + 助手</button>
+            </div>
+          </div>
+
+          <div className="document-scroll">
+            <article className="journal-paper document">
+              <header className="document-header">
+                <p className="kicker">Morning Journal</p>
+                <h1>{documentTitle}</h1>
+                <p className="subtitle">{documentSubtitle}</p>
+              </header>
+
               {loadState === "loading" ? <p className="empty-paper">正在读取今天的日记状态...</p> : null}
               {loadState === "error" && !hasEditableJournal ? (
                 <section className="empty-paper productized-empty-paper">
@@ -544,57 +548,78 @@ export default function App() {
                 </section>
               ) : null}
             </article>
+          </div>
 
-            <section className="compose-bar" aria-label="底部输入和主操作">
-              <form onSubmit={handleSubmit}>
-                <label htmlFor="today-input">补充今天的自然语言输入</label>
-                <textarea
-                  id="today-input"
-                  value={input}
-                  onChange={event => {
-                    resetPendingRegenerateDraft();
-                    setInput(event.target.value);
-                  }}
-                  placeholder={hasEditableJournal ? "补充一句今天的事，或者让 AI 基于当前材料重新整理这一版..." : "今天发生了什么？直接写原话..."}
-                  rows={3}
-                  disabled={isBusy}
-                />
-                <button type="submit" className="primary-action" disabled={isBusy || hasLocalUnsavedChanges}>
-                  生成草稿
+          <section className="compose-bar" aria-label="底部输入和主操作">
+            <form onSubmit={handleSubmit}>
+              <label htmlFor="today-input">补充今天的自然语言输入</label>
+              <textarea
+                id="today-input"
+                value={input}
+                onChange={event => {
+                  resetPendingRegenerateDraft();
+                  setInput(event.target.value);
+                }}
+                placeholder={hasEditableJournal ? "继续写一句今天的事，Journal 会保留原话，再更新草稿..." : "今天发生了什么？直接写原话..."}
+                rows={3}
+                disabled={isBusy}
+              />
+              <button type="submit" className="primary-action primary" disabled={isBusy || hasLocalUnsavedChanges}>
+                生成草稿
+              </button>
+            </form>
+            {hasEditableJournal ? (
+              <div className="compose-secondary-actions">
+                <p className="compose-hint">{composeHint}</p>
+                <button type="button" className="secondary-action secondary" onClick={handleRegenerateCurrentDraft} disabled={isBusy || hasLocalUnsavedChanges}>
+                  重新整理
                 </button>
-              </form>
-              {hasEditableJournal ? (
-                <div className="compose-secondary-actions">
-                  <p className="compose-hint">{composeHint}</p>
-                  <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy || hasLocalUnsavedChanges}>
-                    重新整理
-                  </button>
-                </div>
-              ) : null}
-              {canConfirm ? (
-                <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
-                  保存日记
-                </button>
-              ) : null}
-            </section>
-          </section>
-
-          <aside className="assistant-panel today-assistant" aria-label="今日助手">
-            <section className={`assistant-card next-step-card assistant-card-${productStatus.tone}`}>
-              <div className="section-head">
-                <h2>下一步</h2>
-                <span>{productStatus.label}</span>
               </div>
-              <strong>{productStatus.nextStepTitle}</strong>
-              <p>{productStatus.nextStepText}</p>
+            ) : null}
+            {canConfirm ? (
+              <button type="button" className="primary-action primary" onClick={handleConfirm} disabled={isBusy}>
+                保存日记
+              </button>
+            ) : null}
+          </section>
+        </section>
+
+        <aside className="assistant-panel today-assistant" aria-label="今日助手">
+          <div className="assistant-head">
+            <div>
+              <p className="assistant-eyebrow">Today Assistant</p>
+              <h2>把今天收好</h2>
+              <div className="assistant-meta">
+                <span>{productStatus.label}</span>
+                {visibleTodayTags.slice(0, 2).map(tag => <span key={`assistant-meta-${tag}`}>{tag}</span>)}
+                <span>{activeProviderName}</span>
+              </div>
+            </div>
+            <span className="assistant-time">{latestRawInputTime}</span>
+          </div>
+
+          <div className="assistant-body">
+            <section className={`assistant-card next-step-card assistant-card-${productStatus.tone}`}>
+              <div className="next-step-title">
+                <span className="status-dot" aria-hidden="true"></span>
+                <div>
+                  <strong>下一步：{productStatus.nextStepTitle}</strong>
+                  <p>{productStatus.nextStepText}</p>
+                </div>
+              </div>
+              <div className="next-actions">
+                <button className="secondary" type="button" onClick={() => focusWorkbenchTarget(".journal-stage")} disabled={isBusy}>
+                  回到日记
+                </button>
+              </div>
             </section>
 
             <section className="assistant-card">
-              <div className="section-head">
-                <h2>AI 整理</h2>
-                <span>{getStaticAiStyleLabel()}</span>
+              <div className="assistant-card-head">
+                <h3>AI 整理</h3>
+                <span>{loadState === "loading" ? "读取中" : "刚刚更新"}</span>
               </div>
-              <p>保留原话优先，轻度整理成可编辑的日记段落。</p>
+              <p>从 {assistantSummary.rawInputCount} 条原始输入中整理出 {assistantSummary.sectionCount} 个日记段落，保留原话优先，轻度整理成可编辑的日记内容。</p>
               <div className="assistant-stat-grid" aria-label="AI 整理统计">
                 <div className="assistant-stat">
                   <strong>{assistantSummary.rawInputCount}</strong>
@@ -609,30 +634,41 @@ export default function App() {
                   <span>手动编辑</span>
                 </div>
               </div>
+              <div className="tag-row" aria-label="今日标签">
+                <strong>今日标签</strong>
+                {visibleTodayTags.map(tag => <span key={`tag-${tag}`}>{tag}</span>)}
+              </div>
+              <div className="insight-tags" aria-label="识别主题">
+                {sectionTargets.slice(0, 3).map(target => <span key={`insight-${target}`}>{target}</span>)}
+              </div>
             </section>
 
             <section className="assistant-card">
-              <div className="section-head">
-                <h2>今日材料</h2>
-                <span>{inputCount} 条</span>
+              <div className="assistant-card-head">
+                <h3>今日材料</h3>
+                <span>{inputCount > 0 ? "可追溯" : "待输入"}</span>
               </div>
-              {inputCount > 0 ? (
-                <ol className="raw-list productized-raw-list">
-                  {today?.rawInputs.map(raw => (
-                    <li key={raw.id}>
-                      <strong>{formatRawInputTime(raw.createdAt)}</strong>
-                      <p>{raw.text}</p>
-                    </li>
+              {rawInputViews.length > 0 ? (
+                <div className="material-list">
+                  {rawInputViews.map(({ raw, tags, target }) => (
+                    <div className="material-item" key={raw.id}>
+                      <div className="material-meta">
+                        <span>来源 {formatRawInputTime(raw.createdAt)}</span>
+                        {tags[0] ? <span>{tags[0]}</span> : null}
+                        <span>写入 {target}</span>
+                      </div>
+                      {getRawInputPreview(raw.text, 48)}
+                    </div>
                   ))}
-                </ol>
+                </div>
               ) : (
                 <p className="muted">还没有输入。这里之后会显示原始表达摘要。</p>
               )}
             </section>
 
             <section className="assistant-card">
-              <div className="section-head">
-                <h2>整理状态</h2>
+              <div className="assistant-card-head">
+                <h3>整理状态</h3>
                 <span>{activeProviderName}</span>
               </div>
               <dl className="today-status-list">
@@ -651,10 +687,23 @@ export default function App() {
               </dl>
             </section>
 
+            <section className="assistant-card">
+              <div className="assistant-card-head">
+                <h3>快捷动作</h3>
+                <span>命令层</span>
+              </div>
+              <div className="quick-actions">
+                <button type="button" aria-label="快捷动作 插入段落" onClick={() => focusWorkbenchTarget(".insert-block-menu button")}>插入段落</button>
+                <button type="button" aria-label="快捷动作 重新整理" onClick={handleRegenerateCurrentDraft} disabled={!hasEditableJournal || isBusy || hasLocalUnsavedChanges}>重新整理</button>
+                <button type="button" aria-label="快捷动作 LLM 配置" onClick={() => setIsLlmPanelOpen(true)}>LLM 配置</button>
+                <button type="button" aria-label="快捷动作 查看材料" onClick={() => focusWorkbenchTarget(".raw-fold summary")}>查看材料</button>
+              </div>
+            </section>
+
             {uniqueAttentionErrors.length > 0 ? (
               <section className="assistant-card attention-panel productized-attention-panel" aria-label="需要处理">
-                <div className="section-head">
-                  <h2>这篇草稿需要处理</h2>
+                <div className="assistant-card-head">
+                  <h3>这篇草稿需要处理</h3>
                   <span>需要处理</span>
                 </div>
                 <p>正式日记没有被覆盖，原始表达仍然保留。</p>
@@ -669,15 +718,15 @@ export default function App() {
 
             {today?.entry ? (
               <section className="assistant-card path-panel">
-                <div className="section-head">
-                  <h2>正式文件</h2>
+                <div className="assistant-card-head">
+                  <h3>正式文件</h3>
                   <span>已写入</span>
                 </div>
                 <p>{today.entry.path}</p>
               </section>
             ) : null}
-          </aside>
-        </section>
+          </div>
+        </aside>
       </section>
       {isLlmPanelOpen && aiSettings ? (
         <LlmSettingsPanel

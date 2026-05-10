@@ -72,16 +72,16 @@ export function getProductJournalStatus(
   editor: Pick<TodayEditorState, "status" | "validation" | "canConfirm">,
   hasLocalUnsavedChanges = false
 ): ProductJournalStatusView {
-  if (editor.status === "attention" || !editor.validation.isValid) {
-    return productStatusViews["needs-attention"];
-  }
-
   if (hasLocalUnsavedChanges) {
     return productStatusViews.dirty;
   }
 
   if (editor.status === "empty") {
     return productStatusViews["not-started"];
+  }
+
+  if (editor.status === "attention" || !editor.validation.isValid) {
+    return productStatusViews["needs-attention"];
   }
 
   if (editor.status === "reviewing" && editor.canConfirm) {

@@ -189,13 +189,6 @@ export function JournalEditor({
 
   return (
     <section className="journal-editor" aria-label="日记编辑器">
-      <div className="journal-editor-toolbar productized-editor-toolbar">
-        <div>
-          <span className="eyebrow">日记纸面</span>
-          <p>默认阅读，点击段落即可编辑。</p>
-        </div>
-      </div>
-
       <ValidationPanel validation={editor.validation} />
 
       <div className="journal-editor-blocks">

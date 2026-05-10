@@ -11,6 +11,7 @@ dist/
 dist-electron/
 coverage/
 *.tsbuildinfo
+output/
 
 # Environment and secrets
 .env

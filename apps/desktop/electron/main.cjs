@@ -1,7 +1,26 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog, Menu } = require("electron");
 const path = require("node:path");
+const { createApplicationMenuTemplate } = require("./menu.cjs");
 
 const isDev = !app.isPackaged;
+
+function installApplicationMenu(mainWindow) {
+  const template = createApplicationMenuTemplate({
+    app,
+    mainWindow,
+    showAbout: () => {
+      dialog.showMessageBox(mainWindow, {
+        type: "info",
+        title: "关于 Journal",
+        message: "Journal",
+        detail: "本地优先的晨间日记应用。",
+        buttons: ["确定"]
+      });
+    }
+  });
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -23,6 +42,9 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
+
+  installApplicationMenu(mainWindow);
+  return mainWindow;
 }
 
 app.whenReady().then(() => {
