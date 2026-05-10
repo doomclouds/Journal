@@ -1,4 +1,4 @@
-# AI Provider Integration Implementation Plan
+# LLM Provider Integration Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -40,7 +40,7 @@ Sources: [DeepSeek API docs](https://api-docs.deepseek.com/), [DeepSeek updates]
 - `src/Journal.Infrastructure/Today/TodayJournalService.cs` directly calls `_aiProvider.Generate(...)`.
 - `src/Journal.Infrastructure/Jmf/JmfMarkdownRenderer.cs` currently hard-codes `provider: mock`, `model: mock-journal`, and `prompt_version: mock-journal-entry-v1`.
 - `src/Journal.Api/Program.cs` registers `IJournalAiProvider` as `MockAiProvider` and exposes only journal/editor endpoints.
-- `apps/desktop/src/App.tsx` shows status and API health, but no AI provider status or settings panel.
+- `apps/desktop/src/App.tsx` shows status and API health, but no LLM provider status or settings panel.
 
 ## File Structure
 
@@ -105,7 +105,7 @@ Sources: [DeepSeek API docs](https://api-docs.deepseek.com/), [DeepSeek updates]
 
 ### Frontend Creates
 
-- `apps/desktop/src/AiSettingsPanel.tsx`
+- `apps/desktop/src/LlmSettingsPanel.tsx`
   - LLM configuration panel matching the approved prototype.
 
 ### Frontend Modifies
@@ -113,7 +113,7 @@ Sources: [DeepSeek API docs](https://api-docs.deepseek.com/), [DeepSeek updates]
 - `apps/desktop/src/api.ts`
   - Add AI settings DTOs and client methods.
 - `apps/desktop/src/App.tsx`
-  - Load AI settings, show `AI <provider>`, open panel, refresh after save/test/regenerate.
+  - Load AI settings, show `LLM <provider>`, open panel, refresh after save/test/regenerate.
 - `apps/desktop/src/App.test.tsx`
   - Update initial fetch expectations and add AI panel tests.
 - `apps/desktop/src/styles.css`
@@ -1949,11 +1949,11 @@ git commit -m "feat: expose ai settings endpoints"
 
 ---
 
-## Task 6: Frontend API Client and AI Settings Panel
+## Task 6: Frontend API Client and LLM Settings Panel
 
 **Files:**
 - Modify: `apps/desktop/src/api.ts`
-- Create: `apps/desktop/src/AiSettingsPanel.tsx`
+- Create: `apps/desktop/src/LlmSettingsPanel.tsx`
 - Modify: `apps/desktop/src/styles.css`
 - Test: `apps/desktop/src/App.test.tsx`
 
@@ -2152,9 +2152,9 @@ export function regenerateTodayDraft(providerId?: string): Promise<TodayJournalS
 }
 ```
 
-- [ ] **Step 4: Create AI settings panel component**
+- [ ] **Step 4: Create LLM settings panel component**
 
-Create `apps/desktop/src/AiSettingsPanel.tsx`:
+Create `apps/desktop/src/LlmSettingsPanel.tsx`:
 
 ```tsx
 import { FormEvent, useMemo, useState } from "react";
@@ -2164,7 +2164,7 @@ import {
   type AiSettingsView
 } from "./api";
 
-type AiSettingsPanelProps = {
+type LlmSettingsPanelProps = {
   settings: AiSettingsView;
   isBusy: boolean;
   onClose: () => void;
@@ -2173,14 +2173,14 @@ type AiSettingsPanelProps = {
   onRegenerate: (providerId?: string) => Promise<void>;
 };
 
-export function AiSettingsPanel({
+export function LlmSettingsPanel({
   settings,
   isBusy,
   onClose,
   onSave,
   onTest,
   onRegenerate
-}: AiSettingsPanelProps) {
+}: LlmSettingsPanelProps) {
   const [selectedId, setSelectedId] = useState(settings.activeProviderId);
   const [providers, setProviders] = useState<AiProviderSaveRequest[]>(
     settings.providers.map(provider => ({
@@ -2233,8 +2233,8 @@ export function AiSettingsPanel({
   }
 
   return (
-    <section className="ai-settings-overlay" aria-label="AI Provider 配置面板">
-      <header className="ai-settings-head">
+    <section className="llm-settings-overlay" aria-label="LLM 配置面板">
+      <header className="llm-settings-head">
         <div>
           <strong>LLM 配置</strong>
           <span>{settings.runtime}</span>
@@ -2242,13 +2242,13 @@ export function AiSettingsPanel({
         <button type="button" className="secondary-action" onClick={onClose}>关闭</button>
       </header>
 
-      <div className="ai-settings-grid">
-        <nav className="ai-provider-list" aria-label="Provider 列表">
+      <div className="llm-settings-grid">
+        <nav className="llm-provider-list" aria-label="Provider 列表">
           {settings.providers.map(provider => (
             <button
               key={provider.id}
               type="button"
-              className={`ai-provider-card ${provider.id === selectedId ? "active" : ""}`}
+              className={`llm-provider-card ${provider.id === selectedId ? "active" : ""}`}
               onClick={() => {
                 setSelectedId(provider.id);
                 setTestResult(null);
@@ -2261,14 +2261,14 @@ export function AiSettingsPanel({
           ))}
         </nav>
 
-        <form className="ai-settings-main" onSubmit={handleSave}>
-          <section className="ai-settings-card">
+        <form className="llm-settings-main" onSubmit={handleSave}>
+          <section className="llm-settings-card">
             <span className="rail-label">Selected provider</span>
             <h2>{selected.displayName}</h2>
             <p>{selectedView?.source === "environment" ? "当前配置来自环境变量，API Key 不会显示，也不会回写配置文件。" : "保存到本机 ai-providers.json。"}</p>
           </section>
 
-          <section className="ai-settings-card">
+          <section className="llm-settings-card">
             <span className="rail-label">Basic config</span>
             <label>
               显示名称
@@ -2290,25 +2290,25 @@ export function AiSettingsPanel({
               Base URL
               <input value={selected.baseUrl} onChange={event => updateSelected({ baseUrl: event.target.value })} />
             </label>
-            <div className="ai-settings-actions">
+            <div className="llm-settings-actions">
               <button type="button" className="secondary-action" onClick={handleTest} disabled={isBusy}>测试连接</button>
               <button type="submit" className="primary-action" disabled={isBusy}>启用 Provider</button>
             </div>
           </section>
 
-          <section className="ai-settings-card">
+          <section className="llm-settings-card">
             <span className="rail-label">Regenerate</span>
             <h2>重新整理今日草稿</h2>
             <p>{confirmRegenerate ? "这会覆盖当前草稿内容，但不会影响正式日记。" : "使用当前 Provider 重新生成 reviewing draft。"}</p>
-            <div className="ai-settings-actions">
+            <div className="llm-settings-actions">
               <button type="button" className="secondary-action danger-action" onClick={() => handleRegenerate("mock")} disabled={isBusy}>用 Mock 生成一次</button>
               <button type="button" className="primary-action" onClick={() => handleRegenerate()} disabled={isBusy}>重新整理草稿</button>
             </div>
           </section>
         </form>
 
-        <aside className="ai-settings-side">
-          <section className="ai-settings-card">
+        <aside className="llm-settings-side">
+          <section className="llm-settings-card">
             <span className="rail-label">Advanced</span>
             <label>
               JSON 模式
@@ -2328,7 +2328,7 @@ export function AiSettingsPanel({
             </label>
           </section>
 
-          <section className={`ai-settings-card ${testResult?.isSuccess === false ? "attention-panel" : ""}`}>
+          <section className={`llm-settings-card ${testResult?.isSuccess === false ? "attention-panel" : ""}`}>
             <span className="rail-label">Connection test</span>
             <h2>{testResult ? testResult.status : "最小 JSON 请求"}</h2>
             <p>测试会向当前 Provider 发送一次最小请求，可能产生少量 token 消耗。</p>
@@ -2351,7 +2351,7 @@ export function AiSettingsPanel({
 Append to `apps/desktop/src/styles.css`:
 
 ```css
-.ai-settings-overlay {
+.llm-settings-overlay {
   position: fixed;
   inset: 10px;
   z-index: 10;
@@ -2363,7 +2363,7 @@ Append to `apps/desktop/src/styles.css`:
   box-shadow: 0 28px 80px rgba(42, 36, 28, 0.24);
 }
 
-.ai-settings-head {
+.llm-settings-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2373,21 +2373,21 @@ Append to `apps/desktop/src/styles.css`:
   background: rgba(255, 253, 248, 0.88);
 }
 
-.ai-settings-head div {
+.llm-settings-head div {
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
 
-.ai-settings-head span,
-.ai-provider-card span,
-.ai-provider-card small,
-.ai-settings-card p {
+.llm-settings-head span,
+.llm-provider-card span,
+.llm-provider-card small,
+.llm-settings-card p {
   color: #655d53;
   font-size: 12px;
 }
 
-.ai-settings-grid {
+.llm-settings-grid {
   min-height: 0;
   display: grid;
   grid-template-columns: 260px minmax(420px, 1fr) 360px;
@@ -2396,9 +2396,9 @@ Append to `apps/desktop/src/styles.css`:
   overflow: hidden;
 }
 
-.ai-provider-list,
-.ai-settings-main,
-.ai-settings-side {
+.llm-provider-list,
+.llm-settings-main,
+.llm-settings-side {
   min-height: 0;
   display: grid;
   align-content: start;
@@ -2406,14 +2406,14 @@ Append to `apps/desktop/src/styles.css`:
   overflow: auto;
 }
 
-.ai-provider-card,
-.ai-settings-card {
+.llm-provider-card,
+.llm-settings-card {
   border: 1px solid #d8d4ca;
   border-radius: 8px;
   background: #fffdf8;
 }
 
-.ai-provider-card {
+.llm-provider-card {
   min-height: 78px;
   padding: 12px;
   display: grid;
@@ -2421,21 +2421,21 @@ Append to `apps/desktop/src/styles.css`:
   text-align: left;
 }
 
-.ai-provider-card.active {
+.llm-provider-card.active {
   border-color: rgba(43, 104, 96, 0.38);
   background: #eef6f1;
 }
 
-.ai-settings-card {
+.llm-settings-card {
   padding: 14px;
 }
 
-.ai-settings-card h2 {
+.llm-settings-card h2 {
   margin: 6px 0 10px;
   font-size: 16px;
 }
 
-.ai-settings-card label {
+.llm-settings-card label {
   display: grid;
   gap: 6px;
   margin-top: 10px;
@@ -2443,7 +2443,7 @@ Append to `apps/desktop/src/styles.css`:
   font-weight: 800;
 }
 
-.ai-settings-card input {
+.llm-settings-card input {
   min-height: 38px;
   border: 1px solid #c9c5bb;
   border-radius: 6px;
@@ -2452,7 +2452,7 @@ Append to `apps/desktop/src/styles.css`:
   padding: 0 10px;
 }
 
-.ai-settings-actions {
+.llm-settings-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -2464,14 +2464,14 @@ Append to `apps/desktop/src/styles.css`:
   color: #8c332b;
 }
 
-.ai-settings-card pre {
+.llm-settings-card pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: #655d53;
 }
 
 @media (max-width: 1080px) {
-  .ai-settings-grid {
+  .llm-settings-grid {
     grid-template-columns: 1fr;
     overflow: auto;
   }
@@ -2491,8 +2491,8 @@ Expected: existing App tests may now fail because the app has not loaded setting
 - [ ] **Step 7: Commit Task 6**
 
 ```powershell
-git add apps/desktop/src/api.ts apps/desktop/src/AiSettingsPanel.tsx apps/desktop/src/styles.css apps/desktop/src/App.test.tsx
-git commit -m "feat: add ai settings panel shell"
+git add apps/desktop/src/api.ts apps/desktop/src/LlmSettingsPanel.tsx apps/desktop/src/styles.css apps/desktop/src/App.test.tsx
+git commit -m "feat: add llm settings panel shell"
 ```
 
 ---
@@ -2575,7 +2575,7 @@ When a test triggers submit/confirm/save, shift later `NthCalledWith` indexes by
 Add these tests to the `describe("App", ...)` block:
 
 ```tsx
-test("shows current AI provider in top status strip", async () => {
+test("shows current LLM provider in top status strip", async () => {
   mockFetchSequence([
     { body: healthResponse },
     { body: createEditorState() },
@@ -2584,10 +2584,10 @@ test("shows current AI provider in top status strip", async () => {
 
   render(<App />);
 
-  expect(await screen.findByRole("button", { name: "AI Mock" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
 });
 
-test("opens AI settings panel from top status strip", async () => {
+test("opens LLM settings panel from top status strip", async () => {
   mockFetchSequence([
     { body: healthResponse },
     { body: createEditorState() },
@@ -2596,9 +2596,9 @@ test("opens AI settings panel from top status strip", async () => {
 
   render(<App />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "AI Mock" }));
+  fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
 
-  expect(screen.getByRole("region", { name: "AI Provider 配置面板" })).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
   expect(screen.getByText("最小 JSON 请求")).toBeInTheDocument();
 });
@@ -2627,7 +2627,7 @@ test("tests provider and shows safe technical details", async () => {
 
   render(<App />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "AI Mock" }));
+  fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
   fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
   fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
 
@@ -2654,7 +2654,7 @@ test("regenerates draft after confirmation prompt", async () => {
 
   render(<App />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "AI Mock" }));
+  fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
   fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
   expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
@@ -2693,14 +2693,14 @@ import {
   type HealthResponse,
   type TodayEditorState
 } from "./api";
-import { AiSettingsPanel } from "./AiSettingsPanel";
+import { LlmSettingsPanel } from "./LlmSettingsPanel";
 ```
 
 Add state:
 
 ```tsx
 const [aiSettings, setAiSettings] = useState<AiSettingsView | null>(null);
-const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+const [isLlmPanelOpen, setIsLlmPanelOpen] = useState(false);
 ```
 
 Change initial load:
@@ -2719,13 +2719,13 @@ and set:
 setAiSettings(aiSettingsResult);
 ```
 
-- [ ] **Step 5: Add AI pill to top strip**
+- [ ] **Step 5: Add LLM pill to top strip**
 
 Inside `.status-strip`, after API pill:
 
 ```tsx
-<button type="button" className="ai-status-pill" onClick={() => setIsAiPanelOpen(true)}>
-  AI {aiSettings?.providers.find(provider => provider.isActive)?.displayName ?? "Mock"}
+<button type="button" className="llm-status-pill" onClick={() => setIsLlmPanelOpen(true)}>
+  LLM {aiSettings?.providers.find(provider => provider.isActive)?.displayName ?? "Mock"}
 </button>
 ```
 
@@ -2776,11 +2776,11 @@ async function handleRegenerateDraft(providerId?: string) {
 Render panel before closing `</main>`:
 
 ```tsx
-{isAiPanelOpen && aiSettings ? (
-  <AiSettingsPanel
+{isLlmPanelOpen && aiSettings ? (
+  <LlmSettingsPanel
     settings={aiSettings}
     isBusy={isBusy}
-    onClose={() => setIsAiPanelOpen(false)}
+    onClose={() => setIsLlmPanelOpen(false)}
     onSave={handleSaveAiSettings}
     onTest={handleTestAiProvider}
     onRegenerate={handleRegenerateDraft}
@@ -2788,12 +2788,12 @@ Render panel before closing `</main>`:
 ) : null}
 ```
 
-- [ ] **Step 7: Add AI pill style**
+- [ ] **Step 7: Add LLM pill style**
 
 Add to `apps/desktop/src/styles.css`:
 
 ```css
-.ai-status-pill {
+.llm-status-pill {
   min-height: 32px;
   border: 1px solid #d3cfc5;
   border-radius: 6px;

@@ -1,4 +1,4 @@
-# Journal 阶段 5：真实 AI Provider 接入设计
+# Journal 阶段 5：真实 LLM Provider 接入设计
 
 > 日期：2026-05-10
 > 状态：待用户复核
@@ -13,6 +13,12 @@
 下一步要把 `MockAiProvider` 替换为真实可配置模型，让 Journal 能用 OpenAI-compatible 大模型完成“自然表达 -> 结构化日记 JSON”的整理任务。真实模型接入不能改变已有产品原则：模型不能直接写 Markdown，不能绕过 JSON 校验，不能在失败时污染正式 entry，也不能把 API Key、base URL 或调试响应扩散到日记文件里。
 
 本阶段采用 **OpenAI-compatible Runtime + Microsoft Agent Framework 1.5.0 轻量调用**。Provider 配置支持 `Mock`、`OpenAI`、`DeepSeek`、`智谱 GLM`、`Custom OpenAI-Compatible`。真实 Provider 走统一 OpenAI-compatible 调用路径；Mock 继续作为未配置时的默认能力和测试能力。
+
+### 1.1 术语边界
+
+- **LLM**：用户界面、原型和产品文案中的称呼，例如 `LLM 配置`、`LLM Mock`、`当前 LLM`。
+- **AI Provider**：后端和架构里的既有技术抽象，表示 Journal 的可插拔模型整理 Provider，例如 `IJournalAiProvider`、`/settings/ai`、`JournalAiGenerationService`。
+- 不使用 `LM` 作为缩写，避免和语言模型、大模型、配置入口混淆。
 
 ## 2. 目标
 
@@ -35,7 +41,7 @@ raw inputs
 完成后，用户应该可以：
 
 - 不配置任何 Key 时继续使用 Mock 生成草稿。
-- 通过顶部 `AI` 状态入口查看当前 Provider。
+- 通过顶部 `LLM` 状态入口查看当前 Provider。
 - 配置并启用 `OpenAI`、`DeepSeek`、`智谱 GLM` 或自定义 OpenAI-compatible Provider。
 - 使用环境变量覆盖本机配置。
 - 手填模型名，不依赖 Provider 一定支持 `/models`。
@@ -325,10 +331,10 @@ generated_at: "2026-05-10T..."
 界面入口放在今日工作台顶部状态区：
 
 ```text
-[reviewing] [API ok] [AI Mock ▾]
+[reviewing] [API ok] [LLM Mock ▾]
 ```
 
-点击 `AI Mock ▾` 打开 LLM 配置面板。该面板遵循现有 Phase 2/3 原型的桌面工具气质：日记纸面仍是产品中心，模型配置是低频设置，不抢主工作流。
+点击 `LLM Mock ▾` 打开 LLM 配置面板。该面板遵循现有 Phase 2/3 原型的桌面工具气质：日记纸面仍是产品中心，模型配置是低频设置，不抢主工作流。
 
 布局：
 
@@ -468,8 +474,8 @@ POST /journal/today/draft/regenerate
 
 前端测试覆盖：
 
-- 顶部状态显示当前 AI Provider。
-- 点击 AI 状态打开配置面板。
+- 顶部状态显示当前 LLM Provider。
+- 点击 LLM 状态打开配置面板。
 - 五个 Provider 入口可见。
 - 环境变量来源显示为只读或“已加载”。
 - 手填 model、base URL、API Key 后可保存。

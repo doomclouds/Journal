@@ -2,10 +2,10 @@
 <html lang="zh-CN">
 <head>
   <!--
-    Journal Phase 5 AI Provider configuration prototype.
+    Journal Phase 5 LLM Provider configuration prototype.
 
     我的假设：
-    - 这不是独立设置中心，而是从今日工作台顶部 AI 状态入口打开的低频配置面板。
+    - 这不是独立设置中心，而是从今日工作台顶部 LLM 状态入口打开的低频配置面板。
     - 视觉语言继承 Phase 2/3 原型：暖灰背景、纸面主舞台、辅助 dock、克制状态条。
     - 首版重点是“真实模型替换 Mock”，不是展示一个花哨模型市场。
     - OpenAI / DeepSeek / 智谱 / Custom 都走 OpenAI-compatible runtime。
@@ -20,7 +20,7 @@
   -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Journal AI Provider Configuration Prototype</title>
+  <title>Journal LLM Provider Configuration Prototype</title>
   <style>
     :root {
       --bg: #f3f0e8;
@@ -178,7 +178,7 @@
       gap: 8px;
     }
 
-    .ai-button,
+    .llm-button,
     .ghost,
     .primary,
     .danger-lite,
@@ -189,7 +189,7 @@
       background: rgba(255, 253, 247, 0.72);
     }
 
-    .ai-button,
+    .llm-button,
     .ghost,
     .primary,
     .danger-lite {
@@ -199,7 +199,7 @@
       font-weight: 700;
     }
 
-    .ai-button {
+    .llm-button {
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -208,7 +208,7 @@
       background: #fff8ed;
     }
 
-    .ai-button b {
+    .llm-button b {
       color: var(--sage-dark);
     }
 
@@ -729,11 +729,11 @@
 </head>
 <body>
   <main class="app">
-    <section class="shell" aria-label="Journal AI Provider 配置原型">
+    <section class="shell" aria-label="Journal LLM 配置原型">
       <header class="topbar">
         <div class="brand">
           <strong>Journal</strong>
-          <span>AI Provider prototype</span>
+          <span>LLM Provider prototype</span>
         </div>
         <div class="top-meta">
           <span class="status-dot" aria-hidden="true"></span>
@@ -741,9 +741,9 @@
           <span class="pill">reviewing draft</span>
         </div>
         <div class="top-actions">
-          <button class="ai-button" type="button" id="openSettings">
-            <span>AI</span>
-            <b id="aiLabel">DeepSeek</b>
+          <button class="llm-button" type="button" id="openSettings">
+            <span>LLM</span>
+            <b id="llmLabel">DeepSeek</b>
             <span>▾</span>
           </button>
           <button class="primary" type="button">确认保存</button>
@@ -759,7 +759,7 @@
           </section>
 
           <section class="panel">
-            <span class="label">AI source</span>
+            <span class="label">LLM source</span>
             <h2>来源优先级</h2>
             <ul class="source-list">
               <li><span>JOURNAL_AI_*</span><span class="active">active</span></li>
@@ -780,7 +780,7 @@
           <div class="stage-toolbar">
             <div class="stage-title">
               <strong>今日草稿</strong>
-              <span>AI 状态在顶部可见，配置面板不会抢占写作主流程。</span>
+              <span>LLM 状态在顶部可见，配置面板不会抢占写作主流程。</span>
             </div>
             <div class="top-actions">
               <button class="ghost" type="button">补充输入</button>
@@ -832,7 +832,7 @@
 
         <aside class="dock">
           <section class="panel">
-            <span class="label">Current AI</span>
+            <span class="label">Current LLM</span>
             <h2>DeepSeek · 环境变量</h2>
             <div class="config-source">
               <div class="row"><span>Provider</span><strong>JOURNAL_AI_PROVIDER</strong></div>
@@ -857,7 +857,7 @@
       </main>
     </section>
 
-    <section class="settings-overlay" id="settingsOverlay" aria-label="AI Provider 配置面板">
+    <section class="settings-overlay" id="settingsOverlay" aria-label="LLM 配置面板">
       <header class="settings-head">
         <div>
           <strong>LLM 配置</strong>
@@ -1055,7 +1055,7 @@ apiKey: [redacted]</pre>
     const providerTitle = document.querySelector("#providerTitle");
     const providerDescription = document.querySelector("#providerDescription");
     const providerSource = document.querySelector("#providerSource");
-    const aiLabel = document.querySelector("#aiLabel");
+    const llmLabel = document.querySelector("#llmLabel");
     const displayName = document.querySelector("#displayName");
     const model = document.querySelector("#model");
     const baseUrl = document.querySelector("#baseUrl");
@@ -1113,7 +1113,7 @@ apiKey: [redacted]</pre>
       providerTitle.textContent = next.title;
       providerDescription.textContent = next.description;
       providerSource.textContent = next.source;
-      aiLabel.textContent = next.title;
+      llmLabel.textContent = next.title;
       displayName.value = next.title;
       model.value = next.model;
       baseUrl.value = next.baseUrl;
