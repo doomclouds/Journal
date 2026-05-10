@@ -338,7 +338,8 @@ describe("App", () => {
     await waitFor(() =>
       expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
     );
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
   test("shows friendly empty productized state on initial render", async () => {
@@ -386,7 +387,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
     );
-    expect(screen.getByText("今日材料")).toBeInTheDocument();
+    expect(screen.getAllByText("今日材料").length).toBeGreaterThan(0);
     expect(screen.getByText("整理状态")).toBeInTheDocument();
     expect(screen.getByText("下一步")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "LLM Mock" })).toHaveTextContent("Mock 可用");
@@ -653,9 +654,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "重新整理" }));
     fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("重新生成后的重点")
-    );
+    await waitFor(() => expect(screen.getByText("重新生成后的重点")).toBeInTheDocument());
     expect(screen.getByRole("alert")).toHaveTextContent("settings refresh failed");
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
   });
@@ -753,7 +752,8 @@ describe("App", () => {
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "补充新的今日重点" }
     });
 
@@ -775,7 +775,7 @@ describe("App", () => {
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
 
     expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
@@ -834,7 +834,8 @@ describe("App", () => {
       expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
     );
     expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/inputs", {
       method: "POST",
       headers: {
@@ -1094,13 +1095,12 @@ describe("App", () => {
 
     render(<App />);
 
-    const focusEditor = await screen.findByRole("textbox", { name: "编辑 今日重点" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     fireEvent.change(focusEditor, { target: { value: "保存后的区块内容" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("保存后的区块内容")
-    );
+    await waitFor(() => expect(screen.getByText("保存后的区块内容")).toBeInTheDocument());
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/blocks", {
       method: "PUT",
       headers: {
@@ -1150,7 +1150,7 @@ describe("App", () => {
     });
   });
 
-  test("disables editor save and confirm actions while block save is pending", async () => {
+  test("disables block actions and confirm actions while selected block save is pending", async () => {
     const blockSaveDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
@@ -1162,19 +1162,21 @@ describe("App", () => {
 
     render(<App />);
 
-    const saveButton = await screen.findByRole("button", { name: "保存块编辑草稿" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    const saveButton = screen.getByRole("button", { name: "保存这一段" });
     const confirmButton = screen.getByRole("button", { name: "保存日记" });
 
     fireEvent.click(saveButton);
 
-    expect(saveButton).toBeDisabled();
     expect(confirmButton).toBeDisabled();
-    expect(screen.getByRole("button", { name: "插入 情绪感受" })).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    await waitFor(() => expect(saveButton).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeEnabled()
+    );
     expect(confirmButton).toBeEnabled();
   });
 
@@ -1245,7 +1247,8 @@ describe("App", () => {
 
     render(<App />);
 
-    const focusEditor = await screen.findByRole("textbox", { name: "编辑 今日重点" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     const input = screen.getByLabelText("补充今天的自然语言输入");
     const inputForm = input.closest("form");
     if (!inputForm) {
@@ -1254,23 +1257,19 @@ describe("App", () => {
 
     fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
     fireEvent.change(focusEditor, { target: { value: "准备保存但会变旧" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
     fireEvent.submit(inputForm);
 
     postInputDeferred.resolve(mockJsonResponse(reviewingToday));
     await Promise.resolve();
     inputRefreshDeferred.resolve(mockJsonResponse(latestEditor));
 
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("最新输入刷新")
-    );
+    await waitFor(() => expect(screen.getByText("最新输入刷新")).toBeInTheDocument());
 
     blockSaveDeferred.resolve(mockJsonResponse(staleEditor));
 
     await Promise.resolve();
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("最新输入刷新")
-    );
+    await waitFor(() => expect(screen.getByText("最新输入刷新")).toBeInTheDocument());
     expect(screen.queryByDisplayValue("旧保存响应")).not.toBeInTheDocument();
   });
 
@@ -1280,7 +1279,7 @@ describe("App", () => {
 });
 
 describe("JournalEditor", () => {
-  test("shows editable today focus textarea in default block mode", () => {
+  test("reading-first preview shows product title and hides inline textarea by default", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1290,10 +1289,53 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.getByRole("heading", { name: "今天想推进" })).toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
-  test("shows raw inputs without exposing an editable control", () => {
+  test("selected block save only submits the inline block being edited", () => {
+    const onSaveBlocks = vi.fn();
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "推进 Phase 3",
+              kind: "required",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "yesterday-review",
+              title: "昨日回顾",
+              content: "昨天完成 Phase 2",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={onSaveBlocks}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
+    fireEvent.change(focusEditor, { target: { value: "完成前端编辑器组件" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+
+    expect(onSaveBlocks).toHaveBeenCalledTimes(1);
+    expect(onSaveBlocks).toHaveBeenCalledWith([
+      { id: "today-focus", content: "完成前端编辑器组件" }
+    ]);
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+  });
+
+  test("cancels inline block editing and restores preview text", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1303,11 +1345,35 @@ describe("JournalEditor", () => {
       />
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "临时改动，不保存" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByText("临时改动，不保存")).not.toBeInTheDocument();
+  });
+
+  test("assistant-friendly system raw block shows product labels without edit action", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "今日材料" })).toBeInTheDocument();
+    expect(screen.getByText("保留原话")).toBeInTheDocument();
     expect(screen.getByText("今天要保留原始表达")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 原始输入" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "编辑 今日材料" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日材料" })).not.toBeInTheDocument();
   });
 
-  test("inserts an available optional block into the page", () => {
+  test("shows 添加 情绪感受 for optional inserts and opens the new inline block", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1317,7 +1383,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
 
     expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
   });
@@ -1365,17 +1431,17 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "插入 工作推进" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 工作推进" }));
 
     expect(screen.getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual([
-      "原始输入",
-      "昨日回顾",
-      "今日重点",
+      "今日材料",
+      "昨天回顾",
+      "今天想推进",
       "工作推进"
     ]);
   });
 
-  test("keeps block save action before the section list", () => {
+  test("keeps optional insert action before the section list", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1385,31 +1451,10 @@ describe("JournalEditor", () => {
       />
     );
 
-    const saveButton = screen.getByRole("button", { name: "保存块编辑草稿" });
-    const firstSection = screen.getByRole("region", { name: "原始输入" });
+    const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
+    const firstSection = screen.getByRole("region", { name: "今天想推进" });
 
-    expect(saveButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  test("saves current editable block sections", () => {
-    const onSaveBlocks = vi.fn();
-    render(
-      <JournalEditor
-        editor={createEditorState()}
-        isBusy={false}
-        onSaveBlocks={onSaveBlocks}
-        onSaveSource={vi.fn()}
-      />
-    );
-
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
-      target: { value: "完成前端编辑器组件" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存块编辑草稿" }));
-
-    expect(onSaveBlocks).toHaveBeenCalledWith([
-      { id: "today-focus", content: "完成前端编辑器组件" }
-    ]);
+    expect(insertButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   test("resets local block edits when the authoritative editor snapshot changes", () => {
@@ -1430,7 +1475,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "未保存的本地区块内容" }
     });
 
@@ -1443,7 +1489,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("未保存的本地区块内容")).not.toBeInTheDocument();
   });
 
@@ -1538,7 +1585,7 @@ describe("JournalEditor", () => {
     expect(screen.getByText("请补回 today-focus 区块后再保存。")).toBeInTheDocument();
   });
 
-  test("disables editable block and source textareas while busy", () => {
+  test("disables editable block actions and source textareas while busy", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1548,7 +1595,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
 

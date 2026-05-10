@@ -71,10 +71,12 @@ export function JournalEditor({
   const [mode, setMode] = useState<EditorMode>("blocks");
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
   const [sourceMarkdown, setSourceMarkdown] = useState(editor.markdown);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
 
   useEffect(() => {
     setSections(editor.sections);
     setSourceMarkdown(editor.markdown);
+    setEditingSectionId(null);
   }, [editor]);
 
   const orderById = useMemo(() => {
@@ -108,14 +110,29 @@ export function JournalEditor({
       [...current, createSectionFromDefinition(definition)]
         .sort((left, right) => compareSections(left, right, orderById))
     );
+    setEditingSectionId(definition.id);
   }
 
-  function saveBlocks() {
-    onSaveBlocks(
-      sections
-        .filter(section => section.isEditableInBlockMode)
-        .map(section => ({ id: section.id, content: section.content }))
+  function cancelSection(sectionId: string) {
+    const baselineSection = editor.sections.find(section => section.id === sectionId);
+    setSections(current =>
+      current.map(section =>
+        section.id === sectionId
+          ? { ...section, content: baselineSection?.content ?? "" }
+          : section
+      )
     );
+    setEditingSectionId(null);
+  }
+
+  function saveSection(sectionId: string) {
+    const section = sections.find(currentSection => currentSection.id === sectionId);
+    if (!section?.isEditableInBlockMode) {
+      return;
+    }
+
+    onSaveBlocks([{ id: section.id, content: section.content }]);
+    setEditingSectionId(null);
   }
 
   return (
@@ -145,11 +162,7 @@ export function JournalEditor({
             源码模式
           </button>
         </div>
-        {mode === "blocks" ? (
-          <button type="button" className="editor-save-action" onClick={saveBlocks} disabled={isBusy}>
-            保存块编辑草稿
-          </button>
-        ) : (
+        {mode === "source" ? (
           <button
             type="button"
             className="editor-save-action"
@@ -158,7 +171,7 @@ export function JournalEditor({
           >
             保存源码草稿
           </button>
-        )}
+        ) : null}
       </div>
 
       <ValidationPanel validation={editor.validation} />
@@ -176,7 +189,11 @@ export function JournalEditor({
               section={section}
               value={section.content}
               disabled={isBusy}
+              isEditing={editingSectionId === section.id}
+              onEdit={() => setEditingSectionId(section.id)}
+              onCancel={() => cancelSection(section.id)}
               onChange={content => updateSectionContent(section.id, content)}
+              onSave={() => saveSection(section.id)}
             />
           ))}
         </div>
