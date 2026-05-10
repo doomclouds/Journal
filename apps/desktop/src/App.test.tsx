@@ -1529,7 +1529,7 @@ describe("LlmSettingsPanel", () => {
       />
     );
 
-    expect(screen.getByDisplayValue("sk-••••••••••••••••4A7C")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("sk-••••••••••••••••4A7C")).toHaveValue("");
 
     fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
 
@@ -1627,12 +1627,117 @@ describe("LlmSettingsPanel", () => {
     );
 
     expect(screen.queryByText("已从环境变量加载，不在界面显示")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("sk-••••••••••••••••9D2A")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("sk-••••••••••••••••9D2A")).toHaveValue("");
 
     fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
 
     expect(await screen.findByDisplayValue("sk-file-secret-9D2A")).toBeInTheDocument();
     expect(onRevealApiKey).toHaveBeenCalledWith("openai");
+  });
+
+  test("keeps masked api key preview out of editable value", async () => {
+    const fileBackedDeepSeekSettings = {
+      ...aiSettings,
+      activeProviderId: "deepseek",
+      providers: aiSettings.providers.map(provider =>
+        provider.id === "deepseek"
+          ? {
+              ...provider,
+              isEnabled: true,
+              isActive: true,
+              hasApiKey: true,
+              source: "file",
+              apiKeyPreview: "sk-••••••••••••••••4A7C",
+              canRevealApiKey: true
+            }
+          : { ...provider, isActive: false }
+      )
+    };
+    const onTest = vi.fn().mockResolvedValue({
+      isSuccess: true,
+      status: "success",
+      safeResponseSnippet: "{\"ok\":true}",
+      httpStatus: 200,
+      latency: "00:00:00.1200000",
+      error: null
+    });
+
+    render(
+      <LlmSettingsPanel
+        settings={fileBackedDeepSeekSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={vi.fn()}
+        onTest={onTest}
+        onRevealApiKey={vi.fn()}
+      />
+    );
+
+    expect(screen.getByPlaceholderText("sk-••••••••••••••••4A7C")).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-new-secret-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
+
+    await waitFor(() => expect(onTest).toHaveBeenCalled());
+    const candidate = onTest.mock.calls[0][1];
+    expect(candidate.providers.find((provider: AiProviderSaveRequest) => provider.id === "deepseek").apiKey).toBe("sk-new-secret-value");
+  });
+
+  test("editing revealed api key keeps displayed value and candidate in sync", async () => {
+    const fileBackedDeepSeekSettings = {
+      ...aiSettings,
+      activeProviderId: "deepseek",
+      providers: aiSettings.providers.map(provider =>
+        provider.id === "deepseek"
+          ? {
+              ...provider,
+              isEnabled: true,
+              isActive: true,
+              hasApiKey: true,
+              source: "file",
+              apiKeyPreview: "sk-••••••••••••••••4A7C",
+              canRevealApiKey: true
+            }
+          : { ...provider, isActive: false }
+      )
+    };
+    const onRevealApiKey = vi.fn().mockResolvedValue({
+      providerId: "deepseek",
+      source: "file",
+      apiKey: "sk-file-backed-secret-4A7C"
+    });
+    const onTest = vi.fn().mockResolvedValue({
+      isSuccess: true,
+      status: "success",
+      safeResponseSnippet: "{\"ok\":true}",
+      httpStatus: 200,
+      latency: "00:00:00.1200000",
+      error: null
+    });
+
+    render(
+      <LlmSettingsPanel
+        settings={fileBackedDeepSeekSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={vi.fn()}
+        onTest={onTest}
+        onRevealApiKey={onRevealApiKey}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
+
+    const apiKeyInput = await screen.findByDisplayValue("sk-file-backed-secret-4A7C");
+    fireEvent.change(apiKeyInput, { target: { value: "sk-revealed-edited-secret" } });
+
+    expect(screen.getByDisplayValue("sk-revealed-edited-secret")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
+
+    await waitFor(() => expect(onTest).toHaveBeenCalled());
+    const candidate = onTest.mock.calls[0][1];
+    expect(candidate.providers.find((provider: AiProviderSaveRequest) => provider.id === "deepseek").apiKey).toBe("sk-revealed-edited-secret");
   });
 
   test("tests current form with candidate settings and marks old result stale after edits", async () => {
@@ -1795,7 +1900,7 @@ describe("LlmSettingsPanel", () => {
     await screen.findByText("可以回到今日页重新整理");
 
     expect(screen.getByLabelText("API Key")).not.toHaveValue("sk-new-secret-value");
-    expect(screen.getByDisplayValue("sk-••••••••••••••••4A7C")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("sk-••••••••••••••••4A7C")).toHaveValue("");
   });
 
   test("shows diagnostics when api key reveal fails", async () => {
@@ -1834,7 +1939,7 @@ describe("LlmSettingsPanel", () => {
     await screen.findByText("测试失败，配置没有保存");
 
     expect(screen.queryByDisplayValue("sk-file-backed-secret-4A7C")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("sk-••••••••••••••••4A7C")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("sk-••••••••••••••••4A7C")).toHaveValue("");
     expect(screen.getByText("reveal failed")).toBeInTheDocument();
     expect(screen.getByText("request_failed")).toBeInTheDocument();
     expect(screen.getByText("技术详情")).toBeInTheDocument();

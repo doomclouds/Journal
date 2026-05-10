@@ -358,13 +358,14 @@ export function LlmSettingsPanel({
                   <div className="llm-key-row">
                     <input
                       aria-label="API Key"
-                      value={
-                        revealedKeyProviderId === selected.id
-                          ? revealedKey
-                          : selected.apiKey || selectedView?.apiKeyPreview || ""
-                      }
-                      placeholder={selectedView?.hasApiKey ? "API Key 已配置" : "未填写 API Key"}
-                      onChange={event => updateSelected({ apiKey: event.target.value })}
+                      value={revealedKeyProviderId === selected.id ? revealedKey : selected.apiKey}
+                      placeholder={selectedView?.apiKeyPreview || (selectedView?.hasApiKey ? "API Key 已配置" : "未填写 API Key")}
+                      onChange={event => {
+                        if (revealedKeyProviderId === selected.id) {
+                          setRevealedKey(event.target.value);
+                        }
+                        updateSelected({ apiKey: event.target.value });
+                      }}
                     />
                     {selectedView?.canRevealApiKey && !selected.apiKey ? (
                       <button
