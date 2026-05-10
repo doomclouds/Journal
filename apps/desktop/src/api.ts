@@ -111,6 +111,8 @@ export type AiProviderView = {
   isEnabled: boolean;
   isActive: boolean;
   hasApiKey: boolean;
+  apiKeyPreview: string;
+  canRevealApiKey: boolean;
   source: string;
   timeoutSeconds: number;
   temperature: number;
@@ -145,6 +147,12 @@ export type AiSettingsSaveRequest = {
   providers: AiProviderSaveRequest[];
 };
 
+export type AiProviderApiKeyView = {
+  providerId: string;
+  source: string;
+  apiKey: string;
+};
+
 export type AiProviderHealthResult = {
   isSuccess: boolean;
   status: string;
@@ -157,6 +165,12 @@ export type AiProviderHealthResult = {
     message: string;
     technicalDetails: string;
   } | null;
+};
+
+export type AiSettingsActivationResult = {
+  saved: boolean;
+  settings: AiSettingsView;
+  testResult: AiProviderHealthResult;
 };
 
 const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
@@ -206,14 +220,31 @@ export function saveAiSettings(request: AiSettingsSaveRequest): Promise<AiSettin
   });
 }
 
-export function testAiProvider(providerId: string): Promise<AiProviderHealthResult> {
+export function testAiProvider(
+  providerId: string,
+  candidate?: AiSettingsSaveRequest
+): Promise<AiProviderHealthResult> {
   return requestJson<AiProviderHealthResult>("/settings/ai/test", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ providerId })
+    body: JSON.stringify(candidate ? { providerId, candidate } : { providerId })
   });
+}
+
+export function activateAiSettings(request: AiSettingsSaveRequest): Promise<AiSettingsActivationResult> {
+  return requestJson<AiSettingsActivationResult>("/settings/ai/activate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+}
+
+export function revealAiProviderApiKey(providerId: string): Promise<AiProviderApiKeyView> {
+  return requestJson<AiProviderApiKeyView>(`/settings/ai/${encodeURIComponent(providerId)}/api-key`);
 }
 
 export function addTodayInput(text: string, source = "text"): Promise<TodayJournalState> {

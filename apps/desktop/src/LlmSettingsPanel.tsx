@@ -1,7 +1,9 @@
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import {
+  type AiProviderApiKeyView,
   type AiProviderHealthResult,
   type AiProviderSaveRequest,
+  type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
   type AiSettingsView
 } from "./api";
@@ -10,18 +12,20 @@ type LlmSettingsPanelProps = {
   settings: AiSettingsView;
   isBusy: boolean;
   onClose: () => void;
-  onSave: (request: AiSettingsSaveRequest) => Promise<void>;
-  onTest: (providerId: string) => Promise<AiProviderHealthResult>;
-  onRegenerate: (providerId?: string) => Promise<void>;
+  onActivate?: (request: AiSettingsSaveRequest) => Promise<AiSettingsActivationResult>;
+  onSave?: (request: AiSettingsSaveRequest) => Promise<void>;
+  onTest: (providerId: string, candidate?: AiSettingsSaveRequest) => Promise<AiProviderHealthResult>;
+  onRevealApiKey?: (providerId: string) => Promise<AiProviderApiKeyView>;
 };
 
 export function LlmSettingsPanel({
   settings,
   isBusy,
   onClose,
+  onActivate,
   onSave,
   onTest,
-  onRegenerate
+  onRevealApiKey: _onRevealApiKey
 }: LlmSettingsPanelProps) {
   const [selectedId, setSelectedId] = useState(settings.activeProviderId);
   const selectedIdRef = useRef(settings.activeProviderId);
@@ -42,7 +46,6 @@ export function LlmSettingsPanel({
     }))
   );
   const [testResult, setTestResult] = useState<AiProviderHealthResult | null>(null);
-  const [pendingRegenerate, setPendingRegenerate] = useState<{ providerId?: string } | null>(null);
 
   const selected = useMemo(
     () => providers.find(provider => provider.id === selectedId),
@@ -56,7 +59,6 @@ export function LlmSettingsPanel({
     }
 
     setTestResult(null);
-    setPendingRegenerate(null);
     setProviders(current =>
       current.map(provider => provider.id === selected.id ? { ...provider, ...patch } : provider)
     );
@@ -82,7 +84,18 @@ export function LlmSettingsPanel({
       return;
     }
 
-    await onSave({ activeProviderId: selected.id, providers });
+    try {
+      if (onActivate) {
+        await onActivate({ activeProviderId: selected.id, providers });
+        return;
+      }
+
+      if (onSave) {
+        await onSave({ activeProviderId: selected.id, providers });
+      }
+    } catch {
+      // App-level error state already handles submission failures.
+    }
   }
 
   async function handleTest() {
@@ -114,17 +127,6 @@ export function LlmSettingsPanel({
       setTestResult(result);
     }
   }
-
-  async function handleRegenerate(providerId?: string) {
-    if (!pendingRegenerate || pendingRegenerate.providerId !== providerId) {
-      setPendingRegenerate({ providerId });
-      return;
-    }
-
-    await onRegenerate(providerId);
-    setPendingRegenerate(null);
-  }
-
   return (
     <section className="llm-settings-overlay" aria-label="LLM 配置面板">
       <header className="llm-settings-head">
@@ -147,7 +149,6 @@ export function LlmSettingsPanel({
                 selectedIdRef.current = provider.id;
                 setSelectedId(provider.id);
                 setTestResult(null);
-                setPendingRegenerate(null);
               }}
             >
               <strong>{provider.displayName}</strong>
@@ -200,25 +201,6 @@ export function LlmSettingsPanel({
                 </button>
                 <button type="submit" className="primary-action" disabled={isBusy}>
                   启用当前 LLM
-                </button>
-              </div>
-            </section>
-
-            <section className="llm-settings-card">
-              <span className="rail-label">Regenerate</span>
-              <h2>重新整理今日草稿</h2>
-              <p>{pendingRegenerate ? "这会覆盖当前草稿内容，但不会影响正式日记。" : "使用当前 LLM 重新生成 reviewing draft。"}</p>
-              <div className="llm-settings-actions">
-                <button
-                  type="button"
-                  className="secondary-action danger-action"
-                  onClick={() => handleRegenerate("mock")}
-                  disabled={isBusy}
-                >
-                  用 Mock 生成一次
-                </button>
-                <button type="button" className="primary-action" onClick={() => handleRegenerate()} disabled={isBusy}>
-                  重新整理草稿
                 </button>
               </div>
             </section>
@@ -293,7 +275,7 @@ export function LlmSettingsPanel({
             <section className="llm-settings-card attention-panel">
               <span className="rail-label">连接测试</span>
               <h2>provider_not_found</h2>
-              <p>选择一个已配置的 LLM 后才能测试连接或重新整理草稿。</p>
+              <p>选择一个已配置的 LLM 后才能测试连接。</p>
             </section>
           </aside>
         )}

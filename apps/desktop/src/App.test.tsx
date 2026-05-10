@@ -2,9 +2,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
+  activateAiSettings,
   getAiSettings,
   getTodayEditor,
   regenerateTodayDraft,
+  revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
   saveSourceDraft,
@@ -50,6 +52,8 @@ const aiSettings = {
       isEnabled: true,
       isActive: true,
       hasApiKey: true,
+      apiKeyPreview: "sk-***1234",
+      canRevealApiKey: false,
       source: "default",
       timeoutSeconds: 1,
       temperature: 0,
@@ -67,6 +71,8 @@ const aiSettings = {
       isEnabled: false,
       isActive: false,
       hasApiKey: false,
+      apiKeyPreview: "",
+      canRevealApiKey: true,
       source: "preset",
       timeoutSeconds: 45,
       temperature: 0.2,
@@ -255,6 +261,14 @@ function mockJsonResponse(body: unknown, ok = true, status = 200): Response {
     status,
     json: async () => body
   } as Response;
+}
+
+function createInitialFetchMock() {
+  return vi
+    .fn()
+    .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+    .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+    .mockResolvedValueOnce(mockJsonResponse(aiSettings));
 }
 
 afterEach(() => {
@@ -451,8 +465,8 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("settings save failed");
     expect(screen.getByRole("button", { name: "启用当前 LLM" })).toBeEnabled();
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai", {
-      method: "PUT",
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai/activate", {
+      method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
@@ -463,6 +477,22 @@ describe("App", () => {
   test("ignores stale LLM settings save response when a later save wins", async () => {
     const firstSaveDeferred = createDeferred<Response>();
     const secondSaveDeferred = createDeferred<Response>();
+    const successfulActivation = {
+      saved: true,
+      settings: aiSettings,
+      testResult: {
+        isSuccess: true,
+        status: "success",
+        safeResponseSnippet: "{\"ok\":true}",
+        httpStatus: 200,
+        latency: "00:00:00.0100000",
+        error: null
+      }
+    };
+    const successfulDeepSeekActivation = {
+      ...successfulActivation,
+      settings: deepSeekAiSettings
+    };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
@@ -482,10 +512,10 @@ describe("App", () => {
     fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
     fireEvent.submit(screen.getByRole("button", { name: "启用当前 LLM" }).closest("form")!);
 
-    secondSaveDeferred.resolve(mockJsonResponse(aiSettings));
+    secondSaveDeferred.resolve(mockJsonResponse(successfulActivation));
     await waitFor(() => expect(screen.getByRole("button", { name: "LLM Mock" })).toBeInTheDocument());
 
-    firstSaveDeferred.resolve(mockJsonResponse(deepSeekAiSettings));
+    firstSaveDeferred.resolve(mockJsonResponse(successfulDeepSeekActivation));
     await Promise.resolve();
 
     expect(screen.getByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
@@ -504,10 +534,9 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重新整理今日草稿" }));
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理今日草稿" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
@@ -545,15 +574,160 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理今日草稿" }));
 
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("重新生成后的重点")
     );
     expect(screen.getByRole("alert")).toHaveTextContent("settings refresh failed");
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
+  });
+
+  test("shows regenerate draft action on today page instead of LLM settings panel", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "重新整理今日草稿" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /LLM/ }));
+
+    expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "LLM 配置面板" }))
+        .queryByRole("button", { name: "重新整理草稿" })
+    ).not.toBeInTheDocument();
+  });
+
+  test("regenerates draft from today page after confirmation", async () => {
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse(reviewingToday))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const button = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    fireEvent.click(button);
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ providerId: null })
+    }));
+  });
+
+  test("resets regenerate confirmation after raw input changes", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    fireEvent.click(regenerateButton);
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("补充今天的自然语言输入"), {
+      target: { value: "补充一点新上下文" }
+    });
+
+    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+
+    fireEvent.click(regenerateButton);
+
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+  });
+
+  test("resets regenerate confirmation after toggling LLM panel", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    fireEvent.click(regenerateButton);
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "LLM Mock" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+
+    fireEvent.click(regenerateButton);
+
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+  });
+
+  test("editing journal content resets regenerate confirmation", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    fireEvent.click(regenerateButton);
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
+      target: { value: "补充新的今日重点" }
+    });
+
+    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+
+    fireEvent.click(regenerateButton);
+
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+  });
+
+  test("inserting optional block resets regenerate confirmation", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    fireEvent.click(regenerateButton);
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
+
+    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+
+    fireEvent.click(regenerateButton);
+
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+  });
+
+  test("blank raw input submit resets regenerate confirmation", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    fireEvent.click(regenerateButton);
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("请输入一段今天的自然语言内容。");
+    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+
+    fireEvent.click(regenerateButton);
+
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
   });
 
   test("submits raw input and refreshes from today editor state", async () => {
@@ -1272,7 +1446,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={vi.fn()}
         onTest={vi.fn()}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1293,7 +1466,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={vi.fn()}
         onTest={vi.fn()}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1324,7 +1496,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={vi.fn()}
         onTest={onTest}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1348,7 +1519,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={vi.fn()}
         onTest={onTest}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1382,7 +1552,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={vi.fn()}
         onTest={onTest}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1421,7 +1590,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={vi.fn()}
         onTest={onTest}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1459,7 +1627,6 @@ describe("LlmSettingsPanel", () => {
         onClose={vi.fn()}
         onSave={onSave}
         onTest={vi.fn()}
-        onRegenerate={vi.fn()}
       />
     );
 
@@ -1471,53 +1638,6 @@ describe("LlmSettingsPanel", () => {
     expect(request.providers.find(provider => provider.id === "mock")?.timeoutSeconds).toBe(1);
   });
 
-  test("requires confirmation before regenerating draft", async () => {
-    const onRegenerate = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <LlmSettingsPanel
-        settings={aiSettings}
-        isBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-        onTest={vi.fn()}
-        onRegenerate={onRegenerate}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
-
-    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
-    expect(onRegenerate).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
-
-    await waitFor(() => expect(onRegenerate).toHaveBeenCalledWith(undefined));
-  });
-
-  test("does not reuse mock regenerate confirmation for current provider regenerate", async () => {
-    const onRegenerate = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <LlmSettingsPanel
-        settings={aiSettings}
-        isBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-        onTest={vi.fn()}
-        onRegenerate={onRegenerate}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "用 Mock 生成一次" }));
-    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
-    expect(onRegenerate).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
-    await waitFor(() => expect(onRegenerate).toHaveBeenCalledWith(undefined));
-  });
 });
 
 describe("editor API client", () => {
@@ -1601,6 +1721,87 @@ describe("editor API client", () => {
       },
       body: JSON.stringify({ providerId: "deepseek" })
     });
+  });
+
+  test("testAiProvider sends candidate settings when provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({
+      isSuccess: false,
+      status: "missing_api_key",
+      safeResponseSnippet: "",
+      httpStatus: null,
+      latency: null,
+      error: null
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const candidate = {
+      activeProviderId: "deepseek",
+      providers: [
+        {
+          id: "deepseek",
+          type: "openai-compatible",
+          displayName: "DeepSeek",
+          preset: "deepseek",
+          baseUrl: "https://api.deepseek.com",
+          model: "deepseek-v4-flash",
+          apiKey: "",
+          isEnabled: true,
+          timeoutSeconds: 45,
+          temperature: 0.2,
+          maxTokens: 1200,
+          stylePreset: "faithful"
+        }
+      ]
+    };
+
+    await testAiProvider("deepseek", candidate);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ providerId: "deepseek", candidate })
+    });
+  });
+
+  test("activateAiSettings posts protected activation request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({
+      saved: true,
+      settings: aiSettings,
+      testResult: {
+        isSuccess: true,
+        status: "success",
+        safeResponseSnippet: "{\"ok\":true}",
+        httpStatus: 200,
+        latency: "00:00:00.0100000",
+        error: null
+      }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = { activeProviderId: "mock", providers: [] };
+
+    await activateAiSettings(request);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai/activate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+  });
+
+  test("revealAiProviderApiKey reads file-backed key endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({
+      providerId: "deepseek",
+      source: "file",
+      apiKey: "secret-value"
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await revealAiProviderApiKey("deepseek");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai/deepseek/api-key", undefined);
   });
 
   test("regenerateTodayDraft sends optional provider override", async () => {
