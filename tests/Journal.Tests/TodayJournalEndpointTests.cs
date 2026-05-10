@@ -566,6 +566,101 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PostSettingsAiTest_WithCandidateDoesNotWriteSettingsFile()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+
+        using var response = await client.PostAsJsonAsync(
+            "/settings/ai/test",
+            new
+            {
+                providerId = "deepseek",
+                candidate = CreateAiSettingsSaveRequest("deepseek", deepSeekApiKey: "")
+            });
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(document.RootElement.GetProperty("isSuccess").GetBoolean());
+        Assert.Equal("missing_api_key", document.RootElement.GetProperty("status").GetString());
+        Assert.False(File.Exists(paths.AiSettingsPath()));
+    }
+
+    [Fact]
+    public async Task PostSettingsAiActivate_WithMockSuccessPersistsCandidateSettings()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        const string persistedSecret = "persisted-secret";
+        const string persistedModel = "deepseek-persisted-model";
+        const string persistedBaseUrl = "https://persisted.deepseek.example/v1";
+
+        using var response = await client.PostAsJsonAsync(
+            "/settings/ai/activate",
+            CreateAiSettingsSaveRequest(
+                "mock",
+                deepSeekApiKey: persistedSecret,
+                deepSeekModel: persistedModel,
+                deepSeekBaseUrl: persistedBaseUrl));
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+
+        Assert.True(root.GetProperty("saved").GetBoolean());
+        Assert.True(root.GetProperty("testResult").GetProperty("isSuccess").GetBoolean());
+        Assert.Equal("mock", root.GetProperty("settings").GetProperty("activeProviderId").GetString());
+        Assert.True(File.Exists(paths.AiSettingsPath()));
+
+        using var getResponse = await client.GetAsync("/settings/ai");
+        getResponse.EnsureSuccessStatusCode();
+
+        using var getDocument = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync());
+        var deepSeek = getDocument.RootElement.GetProperty("providers").EnumerateArray()
+            .Single(provider => provider.GetProperty("id").GetString() == "deepseek");
+
+        Assert.Equal("mock", getDocument.RootElement.GetProperty("activeProviderId").GetString());
+        Assert.True(deepSeek.GetProperty("hasApiKey").GetBoolean());
+        Assert.Equal("file", deepSeek.GetProperty("source").GetString());
+        Assert.Equal(persistedModel, deepSeek.GetProperty("model").GetString());
+        Assert.Equal(persistedBaseUrl, deepSeek.GetProperty("baseUrl").GetString());
+    }
+
+    [Fact]
+    public async Task PostSettingsAiActivate_WhenTestFailsDoesNotOverwriteExistingSettings()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var saveResponse = await client.PutAsJsonAsync(
+            "/settings/ai",
+            CreateAiSettingsSaveRequest("mock", deepSeekApiKey: ""));
+        saveResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PostAsJsonAsync(
+            "/settings/ai/activate",
+            CreateAiSettingsSaveRequest("deepseek", deepSeekApiKey: ""));
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+
+        Assert.False(root.GetProperty("saved").GetBoolean());
+        Assert.Equal("missing_api_key", root.GetProperty("testResult").GetProperty("status").GetString());
+        Assert.Equal("mock", root.GetProperty("settings").GetProperty("activeProviderId").GetString());
+
+        using var getResponse = await client.GetAsync("/settings/ai");
+        getResponse.EnsureSuccessStatusCode();
+        using var getDocument = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync());
+        Assert.Equal("mock", getDocument.RootElement.GetProperty("activeProviderId").GetString());
+    }
+
+    [Fact]
     public async Task PostTodayDraftRegenerate_UsesMockOverrideAndDoesNotWriteEntry()
     {
         using var workspace = TempWorkspace.Create();
@@ -639,7 +734,11 @@ public sealed class TodayJournalEndpointTests
         Assert.Equal("invalid request body", document.RootElement.GetProperty("error").GetString());
     }
 
-    private static object CreateAiSettingsSaveRequest(string activeProviderId, string deepSeekApiKey) =>
+    private static object CreateAiSettingsSaveRequest(
+        string activeProviderId,
+        string deepSeekApiKey,
+        string deepSeekModel = "deepseek-v4-flash",
+        string deepSeekBaseUrl = "https://api.deepseek.com") =>
         new
         {
             activeProviderId,
@@ -666,8 +765,8 @@ public sealed class TodayJournalEndpointTests
                     type = "openai-compatible",
                     displayName = "DeepSeek",
                     preset = "deepseek",
-                    baseUrl = "https://api.deepseek.com",
-                    model = "deepseek-v4-flash",
+                    baseUrl = deepSeekBaseUrl,
+                    model = deepSeekModel,
                     apiKey = deepSeekApiKey,
                     isEnabled = true,
                     timeoutSeconds = 45,

@@ -174,6 +174,33 @@ public sealed class JournalAiGenerationServiceTests
         Assert.Contains("missing-provider", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task CheckAsync_WithCandidateSettingsUsesCandidateInsteadOfSavedSettings()
+    {
+        var savedSettings = JournalAiSettings.CreateDefault();
+        var candidate = JournalAiSettings.CreateDefault();
+        var deepSeek = candidate.Providers.Single(item => item.Id == "deepseek") with
+        {
+            ApiKey = "candidate-key",
+            IsEnabled = true
+        };
+        candidate = candidate with
+        {
+            ActiveProviderId = "deepseek",
+            Providers = candidate.Providers.Select(item => item.Id == "deepseek" ? deepSeek : item).ToArray()
+        };
+        var runtime = new StaticRuntime(OpenAiCompatibleRunResult.Success(null, """{"ok":true}""", TimeSpan.FromMilliseconds(12)));
+        var service = new JournalAiGenerationService(
+            new StaticSettingsService(savedSettings),
+            new MockAiProvider(),
+            new OpenAiCompatibleJournalAiProvider(runtime));
+
+        var result = await service.CheckAsync("deepseek", candidate, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("success", result.Status);
+    }
+
     private static JournalAiJson CreateValidAiJson(IReadOnlyList<string> rawInputs) =>
         new(
             "journal-entry/v1",

@@ -94,7 +94,8 @@ app.MapPut("/settings/ai", async (
 
 app.MapPost("/settings/ai/test", async (
     AiProviderTestRequest request,
-    JournalAiGenerationService service,
+    JournalAiSettingsService settingsService,
+    JournalAiGenerationService generationService,
     CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.ProviderId))
@@ -102,8 +103,45 @@ app.MapPost("/settings/ai/test", async (
         return Results.BadRequest(new { error = "providerId is required" });
     }
 
-    var health = await service.CheckAsync(request.ProviderId, cancellationToken);
-    return Results.Ok(health);
+    try
+    {
+        var health = request.Candidate is null
+            ? await generationService.CheckAsync(request.ProviderId, cancellationToken)
+            : await generationService.CheckAsync(
+                request.ProviderId,
+                await settingsService.BuildEffectiveCandidateAsync(request.Candidate, cancellationToken),
+                cancellationToken);
+
+        return Results.Ok(health);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/settings/ai/activate", async (
+    JournalAiSettingsSaveRequest request,
+    JournalAiSettingsService settingsService,
+    JournalAiGenerationService generationService,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var candidate = await settingsService.BuildEffectiveCandidateAsync(request, cancellationToken);
+        var testResult = await generationService.CheckAsync(candidate.ActiveProviderId, candidate, cancellationToken);
+        if (testResult.IsSuccess)
+        {
+            await settingsService.SaveAsync(request, cancellationToken);
+        }
+
+        var view = await settingsService.ReadViewAsync(cancellationToken);
+        return Results.Ok(new JournalAiSettingsActivationResult(testResult.IsSuccess, view, testResult));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
 });
 
 app.MapGet("/journal/today", async (TodayJournalService service, CancellationToken cancellationToken) =>
@@ -217,7 +255,9 @@ public partial class Program
 
 public sealed record AddTodayInputRequest(string Text, string? Source);
 
-public sealed record AiProviderTestRequest(string ProviderId);
+public sealed record AiProviderTestRequest(
+    string ProviderId,
+    JournalAiSettingsSaveRequest? Candidate = null);
 
 public sealed record RegenerateTodayDraftRequest(string? ProviderId);
 
