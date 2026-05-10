@@ -72,13 +72,14 @@ export function JournalEditor({
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
   const [sourceMarkdown, setSourceMarkdown] = useState(editor.markdown);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
-  const previousEditorRef = useRef<TodayEditorState | null>(null);
+  const previousEditorRef = useRef<TodayEditorState>(editor);
 
   useEffect(() => {
+    const isInitialEditor = previousEditorRef.current === editor;
     setSections(editor.sections);
     setSourceMarkdown(editor.markdown);
-    setEditingSectionId(null);
-    if (previousEditorRef.current) {
+    if (!isInitialEditor) {
+      setEditingSectionId(null);
       setIsSourceOpen(false);
     }
     previousEditorRef.current = editor;
