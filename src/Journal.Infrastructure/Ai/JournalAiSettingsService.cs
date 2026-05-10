@@ -51,8 +51,17 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
         ArgumentNullException.ThrowIfNull(request);
         ValidateSaveRequest(request);
 
+        var activeProviderId = string.IsNullOrWhiteSpace(request.ActiveProviderId)
+            ? "mock"
+            : request.ActiveProviderId.Trim();
+        if (!request.Providers.Any(provider =>
+            string.Equals(provider.Id.Trim(), activeProviderId, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException($"active provider '{activeProviderId}' was not found in providers.", nameof(request));
+        }
+
         var settings = new JournalAiSettings(
-            string.IsNullOrWhiteSpace(request.ActiveProviderId) ? "mock" : request.ActiveProviderId.Trim(),
+            activeProviderId,
             request.Providers.Select(ToSettings).ToArray());
 
         await _store.WriteAsync(settings, cancellationToken);

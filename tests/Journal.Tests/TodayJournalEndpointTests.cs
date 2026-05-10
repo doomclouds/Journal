@@ -376,6 +376,242 @@ public sealed class TodayJournalEndpointTests
         Assert.Same(concrete, reader);
     }
 
+    [Fact]
+    public async Task GetSettingsAi_ReturnsSafeProviderView()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/settings/ai");
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+
+        Assert.Equal("mock", root.GetProperty("activeProviderId").GetString());
+        Assert.Contains(
+            root.GetProperty("providers").EnumerateArray(),
+            provider => provider.GetProperty("id").GetString() == "deepseek");
+        Assert.DoesNotContain("\"apiKey\"", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PutSettingsAi_SavesConfigurationWithoutReturningApiKey()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PutAsJsonAsync(
+            "/settings/ai",
+            CreateAiSettingsSaveRequest("deepseek", deepSeekApiKey: "secret-value"));
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        var deepSeek = root.GetProperty("providers").EnumerateArray()
+            .Single(provider => provider.GetProperty("id").GetString() == "deepseek");
+
+        Assert.DoesNotContain("secret-value", body, StringComparison.Ordinal);
+        Assert.True(deepSeek.GetProperty("hasApiKey").GetBoolean());
+
+        using var getResponse = await client.GetAsync("/settings/ai");
+        getResponse.EnsureSuccessStatusCode();
+
+        using var getDocument = await JsonDocument.ParseAsync(await getResponse.Content.ReadAsStreamAsync());
+        Assert.Equal("deepseek", getDocument.RootElement.GetProperty("activeProviderId").GetString());
+    }
+
+    [Fact]
+    public async Task PutSettingsAi_WithMalformedRequestReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PutAsJsonAsync(
+            "/settings/ai",
+            new { activeProviderId = "deepseek", providers = Array.Empty<object>() });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PutSettingsAi_WithUnknownActiveProviderReturnsBadRequestAndPreservesExistingConfiguration()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var validResponse = await client.PutAsJsonAsync(
+            "/settings/ai",
+            CreateAiSettingsSaveRequest("deepseek", deepSeekApiKey: "secret-value"));
+        validResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PutAsJsonAsync(
+            "/settings/ai",
+            CreateAiSettingsSaveRequest("openai", deepSeekApiKey: "replacement-secret"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using var getResponse = await client.GetAsync("/settings/ai");
+        getResponse.EnsureSuccessStatusCode();
+
+        using var getDocument = await JsonDocument.ParseAsync(await getResponse.Content.ReadAsStreamAsync());
+        Assert.Equal("deepseek", getDocument.RootElement.GetProperty("activeProviderId").GetString());
+    }
+
+    [Fact]
+    public async Task PostSettingsAiTest_WithBlankProviderReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/settings/ai/test",
+            new { providerId = "   " });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("providerId is required", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PostSettingsAiTest_WithMockProviderReturnsSuccess()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/settings/ai/test",
+            new { providerId = "mock" });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.True(root.GetProperty("isSuccess").GetBoolean());
+        Assert.Equal("success", root.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task PostTodayDraftRegenerate_UsesMockOverrideAndDoesNotWriteEntry()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天先确认正式 entry #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+
+        using var confirmResponse = await client.PostAsync("/journal/today/draft/confirm", content: null);
+        confirmResponse.EnsureSuccessStatusCode();
+
+        var entryPath = paths.EntryPath(date);
+        var originalEntryText = await File.ReadAllTextAsync(entryPath, Encoding.UTF8);
+
+        using var secondInputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "确认后新增 raw input，只应该进入 draft #Journal", source = "text" });
+        secondInputResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/draft/regenerate",
+            new { providerId = "mock" });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var currentEntryText = await File.ReadAllTextAsync(entryPath, Encoding.UTF8);
+
+        Assert.Equal("reviewing", document.RootElement.GetProperty("status").GetString());
+        Assert.True(File.Exists(entryPath));
+        Assert.Equal(originalEntryText, currentEntryText);
+        Assert.DoesNotContain("确认后新增 raw input", currentEntryText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PostTodayDraftRegenerate_WithEmptyBodyReturnsOk()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天验证空 body regenerate #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PostAsync("/journal/today/draft/regenerate", content: null);
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("reviewing", document.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task PostTodayDraftRegenerate_WithMalformedBodyReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync(
+            "/journal/today/draft/regenerate",
+            new StringContent("{", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("invalid request body", document.RootElement.GetProperty("error").GetString());
+    }
+
+    private static object CreateAiSettingsSaveRequest(string activeProviderId, string deepSeekApiKey) =>
+        new
+        {
+            activeProviderId,
+            providers = new object[]
+            {
+                new
+                {
+                    id = "mock",
+                    type = "mock",
+                    displayName = "Mock",
+                    preset = "mock",
+                    baseUrl = "local",
+                    model = "mock-journal",
+                    apiKey = "",
+                    isEnabled = true,
+                    timeoutSeconds = 1,
+                    temperature = 0.0,
+                    maxTokens = 0,
+                    stylePreset = "faithful"
+                },
+                new
+                {
+                    id = "deepseek",
+                    type = "openai-compatible",
+                    displayName = "DeepSeek",
+                    preset = "deepseek",
+                    baseUrl = "https://api.deepseek.com",
+                    model = "deepseek-v4-flash",
+                    apiKey = deepSeekApiKey,
+                    isEnabled = true,
+                    timeoutSeconds = 45,
+                    temperature = 0.2,
+                    maxTokens = 1200,
+                    stylePreset = "faithful"
+                }
+            }
+        };
+
     private static WebApplicationFactory<Program> CreateFactory(string root) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
