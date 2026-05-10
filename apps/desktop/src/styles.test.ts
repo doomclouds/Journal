@@ -48,6 +48,12 @@ describe("Today workbench productized CSS contract", () => {
     return blocks.join("\n");
   }
 
+  function getRuleBody(selectorPattern: string, stylesheet = css) {
+    const match = new RegExp(`${selectorPattern}\\s*\\{([^}]*)\\}`, "s").exec(stylesheet);
+    expect(match).not.toBeNull();
+    return match?.[1] ?? "";
+  }
+
   test("defines the main productized workbench regions", () => {
     expect(css).toMatch(/\.productized-workspace\s*\{/);
     expect(css).toMatch(/\.today-assistant\s*\{/);
@@ -56,16 +62,39 @@ describe("Today workbench productized CSS contract", () => {
   });
 
   test("uses a dark monospace advanced source drawer", () => {
-    expect(css).toMatch(/\.journal-source-drawer\s*\{[^}]*background:\s*#[0-9a-fA-F]{3,6}/s);
-    expect(css).toMatch(/\.journal-source-drawer\s+textarea\s*\{[^}]*background:\s*#[0-9a-fA-F]{3,6}/s);
-    expect(css).toMatch(/\.journal-source-drawer\s+textarea\s*\{[^}]*color:\s*#[0-9a-fA-F]{3,6}/s);
-    expect(css).toMatch(/\.journal-source-drawer\s+textarea\s*\{[^}]*font-family:[^;}]*monospace/s);
+    const drawer = getRuleBody("\\.journal-source-drawer");
+    const textarea = getRuleBody("\\.journal-source-drawer\\s+textarea");
+
+    expect(drawer).toMatch(/background:\s*#151a20;/);
+    expect(drawer).toMatch(/color:\s*#e9eef3;/);
+    expect(drawer).toMatch(/border:\s*1px\s+solid\s+rgba\(174,\s*190,\s*204,\s*0\.2\);/);
+    expect(textarea).toMatch(/background:\s*#0d1117;/);
+    expect(textarea).toMatch(/color:\s*#edf4fa;/);
+    expect(textarea).toMatch(/font-family:[^;}]*monospace;/);
   });
 
   test("styles existing inline block preview and editing states", () => {
-    expect(css).toMatch(/\.journal-block-readonly\s*\{/);
-    expect(css).toMatch(/\.journal-block-inline-editor\s*\{/);
-    expect(css).toMatch(/\.journal-block-inline-actions\s*\{/);
+    const editingCard = getRuleBody("\\.journal-block-card:has\\(\\.journal-block-inline-editor\\)");
+    const readonly = getRuleBody("\\.journal-block-readonly");
+    const inlineEditor = getRuleBody("\\.journal-block-inline-editor");
+    const inlineActions = getRuleBody("\\.journal-block-inline-actions");
+
+    expect(editingCard).toMatch(/border-color:\s*rgba\(47,\s*111,\s*95,\s*0\.34\);/);
+    expect(editingCard).toMatch(/background:\s*#f7fbf7;/);
+    expect(editingCard).toMatch(/box-shadow:\s*0\s+12px\s+28px\s+rgba\(47,\s*111,\s*95,\s*0\.1\);/);
+    expect(readonly).toMatch(/min-height:\s*72px;/);
+    expect(readonly).toMatch(/background:\s*#fbfaf5;/);
+    expect(readonly).toMatch(/color:\s*#3a352e;/);
+    expect(readonly).toMatch(/line-height:\s*1\.65;/);
+    expect(readonly).toMatch(/overflow-wrap:\s*anywhere;/);
+    expect(inlineEditor).toMatch(/display:\s*grid;/);
+    expect(inlineEditor).toMatch(/border-left:\s*4px\s+solid\s+#2f6f5f;/);
+    expect(inlineEditor).toMatch(/background:\s*#eff8f2;/);
+    expect(inlineEditor).toMatch(/padding:\s*12px;/);
+    expect(inlineActions).toMatch(/display:\s*flex;/);
+    expect(inlineActions).toMatch(/flex-wrap:\s*wrap;/);
+    expect(inlineActions).toMatch(/justify-content:\s*flex-end;/);
+    expect(inlineActions).toMatch(/gap:\s*8px;/);
   });
 
   test("collapses to one primary scroll column below 1180px", () => {
