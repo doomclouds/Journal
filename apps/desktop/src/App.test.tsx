@@ -11,6 +11,7 @@ import {
   saveBlockDraft,
   saveSourceDraft,
   testAiProvider,
+  type AiProviderSaveRequest,
   type AiSettingsSaveRequest,
   type JournalDraft,
   type TodayJournalState,
@@ -406,7 +407,7 @@ describe("App", () => {
 
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
-    expect(screen.getByText("最小 JSON 请求")).toBeInTheDocument();
+    expect(screen.getByText("测试会向当前 LLM 发送一次最小请求，可能产生少量 token 消耗。")).toBeInTheDocument();
   });
 
   test("tests provider and shows safe technical details", async () => {
@@ -435,21 +436,56 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
 
-    expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+    expect(await screen.findByText("测试失败，配置没有保存")).toBeInTheDocument();
     expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
-    expect(screen.getByText("安全技术详情")).toBeInTheDocument();
+    expect(screen.getByText("技术详情")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai/test", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ providerId: "deepseek" })
+      body: JSON.stringify({
+        providerId: "deepseek",
+        candidate: {
+          activeProviderId: "deepseek",
+          providers: [
+            {
+              id: "mock",
+              type: "mock",
+              displayName: "Mock",
+              preset: "mock",
+              baseUrl: "local",
+              model: "mock-journal",
+              apiKey: "",
+              isEnabled: false,
+              timeoutSeconds: 1,
+              temperature: 0,
+              maxTokens: 0,
+              stylePreset: "faithful"
+            },
+            {
+              id: "deepseek",
+              type: "openai-compatible",
+              displayName: "DeepSeek",
+              preset: "deepseek",
+              baseUrl: "https://api.deepseek.com",
+              model: "deepseek-v4-flash",
+              apiKey: "",
+              isEnabled: true,
+              timeoutSeconds: 45,
+              temperature: 0.2,
+              maxTokens: 1200,
+              stylePreset: "faithful"
+            }
+          ]
+        }
+      })
     });
   });
 
-  test("shows api error when saving LLM settings fails", async () => {
+  test("shows inline failure when activating LLM settings request fails", async () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
@@ -461,10 +497,11 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "启用当前 LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并启用" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("settings save failed");
-    expect(screen.getByRole("button", { name: "启用当前 LLM" })).toBeEnabled();
+    expect(await screen.findByText("测试失败，配置没有保存")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("settings save failed");
+    expect(screen.getByRole("button", { name: "保存并启用" })).toBeEnabled();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai/activate", {
       method: "POST",
       headers: {
@@ -507,10 +544,10 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
     const providerList = within(screen.getByRole("navigation", { name: "LLM 列表" }));
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "启用当前 LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并启用" }));
 
     fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
-    fireEvent.submit(screen.getByRole("button", { name: "启用当前 LLM" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "保存并启用" }).closest("form")!);
 
     secondSaveDeferred.resolve(mockJsonResponse(successfulActivation));
     await waitFor(() => expect(screen.getByRole("button", { name: "LLM Mock" })).toBeInTheDocument());
@@ -1438,55 +1475,121 @@ describe("JournalEditor", () => {
 });
 
 describe("LlmSettingsPanel", () => {
-  test("shows LLM provider list and safe technical defaults", () => {
+  test("shows productized provider state and key status", () => {
     render(
       <LlmSettingsPanel
         settings={aiSettings}
         isBusy={false}
         onClose={vi.fn()}
-        onSave={vi.fn()}
+        onActivate={vi.fn()}
         onTest={vi.fn()}
+        onRevealApiKey={vi.fn()}
       />
     );
 
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
-    const providerList = within(screen.getByRole("navigation", { name: "LLM 列表" }));
-    expect(providerList.getByRole("button", { name: /Mock/ })).toHaveAttribute("aria-pressed", "true");
-    expect(providerList.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
-    expect(screen.getByText("会使用已保存的 LLM 配置，不会测试当前未保存草稿。")).toBeInTheDocument();
-    expect(screen.getByLabelText("超时")).toHaveAttribute("type", "number");
-    expect(screen.getByLabelText("API Key 已加载，值不显示")).toHaveValue("");
+    expect(screen.getByText("本地备用")).toBeInTheDocument();
+    expect(screen.getByText("默认预设")).toBeInTheDocument();
+    expect(screen.getByText("无需 API Key")).toBeInTheDocument();
+    expect(screen.queryByText("key ready")).not.toBeInTheDocument();
+    expect(screen.queryByText("no key")).not.toBeInTheDocument();
   });
 
-  test("shows missing active LLM without selecting the first configured item", () => {
+  test("shows file-backed key as masked preview and reveals on eye click", async () => {
+    const fileSettings = {
+      ...aiSettings,
+      activeProviderId: "deepseek",
+      providers: aiSettings.providers.map(provider =>
+        provider.id === "deepseek"
+          ? {
+              ...provider,
+              isActive: true,
+              hasApiKey: true,
+              source: "file",
+              apiKeyPreview: "sk-••••••••••••••••4A7C",
+              canRevealApiKey: true
+            }
+          : { ...provider, isActive: false }
+      )
+    };
+    const onRevealApiKey = vi.fn().mockResolvedValue({
+      providerId: "deepseek",
+      source: "file",
+      apiKey: "sk-file-backed-secret-4A7C"
+    });
+
     render(
       <LlmSettingsPanel
-        settings={missingActiveAiSettings}
+        settings={fileSettings}
         isBusy={false}
         onClose={vi.fn()}
-        onSave={vi.fn()}
+        onActivate={vi.fn()}
         onTest={vi.fn()}
+        onRevealApiKey={onRevealApiKey}
       />
     );
 
-    expect(screen.getByRole("heading", { name: "missing-provider" })).toBeInTheDocument();
-    expect(screen.getByText("当前 active LLM 在配置列表中不存在。请从左侧选择一个已配置的 LLM 后保存。")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Mock" })).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("sk-••••••••••••••••4A7C")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
+
+    expect(await screen.findByDisplayValue("sk-file-backed-secret-4A7C")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "隐藏 API Key" })).toBeInTheDocument();
+    expect(onRevealApiKey).toHaveBeenCalledWith("deepseek");
   });
 
-  test("tests selected provider and shows safe technical details", async () => {
+  test("shows environment key as loaded and not revealable", () => {
+    const envSettings = {
+      ...aiSettings,
+      activeProviderId: "openai",
+      providers: [
+        ...aiSettings.providers.map(provider => ({ ...provider, isActive: false })),
+        {
+          id: "openai",
+          type: "openai-compatible",
+          displayName: "OpenAI",
+          preset: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          model: "gpt-4.1-mini",
+          isEnabled: true,
+          isActive: true,
+          hasApiKey: true,
+          apiKeyPreview: "",
+          canRevealApiKey: false,
+          source: "environment",
+          timeoutSeconds: 45,
+          temperature: 0.2,
+          maxTokens: 1200,
+          stylePreset: "faithful",
+          lastTestStatus: "not-tested"
+        }
+      ]
+    };
+
+    render(
+      <LlmSettingsPanel
+        settings={envSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={vi.fn()}
+        onTest={vi.fn()}
+        onRevealApiKey={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("已从环境变量加载，不在界面显示")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看 API Key" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("environment-key-lock")).toBeInTheDocument();
+  });
+
+  test("tests current form with candidate settings and marks old result stale after edits", async () => {
     const onTest = vi.fn().mockResolvedValue({
-      isSuccess: false,
-      status: "unauthorized",
-      safeResponseSnippet: "",
-      httpStatus: 401,
+      isSuccess: true,
+      status: "success",
+      safeResponseSnippet: "{\"ok\":true}",
+      httpStatus: 200,
       latency: "00:00:00.1200000",
-      error: {
-        stage: "provider-call",
-        code: "unauthorized",
-        message: "LLM rejected the API key.",
-        technicalDetails: "httpStatus: 401 authorization: [redacted]"
-      }
+      error: null
     });
 
     render(
@@ -1494,150 +1597,195 @@ describe("LlmSettingsPanel", () => {
         settings={aiSettings}
         isBusy={false}
         onClose={vi.fn()}
-        onSave={vi.fn()}
+        onActivate={vi.fn()}
         onTest={onTest}
+        onRevealApiKey={vi.fn()}
       />
     );
 
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
-
-    expect(await screen.findByText("unauthorized")).toBeInTheDocument();
-    expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
-    expect(screen.getByText("安全技术详情")).toBeInTheDocument();
-    expect(screen.getByText("httpStatus: 401 authorization: [redacted]")).toBeInTheDocument();
-    expect(onTest).toHaveBeenCalledWith("deepseek");
-  });
-
-  test("shows safe failure result when saved LLM connection test rejects", async () => {
-    const onTest = vi.fn().mockRejectedValue(new Error("network down"));
-
-    render(
-      <LlmSettingsPanel
-        settings={aiSettings}
-        isBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-        onTest={onTest}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
-
-    expect(await screen.findByText("request_failed")).toBeInTheDocument();
-    expect(screen.getByText("network down")).toBeInTheDocument();
-    expect(screen.getByText("安全技术详情")).toBeInTheDocument();
-  });
-
-  test("clears stale connection result when editing unsaved provider fields", async () => {
-    const onTest = vi.fn().mockResolvedValue({
-      isSuccess: false,
-      status: "unauthorized",
-      safeResponseSnippet: "",
-      httpStatus: 401,
-      latency: "00:00:00.1200000",
-      error: {
-        stage: "provider-call",
-        code: "unauthorized",
-        message: "LLM rejected the API key.",
-        technicalDetails: "httpStatus: 401 authorization: [redacted]"
-      }
-    });
-
-    render(
-      <LlmSettingsPanel
-        settings={aiSettings}
-        isBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-        onTest={onTest}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
-
-    expect(await screen.findByText("unauthorized")).toBeInTheDocument();
-    expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
-
     fireEvent.change(screen.getByLabelText("模型"), { target: { value: "deepseek-next" } });
+    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
 
-    expect(screen.queryByText("unauthorized")).not.toBeInTheDocument();
-    expect(screen.queryByText("安全技术详情")).not.toBeInTheDocument();
+    await waitFor(() => expect(onTest).toHaveBeenCalled());
+    expect(onTest.mock.calls[0][0]).toBe("deepseek");
+    expect(onTest.mock.calls[0][1].providers.find((provider: AiProviderSaveRequest) => provider.id === "deepseek").model).toBe("deepseek-next");
+    expect(await screen.findByText("连接测试通过")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("模型"), { target: { value: "deepseek-latest" } });
+
+    expect(screen.getByText("测试结果已过期")).toBeInTheDocument();
   });
 
-  test("ignores stale connection result after switching provider", async () => {
-    const testDeferred = createDeferred<{
-      isSuccess: boolean;
-      status: string;
-      safeResponseSnippet: string;
-      httpStatus: number;
-      latency: string;
-      error: {
-        stage: string;
-        code: string;
-        message: string;
-        technicalDetails: string;
-      };
-    }>();
-    const onTest = vi.fn().mockReturnValue(testDeferred.promise);
-
-    render(
-      <LlmSettingsPanel
-        settings={aiSettings}
-        isBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-        onTest={onTest}
-      />
-    );
-
-    const providerList = within(screen.getByRole("navigation", { name: "LLM 列表" }));
-    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
-    fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
-
-    testDeferred.resolve({
-      isSuccess: false,
-      status: "unauthorized",
-      safeResponseSnippet: "",
-      httpStatus: 401,
-      latency: "00:00:00.1200000",
-      error: {
-        stage: "provider-call",
-        code: "unauthorized",
-        message: "LLM rejected the API key.",
-        technicalDetails: "httpStatus: 401 authorization: [redacted]"
+  test("save and activate keeps panel open and does not switch provider on failed activation", async () => {
+    const onActivate = vi.fn().mockResolvedValue({
+      saved: false,
+      settings: aiSettings,
+      testResult: {
+        isSuccess: false,
+        status: "missing_api_key",
+        safeResponseSnippet: "",
+        httpStatus: null,
+        latency: null,
+        error: {
+          stage: "configuration",
+          code: "missing_api_key",
+          message: "LLM API key is required.",
+          technicalDetails: "Provider key is empty."
+        }
       }
     });
 
-    await waitFor(() => expect(onTest).toHaveBeenCalledWith("deepseek"));
-    expect(screen.queryByText("unauthorized")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Mock" })).toBeInTheDocument();
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={onActivate}
+        onTest={vi.fn()}
+        onRevealApiKey={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并启用" }));
+
+    expect(await screen.findByText("测试失败，配置没有保存")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "DeepSeek" })).toBeInTheDocument();
   });
 
-  test("keeps numeric setting when a number input is cleared", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+  test("save and activate success shows today-page next step", async () => {
+    const activatedSettings = {
+      ...aiSettings,
+      activeProviderId: "deepseek",
+      providers: aiSettings.providers.map(provider =>
+        provider.id === "deepseek"
+          ? { ...provider, isActive: true, hasApiKey: true, source: "file", apiKeyPreview: "sk-••••••••••••••••4A7C", canRevealApiKey: true }
+          : { ...provider, isActive: false }
+      )
+    };
+    const onActivate = vi.fn().mockResolvedValue({
+      saved: true,
+      settings: activatedSettings,
+      testResult: {
+        isSuccess: true,
+        status: "success",
+        safeResponseSnippet: "{\"ok\":true}",
+        httpStatus: 200,
+        latency: "00:00:00.1200000",
+        error: null
+      }
+    });
 
     render(
       <LlmSettingsPanel
         settings={aiSettings}
         isBusy={false}
         onClose={vi.fn()}
-        onSave={onSave}
+        onActivate={onActivate}
         onTest={vi.fn()}
+        onRevealApiKey={vi.fn()}
       />
     );
 
-    fireEvent.change(screen.getByLabelText("超时"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "启用当前 LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并启用" }));
 
-    await waitFor(() => expect(onSave).toHaveBeenCalled());
-    const request = onSave.mock.calls[0][0] as AiSettingsSaveRequest;
-    expect(request.providers.find(provider => provider.id === "mock")?.timeoutSeconds).toBe(1);
+    expect(await screen.findByText("可以回到今日页重新整理")).toBeInTheDocument();
   });
 
+  test("save and activate clears manually entered api key after success", async () => {
+    const fileBackedDeepSeekSettings = {
+      ...aiSettings,
+      activeProviderId: "deepseek",
+      providers: aiSettings.providers.map(provider =>
+        provider.id === "deepseek"
+          ? {
+              ...provider,
+              isEnabled: true,
+              isActive: true,
+              hasApiKey: true,
+              source: "file",
+              apiKeyPreview: "sk-••••••••••••••••4A7C",
+              canRevealApiKey: true
+            }
+          : { ...provider, isActive: false }
+      )
+    };
+    const onActivate = vi.fn().mockResolvedValue({
+      saved: true,
+      settings: fileBackedDeepSeekSettings,
+      testResult: {
+        isSuccess: true,
+        status: "success",
+        safeResponseSnippet: "{\"ok\":true}",
+        httpStatus: 200,
+        latency: "00:00:00.1200000",
+        error: null
+      }
+    });
+
+    render(
+      <LlmSettingsPanel
+        settings={fileBackedDeepSeekSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={onActivate}
+        onTest={vi.fn()}
+        onRevealApiKey={vi.fn()}
+      />
+    );
+
+    const apiKeyInput = screen.getByLabelText("API Key");
+    fireEvent.change(apiKeyInput, { target: { value: "sk-new-secret-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并启用" }));
+
+    await screen.findByText("可以回到今日页重新整理");
+
+    expect(screen.getByLabelText("API Key")).not.toHaveValue("sk-new-secret-value");
+    expect(screen.getByDisplayValue("sk-••••••••••••••••4A7C")).toBeInTheDocument();
+  });
+
+  test("shows diagnostics when api key reveal fails", async () => {
+    const fileBackedDeepSeekSettings = {
+      ...aiSettings,
+      activeProviderId: "deepseek",
+      providers: aiSettings.providers.map(provider =>
+        provider.id === "deepseek"
+          ? {
+              ...provider,
+              isEnabled: true,
+              isActive: true,
+              hasApiKey: true,
+              source: "file",
+              apiKeyPreview: "sk-••••••••••••••••4A7C",
+              canRevealApiKey: true
+            }
+          : { ...provider, isActive: false }
+      )
+    };
+    const onRevealApiKey = vi.fn().mockRejectedValue(new Error("reveal failed"));
+
+    render(
+      <LlmSettingsPanel
+        settings={fileBackedDeepSeekSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onActivate={vi.fn()}
+        onTest={vi.fn()}
+        onRevealApiKey={onRevealApiKey}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
+
+    await screen.findByText("测试失败，配置没有保存");
+
+    expect(screen.queryByDisplayValue("sk-file-backed-secret-4A7C")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("sk-••••••••••••••••4A7C")).toBeInTheDocument();
+    expect(screen.getByText("reveal failed")).toBeInTheDocument();
+    expect(screen.getByText("request_failed")).toBeInTheDocument();
+    expect(screen.getByText("技术详情")).toBeInTheDocument();
+  });
 });
 
 describe("editor API client", () => {
