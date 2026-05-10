@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   JmfSection,
   JmfSectionDefinition,
@@ -72,12 +72,16 @@ export function JournalEditor({
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
   const [sourceMarkdown, setSourceMarkdown] = useState(editor.markdown);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const previousEditorRef = useRef<TodayEditorState | null>(null);
 
   useEffect(() => {
     setSections(editor.sections);
     setSourceMarkdown(editor.markdown);
     setEditingSectionId(null);
-    setIsSourceOpen(false);
+    if (previousEditorRef.current) {
+      setIsSourceOpen(false);
+    }
+    previousEditorRef.current = editor;
   }, [editor]);
 
   const orderById = useMemo(() => {
@@ -119,6 +123,8 @@ export function JournalEditor({
   useEffect(() => {
     onDirtyChange?.(hasDirtyEditingSection);
   }, [hasDirtyEditingSection, onDirtyChange]);
+
+  const isSourceSaveDisabled = isBusy || hasDirtyEditingSection;
 
   function resetSectionToBaseline(current: JmfSection[], sectionId: string) {
     const baselineSection = editor.sections.find(section => section.id === sectionId);
@@ -176,6 +182,14 @@ export function JournalEditor({
     }
 
     onSaveBlocks([{ id: section.id, content: section.content }]);
+  }
+
+  function saveSourceMarkdown() {
+    if (hasDirtyEditingSection) {
+      return;
+    }
+
+    onSaveSource(sourceMarkdown);
   }
 
   return (
@@ -239,11 +253,14 @@ export function JournalEditor({
             rows={14}
           />
           <div className="source-actions">
+            {hasDirtyEditingSection ? (
+              <p className="source-save-hint">先保存或取消正在编辑的段落，再保存源码。</p>
+            ) : null}
             <button
               type="button"
               className="editor-save-action"
-              onClick={() => onSaveSource(sourceMarkdown)}
-              disabled={isBusy}
+              onClick={saveSourceMarkdown}
+              disabled={isSourceSaveDisabled}
             >
               保存源码草稿
             </button>

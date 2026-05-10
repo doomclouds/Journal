@@ -786,6 +786,39 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  test("dirty inline block disables advanced source save without clearing local edits", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存但不能丢" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
+
+    expect(screen.getByRole("button", { name: "保存源码草稿" })).toBeDisabled();
+    expect(screen.getByText("先保存或取消正在编辑的段落，再保存源码。")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存但不能丢");
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "收起高级源码" }));
+
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存但不能丢");
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
+
+    expect(screen.getByRole("button", { name: "保存源码草稿" })).toBeDisabled();
+  });
+
   test("inserting optional block resets regenerate confirmation", async () => {
     const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
@@ -1258,6 +1291,29 @@ describe("App", () => {
     await waitFor(() =>
       expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument()
     );
+  });
+
+  test("keeps advanced source drawer open with edited markdown when source save fails", async () => {
+    const updatedMarkdown = "# 2026-05-08\n\n保存失败时留在抽屉里";
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { ok: false, status: 500, body: { error: "source save failed" } }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: updatedMarkdown }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("source save failed");
+    expect(screen.getByRole("button", { name: "收起高级源码" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   test("ignores stale block save response when a later raw input refresh wins", async () => {
