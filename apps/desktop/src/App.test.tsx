@@ -985,7 +985,7 @@ describe("App", () => {
     render(<App />);
 
     expect((await screen.findAllByText("需要处理")).length).toBeGreaterThan(0);
-    expect(screen.getByText("正式日记没有被覆盖，原始表达仍然保留。")).toBeInTheDocument();
+    expect(screen.getAllByText("正式日记没有被覆盖，原始表达仍然保留。").length).toBeGreaterThan(0);
     expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "确认写入正式日记" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
@@ -1014,7 +1014,7 @@ describe("App", () => {
 
     render(<App />);
 
-    await screen.findByText("正式日记没有被覆盖，原始表达仍然保留。");
+    expect((await screen.findAllByText("正式日记没有被覆盖，原始表达仍然保留。")).length).toBeGreaterThan(0);
 
     expect(screen.getAllByRole("button", { name: "重新整理" })).toHaveLength(1);
 
@@ -1184,15 +1184,14 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "源码模式" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: updatedMarkdown }
     });
     fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown)
-    );
+    await waitFor(() => expect(screen.getByText("源码保存后的内容")).toBeInTheDocument());
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/source", {
       method: "PUT",
       headers: {
@@ -1248,7 +1247,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "源码模式" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
     const sourceEditor = screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" });
     fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
 
@@ -1256,7 +1255,9 @@ describe("App", () => {
 
     sourceSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    await waitFor(() => expect(sourceEditor).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument()
+    );
   });
 
   test("ignores stale block save response when a later raw input refresh wins", async () => {
@@ -1608,7 +1609,41 @@ describe("JournalEditor", () => {
     expect(screen.queryByDisplayValue("未保存的本地区块内容")).not.toBeInTheDocument();
   });
 
-  test("saves full markdown in source mode", () => {
+  test("keeps advanced source drawer hidden until opened and collapses it again", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(editorMarkdown);
+
+    fireEvent.click(screen.getByRole("button", { name: "收起高级源码" }));
+
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
+  });
+
+  test("removes source mode tabs as the default editor interaction", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "区块模式" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "源码模式" })).not.toBeInTheDocument();
+  });
+
+  test("saves full markdown from advanced source drawer", () => {
     const onSaveSource = vi.fn();
     render(
       <JournalEditor
@@ -1619,7 +1654,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: "# 2026-05-08\n\n更新后的源码" }
     });
@@ -1655,7 +1690,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: "# 未保存的本地源码" }
     });
@@ -1669,11 +1704,11 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(editorMarkdown);
+    expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("# 未保存的本地源码")).not.toBeInTheDocument();
   });
 
-  test("shows attention validation issue message and repair hint", () => {
+  test("shows needs-attention explanation with validation issue message and repair hint", () => {
     render(
       <JournalEditor
         editor={createEditorState({
@@ -1695,6 +1730,13 @@ describe("JournalEditor", () => {
       />
     );
 
+    expect(screen.getByRole("region", { name: "需要处理" })).toHaveClass(
+      "attention-panel",
+      "productized-attention-panel"
+    );
+    expect(screen.getByText("这篇草稿需要处理")).toBeInTheDocument();
+    expect(screen.getByText("需要处理")).toBeInTheDocument();
+    expect(screen.getByText("正式日记没有被覆盖，原始表达仍然保留。")).toBeInTheDocument();
     expect(screen.getByText("缺少今日重点区块")).toBeInTheDocument();
     expect(screen.getByText("请补回 today-focus 区块后再保存。")).toBeInTheDocument();
   });
@@ -1712,7 +1754,7 @@ describe("JournalEditor", () => {
     expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("tab", { name: "源码模式" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开高级源码" }));
 
     expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toBeDisabled();
   });

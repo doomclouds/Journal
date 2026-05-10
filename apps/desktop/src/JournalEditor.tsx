@@ -9,8 +9,6 @@ import { InsertBlockMenu } from "./InsertBlockMenu";
 import { JournalBlockCard } from "./JournalBlockCard";
 import { ValidationPanel } from "./ValidationPanel";
 
-type EditorMode = "blocks" | "source";
-
 type JournalEditorProps = {
   editor: TodayEditorState;
   isBusy: boolean;
@@ -70,7 +68,7 @@ export function JournalEditor({
   onLocalInteraction,
   onDirtyChange
 }: JournalEditorProps) {
-  const [mode, setMode] = useState<EditorMode>("blocks");
+  const [isSourceOpen, setIsSourceOpen] = useState(false);
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
   const [sourceMarkdown, setSourceMarkdown] = useState(editor.markdown);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
@@ -79,6 +77,7 @@ export function JournalEditor({
     setSections(editor.sections);
     setSourceMarkdown(editor.markdown);
     setEditingSectionId(null);
+    setIsSourceOpen(false);
   }, [editor]);
 
   const orderById = useMemo(() => {
@@ -181,68 +180,54 @@ export function JournalEditor({
 
   return (
     <section className="journal-editor" aria-label="JMF 编辑器">
-      <div className="journal-editor-toolbar">
-        <div role="tablist" aria-label="编辑模式">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "blocks"}
-            onClick={() => {
-              onLocalInteraction?.();
-              setMode("blocks");
-            }}
-          >
-            区块模式
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "source"}
-            onClick={() => {
-              onLocalInteraction?.();
-              setMode("source");
-            }}
-          >
-            源码模式
-          </button>
+      <div className="journal-editor-toolbar productized-editor-toolbar">
+        <div>
+          <span className="eyebrow">日记纸面</span>
+          <p>默认阅读，点击段落即可编辑。</p>
         </div>
-        {mode === "source" ? (
-          <button
-            type="button"
-            className="editor-save-action"
-            onClick={() => onSaveSource(sourceMarkdown)}
-            disabled={isBusy}
-          >
-            保存源码草稿
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="secondary-action"
+          onClick={() => {
+            onLocalInteraction?.();
+            setIsSourceOpen(current => !current);
+          }}
+        >
+          {isSourceOpen ? "收起高级源码" : "展开高级源码"}
+        </button>
       </div>
 
       <ValidationPanel validation={editor.validation} />
 
-      {mode === "blocks" ? (
-        <div className="journal-editor-blocks">
-          <InsertBlockMenu
-            sections={insertableSections}
+      <div className="journal-editor-blocks">
+        <InsertBlockMenu
+          sections={insertableSections}
+          disabled={isBusy}
+          onInsert={insertSection}
+        />
+        {sections.map(section => (
+          <JournalBlockCard
+            key={section.id}
+            section={section}
+            value={section.content}
             disabled={isBusy}
-            onInsert={insertSection}
+            isEditing={editingSectionId === section.id}
+            onEdit={() => editSection(section.id)}
+            onCancel={() => cancelSection(section.id)}
+            onChange={content => updateSectionContent(section.id, content)}
+            onSave={() => saveSection(section.id)}
           />
-          {sections.map(section => (
-            <JournalBlockCard
-              key={section.id}
-              section={section}
-              value={section.content}
-              disabled={isBusy}
-              isEditing={editingSectionId === section.id}
-              onEdit={() => editSection(section.id)}
-              onCancel={() => cancelSection(section.id)}
-              onChange={content => updateSectionContent(section.id, content)}
-              onSave={() => saveSection(section.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="journal-editor-source">
+        ))}
+      </div>
+
+      {isSourceOpen ? (
+        <section className="journal-source-drawer" aria-label="高级 JMF 源码">
+          <div className="source-drawer-head">
+            <div>
+              <h2>高级：JMF 源码</h2>
+              <p>这里显示 front matter、JMF marker 和技术细节。</p>
+            </div>
+          </div>
           <textarea
             aria-label="编辑完整 JMF Markdown"
             value={sourceMarkdown}
@@ -253,8 +238,18 @@ export function JournalEditor({
             }}
             rows={14}
           />
-        </div>
-      )}
+          <div className="source-actions">
+            <button
+              type="button"
+              className="editor-save-action"
+              onClick={() => onSaveSource(sourceMarkdown)}
+              disabled={isBusy}
+            >
+              保存源码草稿
+            </button>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }
