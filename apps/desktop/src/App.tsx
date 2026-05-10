@@ -35,6 +35,8 @@ function formatRawInputTime(value: string) {
   return time?.[1] ?? value;
 }
 
+const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补充或重新整理。";
+
 export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
@@ -89,6 +91,12 @@ export default function App() {
     setHasLocalUnsavedChanges(false);
   }, [editor]);
 
+  useEffect(() => {
+    if (!hasLocalUnsavedChanges && validationError === localUnsavedChangeMessage) {
+      setValidationError("");
+    }
+  }, [hasLocalUnsavedChanges, validationError]);
+
   const today = editor?.today ?? null;
 
   const title = useMemo(() => {
@@ -131,9 +139,11 @@ export default function App() {
   const titleDescription = inputCount > 0
     ? `已保留 ${inputCount} 条原始表达，当前整理稿可以继续确认或微调。`
     : "今天还未记录。先写一句自然语言，Journal 会保留原话。";
-  const composeHint = pendingRegenerateDraft
-    ? "这会覆盖当前草稿内容，但不会影响正式日记。"
-    : "使用当前 LLM 重新整理当前草稿。";
+  const composeHint = hasLocalUnsavedChanges
+    ? localUnsavedChangeMessage
+    : pendingRegenerateDraft
+      ? "这会覆盖当前草稿内容，但不会影响正式日记。"
+      : "使用当前 LLM 重新整理当前草稿。";
   const structureStatusText = loadState === "loading"
     ? "正在读取今天的整理状态。"
     : editor?.validation.isValid
@@ -150,6 +160,12 @@ export default function App() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetPendingRegenerateDraft();
+
+    if (hasLocalUnsavedChanges) {
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     const trimmedInput = input.trim();
 
     if (!trimmedInput) {
@@ -290,6 +306,12 @@ export default function App() {
   }
 
   async function handleRegenerateDraft(providerId?: string) {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     resetPendingRegenerateDraft();
@@ -330,6 +352,12 @@ export default function App() {
   }
 
   async function handleRegenerateCurrentDraft() {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     if (!pendingRegenerateDraft) {
       setPendingRegenerateDraft(true);
       return;
@@ -418,14 +446,14 @@ export default function App() {
                 rows={3}
                 disabled={isBusy}
               />
-              <button type="submit" className="primary-action" disabled={isBusy}>
+              <button type="submit" className="primary-action" disabled={isBusy || hasLocalUnsavedChanges}>
                 生成草稿
               </button>
             </form>
             {hasEditableJournal ? (
               <div className="compose-secondary-actions">
                 <p className="compose-hint">{composeHint}</p>
-                <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy}>
+                <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy || hasLocalUnsavedChanges}>
                   重新整理
                 </button>
               </div>

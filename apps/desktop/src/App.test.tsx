@@ -742,7 +742,7 @@ describe("App", () => {
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
   });
 
-  test("editing journal content resets regenerate confirmation", async () => {
+  test("editing journal content resets regenerate confirmation and blocks refresh while dirty", async () => {
     const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -757,12 +757,18 @@ describe("App", () => {
       target: { value: "补充新的今日重点" }
     });
 
-    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
+    expect(screen.getByText("先保存或取消当前编辑，再继续补充或重新整理。")).toBeInTheDocument();
+    expect(regenerateButton).toBeDisabled();
 
     fireEvent.click(regenerateButton);
 
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
-    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("补充新的今日重点");
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
+    expect(regenerateButton).toBeEnabled();
   });
 
   test("dirty inline block status disables formal save until cancel", async () => {
@@ -784,6 +790,37 @@ describe("App", () => {
     expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  test("dirty inline block blocks raw input submit and regeneration refresh", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存的本地改动" }
+    });
+    fireEvent.change(screen.getByLabelText("补充今天的自然语言输入"), {
+      target: { value: "这条 raw input 不能刷新掉本地编辑" }
+    });
+
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+    expect(screen.getByText("先保存或取消当前编辑，再继续补充或重新整理。")).toBeInTheDocument();
+
+    const inputForm = screen.getByLabelText("补充今天的自然语言输入").closest("form");
+    if (!inputForm) {
+      throw new Error("Expected raw input form");
+    }
+
+    fireEvent.submit(inputForm);
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的本地改动");
   });
 
   test("dirty inline block disables advanced source save without clearing local edits", async () => {
@@ -1221,10 +1258,20 @@ describe("App", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
       target: { value: updatedMarkdown }
     });
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+
     fireEvent.click(screen.getByRole("button", { name: "保存源码草稿" }));
 
     await waitFor(() => expect(screen.getByText("源码保存后的内容")).toBeInTheDocument());
     expect(screen.queryByRole("textbox", { name: "编辑完整 JMF Markdown" })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeEnabled();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/source", {
       method: "PUT",
       headers: {
@@ -1313,55 +1360,20 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("source save failed");
     expect(screen.getByRole("button", { name: "收起高级源码" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown);
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  test("ignores stale block save response when a later raw input refresh wins", async () => {
-    const blockSaveDeferred = createDeferred<Response>();
-    const postInputDeferred = createDeferred<Response>();
-    const inputRefreshDeferred = createDeferred<Response>();
-    const staleEditor = createEditorState({
-      status: "reviewing",
-      markdown: editorMarkdown.replace("推进 Phase 3", "旧保存响应"),
-      sections: [
-        {
-          id: "today-focus",
-          title: "今日重点",
-          content: "旧保存响应",
-          kind: "required",
-          isEditableInBlockMode: true
-        }
-      ]
-    });
-    const latestEditor = createEditorState({
-      status: "processed",
-      canConfirm: false,
-      today: processedToday(),
-      markdown: editorMarkdown.replace("推进 Phase 3", "最新输入刷新"),
-      sections: [
-        {
-          id: "today-focus",
-          title: "今日重点",
-          content: "最新输入刷新",
-          kind: "required",
-          isEditableInBlockMode: true
-        }
-      ]
-    });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
-      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
-      .mockReturnValueOnce(blockSaveDeferred.promise)
-      .mockReturnValueOnce(postInputDeferred.promise)
-      .mockReturnValueOnce(inputRefreshDeferred.promise);
+  test("blocks raw input refresh while inline dirty so local block edits stay visible", async () => {
+    const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     const input = screen.getByLabelText("补充今天的自然语言输入");
     const inputForm = input.closest("form");
     if (!inputForm) {
@@ -1369,21 +1381,14 @@ describe("App", () => {
     }
 
     fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
-    fireEvent.change(focusEditor, { target: { value: "准备保存但会变旧" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "准备保存的本地内容" }
+    });
     fireEvent.submit(inputForm);
 
-    postInputDeferred.resolve(mockJsonResponse(reviewingToday));
-    await Promise.resolve();
-    inputRefreshDeferred.resolve(mockJsonResponse(latestEditor));
-
-    await waitFor(() => expect(screen.getByText("最新输入刷新")).toBeInTheDocument());
-
-    blockSaveDeferred.resolve(mockJsonResponse(staleEditor));
-
-    await Promise.resolve();
-    await waitFor(() => expect(screen.getByText("最新输入刷新")).toBeInTheDocument());
-    expect(screen.queryByDisplayValue("旧保存响应")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("准备保存的本地内容");
   });
 
   test("restores mocked fetch between tests", () => {
@@ -1448,7 +1453,7 @@ describe("JournalEditor", () => {
     expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("完成前端编辑器组件");
   });
 
-  test("switching sections reverts previous dirty inline block before editing the next one", () => {
+  test("switching sections keeps the dirty inline block active until it is saved or canceled", () => {
     render(
       <JournalEditor
         editor={createEditorState({
@@ -1479,11 +1484,19 @@ describe("JournalEditor", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "A 段未保存内容" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "编辑 昨天回顾" }));
 
-    expect(screen.getByRole("textbox", { name: "编辑 昨天回顾" })).toHaveValue("昨天完成 Phase 2");
-    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
-    expect(screen.queryByText("A 段未保存内容")).not.toBeInTheDocument();
+    const nextSectionEditButton = screen.getByRole("button", { name: "编辑 昨天回顾" });
+    const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
+    expect(nextSectionEditButton).toBeDisabled();
+    expect(insertButton).toBeDisabled();
+
+    fireEvent.click(nextSectionEditButton);
+    fireEvent.click(insertButton);
+
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("A 段未保存内容");
+    expect(screen.queryByRole("textbox", { name: "编辑 昨天回顾" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.getByText("昨天完成 Phase 2")).toBeInTheDocument();
   });
 
   test("cancels inline block editing and restores preview text", () => {

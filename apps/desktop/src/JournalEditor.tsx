@@ -119,10 +119,12 @@ export function JournalEditor({
 
     return currentSection.content !== baselineSection.content;
   }, [editingSectionId, editor.sections, sections]);
+  const hasDirtySource = sourceMarkdown !== editor.markdown;
+  const hasLocalDirty = hasDirtyEditingSection || hasDirtySource;
 
   useEffect(() => {
-    onDirtyChange?.(hasDirtyEditingSection);
-  }, [hasDirtyEditingSection, onDirtyChange]);
+    onDirtyChange?.(hasLocalDirty);
+  }, [hasLocalDirty, onDirtyChange]);
 
   const isSourceSaveDisabled = isBusy || hasDirtyEditingSection;
 
@@ -145,6 +147,10 @@ export function JournalEditor({
   }
 
   function editSection(sectionId: string) {
+    if (hasDirtyEditingSection && editingSectionId !== sectionId) {
+      return;
+    }
+
     setSections(current =>
       editingSectionId && editingSectionId !== sectionId
         ? resetSectionToBaseline(current, editingSectionId)
@@ -161,6 +167,10 @@ export function JournalEditor({
   }
 
   function insertSection(definition: JmfSectionDefinition) {
+    if (hasDirtyEditingSection) {
+      return;
+    }
+
     onLocalInteraction?.();
     setSections(current =>
       [...resetCurrentEditingSection(current), createSectionFromDefinition(definition)]
@@ -172,7 +182,6 @@ export function JournalEditor({
   function cancelSection(sectionId: string) {
     setSections(current => resetSectionToBaseline(current, sectionId));
     setEditingSectionId(null);
-    onDirtyChange?.(false);
   }
 
   function saveSection(sectionId: string) {
@@ -216,7 +225,7 @@ export function JournalEditor({
       <div className="journal-editor-blocks">
         <InsertBlockMenu
           sections={insertableSections}
-          disabled={isBusy}
+          disabled={isBusy || hasDirtyEditingSection}
           onInsert={insertSection}
         />
         {sections.map(section => (
@@ -224,7 +233,7 @@ export function JournalEditor({
             key={section.id}
             section={section}
             value={section.content}
-            disabled={isBusy}
+            disabled={isBusy || (hasDirtyEditingSection && editingSectionId !== section.id)}
             isEditing={editingSectionId === section.id}
             onEdit={() => editSection(section.id)}
             onCancel={() => cancelSection(section.id)}
