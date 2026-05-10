@@ -77,7 +77,7 @@ public sealed class TodayJournalService
         var sourceRawInputIds = inputs.Select(rawInput => rawInput.Id).ToArray();
 
         var aiResult = await _aiProvider.GenerateAsync(
-            new JournalAiGenerationRequest(date, inputs, now, new JournalAiProviderSettings()),
+            new JournalAiGenerationRequest(date, inputs, now, CreateDefaultMockProviderSettings()),
             cancellationToken);
         if (!aiResult.IsSuccess || aiResult.AiJson is null)
         {
@@ -326,6 +326,9 @@ public sealed class TodayJournalService
 
     private static IReadOnlyList<string> ToMessages(IReadOnlyList<JmfValidationIssue> issues) =>
         issues.Select(issue => issue.Message).ToArray();
+
+    private static JournalAiProviderSettings CreateDefaultMockProviderSettings() =>
+        JournalAiSettings.CreateDefault().Providers.Single(provider => provider.Id == "mock");
 
     private static void ValidateBlockDraftRequestShape(JournalBlockEditRequest request)
     {

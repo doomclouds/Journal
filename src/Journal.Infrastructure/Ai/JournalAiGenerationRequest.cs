@@ -7,5 +7,3 @@ public sealed record JournalAiGenerationRequest(
     IReadOnlyList<RawInput> RawInputs,
     DateTimeOffset GeneratedAt,
     JournalAiProviderSettings Settings);
-
-public sealed record JournalAiProviderSettings;

@@ -1,0 +1,69 @@
+using Journal.Domain.Entries;
+
+namespace Journal.Infrastructure.Ai;
+
+public sealed record JournalAiProviderSettings(
+    string Id,
+    string Type,
+    string DisplayName,
+    string Preset,
+    string BaseUrl,
+    string Model,
+    string ApiKey,
+    bool IsEnabled,
+    int TimeoutSeconds,
+    double Temperature,
+    int MaxTokens,
+    string StylePreset)
+{
+    private const string PromptVersion = "journal-entry-json-v1";
+
+    public bool IsMock =>
+        string.Equals(Id, "mock", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Type, "mock", StringComparison.OrdinalIgnoreCase);
+
+    public JournalAiMetadata ToMetadata() =>
+        IsMock
+            ? JournalAiMetadata.Mock
+            : new(Id, string.IsNullOrWhiteSpace(Model) ? "mock-journal" : Model, PromptVersion);
+}
+
+public sealed record JournalAiProviderView(
+    string Id,
+    string Type,
+    string DisplayName,
+    string Preset,
+    string BaseUrl,
+    string Model,
+    bool IsEnabled,
+    bool IsActive,
+    bool HasApiKey,
+    string Source,
+    int TimeoutSeconds,
+    double Temperature,
+    int MaxTokens,
+    string StylePreset,
+    string LastTestStatus);
+
+public sealed record JournalAiSettingsView(
+    string ActiveProviderId,
+    string Runtime,
+    IReadOnlyList<JournalAiProviderView> Providers);
+
+public sealed record JournalAiProviderSaveRequest(
+    string Id,
+    string Type,
+    string DisplayName,
+    string Preset,
+    string BaseUrl,
+    string Model,
+    string ApiKey,
+    bool IsEnabled,
+    int TimeoutSeconds,
+    double Temperature,
+    int MaxTokens,
+    string StylePreset);
+
+public sealed record JournalAiSettingsSaveRequest(
+    string ActiveProviderId,
+    IReadOnlyList<JournalAiProviderSaveRequest> Providers);

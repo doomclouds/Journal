@@ -20,7 +20,7 @@ public sealed class MockAiAndJmfTests
         };
 
         var result = await new MockAiProvider().GenerateAsync(
-            new JournalAiGenerationRequest(date, inputs, generatedAt, new JournalAiProviderSettings()),
+            new JournalAiGenerationRequest(date, inputs, generatedAt, CreateDefaultMockProviderSettings()),
             CancellationToken.None);
         var aiJson = Assert.IsType<JournalAiJson>(result.AiJson);
 
@@ -299,4 +299,7 @@ public sealed class MockAiAndJmfTests
 
     private static int CountSectionMarkers(string markdown) =>
         Regex.Matches(markdown, @"<!--\s*/?journal:section\b").Count;
+
+    private static JournalAiProviderSettings CreateDefaultMockProviderSettings() =>
+        JournalAiSettings.CreateDefault().Providers.Single(provider => provider.Id == "mock");
 }
