@@ -1138,6 +1138,30 @@ describe("App", () => {
     });
   });
 
+  test("keeps failed block save inline dirty and unavailable for formal save", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { ok: false, status: 500, body: { error: "block save failed" } }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "保存失败时不要丢" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("block save failed");
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("保存失败时不要丢");
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认保存" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   test("saves source edits through editor endpoint and updates editor state", async () => {
     const updatedMarkdown = "# 2026-05-08\n\n源码保存后的内容";
     const fetchMock = mockFetchSequence([
@@ -1192,19 +1216,23 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
     const saveButton = screen.getByRole("button", { name: "保存这一段" });
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     const confirmButton = screen.getByRole("button", { name: "保存日记" });
 
     fireEvent.click(saveButton);
 
+    expect(saveButton).toBeDisabled();
+    expect(focusEditor).toBeDisabled();
     expect(confirmButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeEnabled()
     );
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(confirmButton).toBeEnabled();
   });
 
@@ -1360,7 +1388,7 @@ describe("JournalEditor", () => {
     expect(onSaveBlocks).toHaveBeenCalledWith([
       { id: "today-focus", content: "完成前端编辑器组件" }
     ]);
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("完成前端编辑器组件");
   });
 
   test("switching sections reverts previous dirty inline block before editing the next one", () => {

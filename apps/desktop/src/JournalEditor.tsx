@@ -177,8 +177,6 @@ export function JournalEditor({
     }
 
     onSaveBlocks([{ id: section.id, content: section.content }]);
-    setEditingSectionId(null);
-    onDirtyChange?.(false);
   }
 
   return (
