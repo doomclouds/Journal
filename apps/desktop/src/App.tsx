@@ -87,7 +87,8 @@ export default function App() {
 
   const canConfirm = Boolean(editor?.canConfirm && today?.draft && today.status !== "attention");
   const statusLabel = today?.status ?? loadState;
-  const activeProviderName = aiSettings?.providers.find(provider => provider.isActive)?.displayName ?? "Mock";
+  const activeProviderName = aiSettings?.providers.find(provider => provider.isActive)?.displayName
+    ?? (aiSettings?.activeProviderId ? aiSettings.activeProviderId : "Mock");
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
@@ -280,7 +281,7 @@ export default function App() {
         <div className="status-strip" aria-label="运行状态">
           <span className={`status-pill status-${statusLabel}`}>{statusLabel}</span>
           <span className="api-pill">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
-          <button type="button" className="llm-status-pill" onClick={() => setIsLlmPanelOpen(true)}>
+          <button type="button" className="llm-status-pill" aria-label={`LLM ${activeProviderName}`} onClick={() => setIsLlmPanelOpen(true)}>
             LLM {activeProviderName}
           </button>
         </div>
@@ -394,7 +395,7 @@ export default function App() {
           {canConfirm ? (
             <section className="confirm-panel" aria-label="草稿确认">
               <strong>草稿可以确认</strong>
-              <p>确认后更新当天正式 Markdown；阶段 2 不创建版本快照。</p>
+              <p>确认后更新当天正式 Markdown；当前版本不创建版本快照。</p>
               <button type="button" className="primary-action" onClick={handleConfirm} disabled={isBusy}>
                 确认写入正式日记
               </button>

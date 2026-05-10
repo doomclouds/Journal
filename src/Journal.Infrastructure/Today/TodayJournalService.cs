@@ -113,7 +113,7 @@ public sealed class TodayJournalService
             var attentionDraft = new JournalDraft(
                 date,
                 JournalStatus.Attention,
-                RenderAttentionMarkdown("AI provider failed", errors),
+                RenderAttentionMarkdown("LLM generation failed", errors),
                 sourceRawInputIds,
                 errors,
                 now);
@@ -369,7 +369,7 @@ public sealed class TodayJournalService
     {
         if (error is null)
         {
-            return ["AI provider failed."];
+            return ["LLM generation failed."];
         }
 
         var messages = new List<string>();
@@ -388,7 +388,7 @@ public sealed class TodayJournalService
             messages.Add($"Technical details: {error.TechnicalDetails}");
         }
 
-        return messages.Count > 0 ? messages : ["AI provider failed."];
+        return messages.Count > 0 ? messages : ["LLM generation failed."];
     }
 
     private static string RenderAttentionMarkdown(string title, IReadOnlyList<string> errors)

@@ -302,6 +302,23 @@ public sealed class JournalAiSettingsTests
         Assert.DoesNotContain("openai-secret", JsonSerializer.Serialize(view));
     }
 
+    [Fact]
+    public async Task ReadEffectiveAsync_PreservesUnknownEnvironmentProviderOverride()
+    {
+        using var workspace = TempWorkspace.Create();
+        var service = CreateService(workspace.Root, new Dictionary<string, string?>
+        {
+            ["JOURNAL_AI_PROVIDER"] = "missing-provider"
+        });
+
+        var effective = await service.ReadEffectiveAsync(CancellationToken.None);
+        var view = await service.ReadViewAsync(CancellationToken.None);
+
+        Assert.Equal("missing-provider", effective.ActiveProviderId);
+        Assert.Equal("missing-provider", view.ActiveProviderId);
+        Assert.DoesNotContain(view.Providers, provider => provider.IsActive);
+    }
+
     private static JournalAiSettingsService CreateService(string root, IReadOnlyDictionary<string, string?> env) =>
         new(
             new JournalAiSettingsStore(new LocalJournalPaths(new JournalStorageOptions(root))),

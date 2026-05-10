@@ -10,6 +10,8 @@
 - [阶段 3 设计](./docs/superpowers/specs/2026-05-09-phase-3-jmf-editor-design.md)
 - [阶段 3 实施计划](./docs/superpowers/plans/2026-05-09-phase-3-jmf-editor-implementation-plan.md)
 - [阶段 3 高保真原型](./docs/superpowers/specs/2026-05-09-phase-3-jmf-editor-prototype.html)
+- [阶段 5 设计](./docs/superpowers/specs/2026-05-10-ai-provider-integration-design.md)
+- [阶段 5 实施归档](./docs/superpowers/archives/2026-05/2026-05-10-ai-provider-integration-archives.md)
 - [产品故事演示](./docs/product/journal-product-story.html)
 
 ## 阶段 1：应用框架骨架
@@ -19,7 +21,7 @@
 不包含：
 
 - 日记输入和保存
-- AI Provider
+- 真实 LLM 接入
 - Markdown/JMF 生成
 - SQLite 索引
 - 安装包
@@ -51,7 +53,7 @@ POST http://localhost:5057/journal/today/draft/confirm
 
 今日工作台仍然是只读 Markdown 预览，不提供块编辑和源码编辑。
 
-阶段 2 不包含版本快照、SQLite 索引和真实 AI Provider。这些能力按新路线图进入后续阶段。
+阶段 2 不包含版本快照、SQLite 索引和真实 LLM 接入。这些能力按新路线图进入后续阶段。
 
 ## 阶段 3：JMF 编辑模式与结构校验
 
@@ -84,7 +86,27 @@ PUT http://localhost:5057/journal/today/editor/source
 - 校验失败会写入 `attention` draft 和修复提示，不覆盖正式 entry。
 - 只有点击“确认写入正式日记”后才会更新 `entries/` 下的正式 Markdown。
 
-阶段 3 仍不包含版本快照、SQLite 索引、真实 AI Provider、AI 改写、自动保存和多日期浏览。
+阶段 3 仍不包含版本快照、SQLite 索引、真实 LLM 接入、AI 改写、自动保存和多日期浏览。
+
+## 阶段 5：真实 LLM Provider 接入
+
+当前已交付范围建立在阶段 3 的 JMF 草稿/编辑/确认链路之上，并补上真实 OpenAI-compatible LLM 配置与调用：
+
+```text
+自然语言输入 -> Raw input 持久化 -> Mock 或真实 LLM JSON -> JMF Markdown 草稿
+  -> block/source edit with JMF validation
+  -> 用户确认
+  -> 正式 Markdown 文件
+```
+
+阶段 5 已交付：
+
+- 后端支持 `Mock` 与真实 OpenAI-compatible LLM，当前通过 `%LocalAppData%/Journal/.journal/settings/ai-providers.json` 与环境变量共同决定 active LLM。
+- 新增 `GET/PUT /settings/ai`、`POST /settings/ai/test`、`POST /journal/today/draft/regenerate`，用于读取/保存 LLM 配置、测试已保存配置、按指定 LLM 重新整理今日草稿。
+- 真实 LLM 输出仍只能返回 `JournalAiJson`，并继续经过服务端校验、`raw-inputs` 保护和 JMF renderer 后才会进入 `reviewing` 或 `attention` draft。
+- 顶部状态与配置面板统一使用 `LLM` 术语；未配置 key 时默认 Mock，真实 LLM 失败会进入 `attention` draft，不会静默回退或覆盖正式 entry。
+
+阶段 5 仍不包含版本快照、SQLite 索引、AI 改写聊天、自动保存、多日期浏览和安装包。
 
 ## 环境要求
 

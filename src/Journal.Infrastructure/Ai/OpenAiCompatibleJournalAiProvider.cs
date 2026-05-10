@@ -40,7 +40,7 @@ public sealed class OpenAiCompatibleJournalAiProvider : IJournalAiProvider
                 runResult.Error ?? JournalAiSafeError.Create(
                     "runtime",
                     "provider_error",
-                    "AI provider returned no JSON result.",
+                    "LLM returned no JSON result.",
                     runResult.SafeResponseSnippet));
     }
 
@@ -85,7 +85,7 @@ public sealed class OpenAiCompatibleJournalAiProvider : IJournalAiProvider
             status,
             runResult.HttpStatus,
             runResult.Latency,
-            runResult.Error ?? JournalAiSafeError.Create("runtime", status, "AI provider health check failed.", runResult.SafeResponseSnippet));
+            runResult.Error ?? JournalAiSafeError.Create("runtime", status, "LLM health check failed.", runResult.SafeResponseSnippet));
     }
 
     private static OpenAiCompatibleRunRequest CreateRunRequest(
@@ -115,12 +115,12 @@ public sealed class OpenAiCompatibleJournalAiProvider : IJournalAiProvider
                 || !document.RootElement.TryGetProperty("ok", out var ok)
                 || ok.ValueKind != JsonValueKind.True)
             {
-                return JournalAiSafeError.Create("runtime", "invalid_json", "AI provider health check returned invalid JSON.", safeResponseSnippet);
+                return JournalAiSafeError.Create("runtime", "invalid_json", "LLM health check returned invalid JSON.", safeResponseSnippet);
             }
         }
         catch (JsonException exception)
         {
-            return JournalAiSafeError.Create("runtime", "invalid_json", "AI provider health check returned invalid JSON.", exception.Message);
+            return JournalAiSafeError.Create("runtime", "invalid_json", "LLM health check returned invalid JSON.", exception.Message);
         }
 
         return null;
@@ -130,17 +130,17 @@ public sealed class OpenAiCompatibleJournalAiProvider : IJournalAiProvider
     {
         if (string.IsNullOrWhiteSpace(settings.ApiKey))
         {
-            return JournalAiSafeError.Create("configuration", "missing_api_key", "AI provider API key is required.", "Provider key is empty.");
+            return JournalAiSafeError.Create("configuration", "missing_api_key", "LLM API key is required.", "Provider key is empty.");
         }
 
         if (string.IsNullOrWhiteSpace(settings.Model))
         {
-            return JournalAiSafeError.Create("configuration", "missing_model", "AI provider model is required.", "Provider model is empty.");
+            return JournalAiSafeError.Create("configuration", "missing_model", "LLM model is required.", "Provider model is empty.");
         }
 
         if (!Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out _))
         {
-            return JournalAiSafeError.Create("configuration", "invalid_base_url", "AI provider base URL is invalid.", "Provider base URL is not absolute.");
+            return JournalAiSafeError.Create("configuration", "invalid_base_url", "LLM base URL is invalid.", "Provider base URL is not absolute.");
         }
 
         return null;

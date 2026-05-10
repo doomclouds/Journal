@@ -166,11 +166,7 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             };
         }
 
-        var resolvedProviderId = settings.Providers.Any(provider => string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase))
-            ? providerId
-            : settings.ActiveProviderId;
-
-        return new EnvironmentOverlay(resolvedProviderId, hasOverride);
+        return new EnvironmentOverlay(providerId, hasOverride);
     }
 
     private string? FirstConfiguredProviderKeyName()

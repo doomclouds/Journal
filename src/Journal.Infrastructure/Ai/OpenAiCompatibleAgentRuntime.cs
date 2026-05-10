@@ -81,7 +81,7 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
                 JournalAiSafeError.Create(
                     "runtime",
                     code,
-                    "AI provider request failed.",
+                    "LLM request failed.",
                     exception.Message,
                     [request.ApiKey]),
                 stopwatch.Elapsed,
@@ -98,7 +98,7 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
                 JournalAiSafeError.Create(
                     "runtime",
                     "timeout",
-                    "AI provider request timed out.",
+                    "LLM request timed out.",
                     exception.Message,
                     [request.ApiKey]),
                 stopwatch.Elapsed,
@@ -111,7 +111,7 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
                 JournalAiSafeError.Create(
                     "runtime",
                     "invalid_json",
-                    "AI provider returned invalid JSON.",
+                    "LLM returned invalid JSON.",
                     exception.Message,
                     [request.ApiKey]),
                 stopwatch.Elapsed);
@@ -123,7 +123,7 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
                 JournalAiSafeError.Create(
                     "runtime",
                     "provider_error",
-                    "AI provider request failed.",
+                    "LLM request failed.",
                     exception.Message,
                     [request.ApiKey]),
                 stopwatch.Elapsed);
@@ -138,7 +138,7 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
             JournalAiSafeError.Create(
                 "runtime",
                 "invalid_json",
-                "AI provider returned invalid JSON.",
+                "LLM returned invalid JSON.",
                 safeSnippet,
                 [apiKey]),
             latency,

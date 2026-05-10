@@ -797,7 +797,7 @@
 
               <section class="doc-section">
                 <h2>原始输入</h2>
-                <p>今天准备把真实 AI Provider 接入 Journal。未配置时继续 Mock，配置成功后用真实模型生成结构化 JSON。</p>
+                <p>今天准备把真实 LLM 接入 Journal。未配置时继续 Mock，配置成功后用真实模型生成结构化 JSON。</p>
               </section>
 
               <section class="doc-section">
@@ -812,7 +812,7 @@
                 <h2>今日重点</h2>
                 <ul>
                   <li>接入 OpenAI-compatible runtime。</li>
-                  <li>设计 Provider 配置面板和健康检查。</li>
+                  <li>设计 LLM 配置面板和健康检查。</li>
                   <li>确保真实模型失败时进入 attention，而不是静默回退 Mock。</li>
                 </ul>
               </section>
@@ -835,7 +835,7 @@
             <span class="label">Current LLM</span>
             <h2>DeepSeek · 环境变量</h2>
             <div class="config-source">
-              <div class="row"><span>Provider</span><strong>JOURNAL_AI_PROVIDER</strong></div>
+              <div class="row"><span>环境变量</span><strong>JOURNAL_AI_PROVIDER</strong></div>
               <div class="row"><span>Model</span><strong>deepseek-v4-flash</strong></div>
               <div class="row"><span>API Key</span><strong>已加载，不显示</strong></div>
             </div>
@@ -870,7 +870,7 @@
       </header>
 
       <div class="settings-grid">
-        <nav class="provider-list" aria-label="Provider 列表">
+        <nav class="provider-list" aria-label="LLM 列表">
           <button class="provider-card" type="button" data-provider="mock">
             <div class="provider-top">
               <strong>Mock</strong>
@@ -931,7 +931,7 @@
           <section class="settings-card">
             <div class="provider-summary">
               <div>
-                <span class="label">Selected provider</span>
+                <span class="label">当前 LLM</span>
                 <h2 id="providerTitle">DeepSeek</h2>
                 <p id="providerDescription">当前配置来自环境变量。API Key 已加载但不会显示，也不会回写配置文件。</p>
               </div>
@@ -940,7 +940,7 @@
           </section>
 
           <section class="settings-card">
-            <span class="label">Basic config</span>
+            <span class="label">基础配置</span>
             <h2>普通配置</h2>
             <div class="form-grid">
               <div class="field">
@@ -964,14 +964,14 @@
             </div>
             <div class="config-actions">
               <button class="ghost" type="button" id="testButton">测试连接</button>
-              <button class="primary" type="button">启用 Provider</button>
+              <button class="primary" type="button">启用当前 LLM</button>
             </div>
           </section>
 
           <section class="settings-card">
             <span class="label">Regenerate</span>
             <h2>重新整理今日草稿</h2>
-            <p>使用当前 active provider 读取当天全部 raw inputs，重新生成 reviewing draft。不会写正式日记。</p>
+            <p>使用当前 LLM 读取当天全部 raw inputs，重新生成 reviewing draft。不会写正式日记。</p>
             <div class="config-actions">
               <button class="danger-lite" type="button">用 Mock 生成一次</button>
               <button class="primary" type="button">重新整理草稿</button>
@@ -981,7 +981,7 @@
 
         <aside class="settings-side">
           <section class="settings-card">
-            <span class="label">Advanced</span>
+            <span class="label">高级设置</span>
             <h2>高级配置</h2>
             <div class="form-grid">
               <div class="field">
@@ -1013,9 +1013,9 @@
           </section>
 
           <section class="test-result" id="testResult">
-            <span class="label">Connection test</span>
+            <span class="label">连接测试</span>
             <h2>最小 JSON 请求</h2>
-            <p class="config-note">测试会向当前 Provider 发送一次最小请求，可能产生少量 token 消耗。</p>
+            <p class="config-note">测试会向当前 LLM 发送一次最小请求，可能产生少量 token 消耗。</p>
             <div class="result-row"><strong>Status</strong><span id="testStatus">success</span></div>
             <div class="result-row"><strong>Response</strong><span>{ "ok": true }</span></div>
             <div class="result-row"><strong>Latency</strong><span>846 ms</span></div>

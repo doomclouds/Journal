@@ -44,10 +44,11 @@ public sealed class JournalAiGenerationService
             return result;
         }
 
-        var validation = JournalAiJsonValidator.Validate(result.AiJson);
+        var sanitizedAiJson = OverwriteRawInputs(result.AiJson, rawInputs);
+        var validation = JournalAiJsonValidator.Validate(sanitizedAiJson);
         if (validation.IsValid)
         {
-            return result;
+            return result with { AiJson = sanitizedAiJson };
         }
 
         var message = string.Join(" ", validation.Errors);
@@ -89,14 +90,6 @@ public sealed class JournalAiGenerationService
             return true;
         }
 
-        if (!isExplicitOverride)
-        {
-            providerSettings = settings.Providers.FirstOrDefault(provider => provider.IsMock)
-                ?? JournalAiSettings.CreateDefault().Providers.Single(provider => provider.IsMock);
-            error = null!;
-            return true;
-        }
-
         providerSettings = null!;
         error = CreateProviderNotFoundError(providerId);
         return false;
@@ -106,7 +99,7 @@ public sealed class JournalAiGenerationService
         JournalAiSafeError.Create(
             "settings",
             "provider_not_found",
-            $"AI provider '{providerId}' was not found.",
+            $"LLM '{providerId}' was not found.",
             $"Provider '{providerId}' was not found in effective AI settings.");
 
     private static JournalAiMetadata CreateUnknownProviderMetadata(string? providerIdOverride) =>
@@ -114,4 +107,10 @@ public sealed class JournalAiGenerationService
             string.IsNullOrWhiteSpace(providerIdOverride) ? "unknown" : providerIdOverride.Trim(),
             "unknown",
             JournalAiPrompt.Version);
+
+    private static JournalAiJson OverwriteRawInputs(JournalAiJson aiJson, IReadOnlyList<RawInput> rawInputs) =>
+        aiJson with
+        {
+            RawInputs = rawInputs.Select(rawInput => rawInput.Text).ToArray()
+        };
 }

@@ -87,6 +87,15 @@ const deepSeekAiSettings = {
   }))
 };
 
+const missingActiveAiSettings = {
+  ...aiSettings,
+  activeProviderId: "missing-provider",
+  providers: aiSettings.providers.map(provider => ({
+    ...provider,
+    isActive: false
+  }))
+};
+
 const journalDate = {
   value: "2026-05-08",
   year: "2026",
@@ -357,6 +366,19 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
   });
 
+  test("shows unknown active LLM id instead of falling back to Mock", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: missingActiveAiSettings }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "LLM Mock" })).not.toBeInTheDocument();
+  });
+
   test("opens LLM settings panel from top status strip", async () => {
     mockFetchSequence([
       { body: healthResponse },
@@ -388,7 +410,7 @@ describe("App", () => {
           error: {
             stage: "provider-call",
             code: "unauthorized",
-            message: "AI provider rejected the API key.",
+            message: "LLM rejected the API key.",
             technicalDetails: "httpStatus: 401 authorization: [redacted]"
           }
         }
@@ -402,6 +424,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
 
     expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+    expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
     expect(screen.getByText("安全技术详情")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai/test", {
       method: "POST",
@@ -424,10 +447,10 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "启用 Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "启用当前 LLM" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("settings save failed");
-    expect(screen.getByRole("button", { name: "启用 Provider" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "启用当前 LLM" })).toBeEnabled();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai", {
       method: "PUT",
       headers: {
@@ -452,12 +475,12 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
-    const providerList = within(screen.getByRole("navigation", { name: "Provider 列表" }));
+    const providerList = within(screen.getByRole("navigation", { name: "LLM 列表" }));
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "启用 Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "启用当前 LLM" }));
 
     fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
-    fireEvent.submit(screen.getByRole("button", { name: "启用 Provider" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "启用当前 LLM" }).closest("form")!);
 
     secondSaveDeferred.resolve(mockJsonResponse(aiSettings));
     await waitFor(() => expect(screen.getByRole("button", { name: "LLM Mock" })).toBeInTheDocument());
@@ -1254,12 +1277,29 @@ describe("LlmSettingsPanel", () => {
     );
 
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
-    const providerList = within(screen.getByRole("navigation", { name: "Provider 列表" }));
+    const providerList = within(screen.getByRole("navigation", { name: "LLM 列表" }));
     expect(providerList.getByRole("button", { name: /Mock/ })).toHaveAttribute("aria-pressed", "true");
     expect(providerList.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
-    expect(screen.getByText("会使用已保存的 Provider 配置，不会测试当前未保存草稿。")).toBeInTheDocument();
+    expect(screen.getByText("会使用已保存的 LLM 配置，不会测试当前未保存草稿。")).toBeInTheDocument();
     expect(screen.getByLabelText("超时")).toHaveAttribute("type", "number");
     expect(screen.getByLabelText("API Key 已加载，值不显示")).toHaveValue("");
+  });
+
+  test("shows missing active LLM without selecting the first configured item", () => {
+    render(
+      <LlmSettingsPanel
+        settings={missingActiveAiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={vi.fn()}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "missing-provider" })).toBeInTheDocument();
+    expect(screen.getByText("当前 active LLM 在配置列表中不存在。请从左侧选择一个已配置的 LLM 后保存。")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Mock" })).not.toBeInTheDocument();
   });
 
   test("tests selected provider and shows safe technical details", async () => {
@@ -1272,7 +1312,7 @@ describe("LlmSettingsPanel", () => {
       error: {
         stage: "provider-call",
         code: "unauthorized",
-        message: "AI provider rejected the API key.",
+        message: "LLM rejected the API key.",
         technicalDetails: "httpStatus: 401 authorization: [redacted]"
       }
     });
@@ -1292,9 +1332,32 @@ describe("LlmSettingsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
 
     expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+    expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
     expect(screen.getByText("安全技术详情")).toBeInTheDocument();
     expect(screen.getByText("httpStatus: 401 authorization: [redacted]")).toBeInTheDocument();
     expect(onTest).toHaveBeenCalledWith("deepseek");
+  });
+
+  test("shows safe failure result when saved LLM connection test rejects", async () => {
+    const onTest = vi.fn().mockRejectedValue(new Error("network down"));
+
+    render(
+      <LlmSettingsPanel
+        settings={aiSettings}
+        isBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTest={onTest}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
+
+    expect(await screen.findByText("request_failed")).toBeInTheDocument();
+    expect(screen.getByText("network down")).toBeInTheDocument();
+    expect(screen.getByText("安全技术详情")).toBeInTheDocument();
   });
 
   test("clears stale connection result when editing unsaved provider fields", async () => {
@@ -1307,7 +1370,7 @@ describe("LlmSettingsPanel", () => {
       error: {
         stage: "provider-call",
         code: "unauthorized",
-        message: "AI provider rejected the API key.",
+        message: "LLM rejected the API key.",
         technicalDetails: "httpStatus: 401 authorization: [redacted]"
       }
     });
@@ -1327,6 +1390,7 @@ describe("LlmSettingsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
 
     expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+    expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("模型"), { target: { value: "deepseek-next" } });
 
@@ -1361,7 +1425,7 @@ describe("LlmSettingsPanel", () => {
       />
     );
 
-    const providerList = within(screen.getByRole("navigation", { name: "Provider 列表" }));
+    const providerList = within(screen.getByRole("navigation", { name: "LLM 列表" }));
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
     fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
     fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
@@ -1375,7 +1439,7 @@ describe("LlmSettingsPanel", () => {
       error: {
         stage: "provider-call",
         code: "unauthorized",
-        message: "AI provider rejected the API key.",
+        message: "LLM rejected the API key.",
         technicalDetails: "httpStatus: 401 authorization: [redacted]"
       }
     });
@@ -1400,7 +1464,7 @@ describe("LlmSettingsPanel", () => {
     );
 
     fireEvent.change(screen.getByLabelText("超时"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "启用 Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "启用当前 LLM" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     const request = onSave.mock.calls[0][0] as AiSettingsSaveRequest;

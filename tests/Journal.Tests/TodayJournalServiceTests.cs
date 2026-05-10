@@ -125,9 +125,43 @@ public sealed class TodayJournalServiceTests
         Assert.Equal([state.RawInputs[0].Id], state.Draft.SourceRawInputIds);
         Assert.NotEmpty(state.Errors);
         Assert.Contains(state.Errors, error => error.Contains("schema must be journal-entry/v1", StringComparison.Ordinal));
-        Assert.Contains("AI provider failed", state.Draft.Markdown);
+        Assert.Contains("LLM generation failed", state.Draft.Markdown);
         Assert.Contains("schema must be journal-entry/v1", state.Draft.Markdown);
         Assert.False(File.Exists(paths.EntryPath(state.Date)));
+    }
+
+    [Fact]
+    public async Task AddInputAsync_WithRealProviderOutputPreservesServerRawInputsInDraftMarkdown()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var settings = WithActiveProvider("openai");
+        var service = CreateService(
+            paths,
+            CreateGenerationService(
+                settings,
+                OpenAiCompatibleRunResult.Success(
+                    new JournalAiJson(
+                        "journal-entry/v1",
+                        FixedDay.ToString("yyyy-MM-dd"),
+                        "05-08",
+                        "draft",
+                        [],
+                        [],
+                        "专注",
+                        ["模型改写过的 raw input"],
+                        ["昨天完成了 provider 接线"],
+                        ["今天验证原始输入保护"],
+                        []),
+                    "{}",
+                    TimeSpan.Zero)));
+
+        var state = await service.AddInputAsync("这段原文必须原样保留", "text", CancellationToken.None);
+
+        Assert.Equal(JournalStatus.Reviewing, state.Status);
+        Assert.NotNull(state.Draft);
+        Assert.Contains("- 这段原文必须原样保留", state.Draft.Markdown);
+        Assert.DoesNotContain("模型改写过的 raw input", state.Draft.Markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -188,10 +222,10 @@ public sealed class TodayJournalServiceTests
             CreateGenerationService(
                 settings,
                 OpenAiCompatibleRunResult.Failure(
-                    JournalAiSafeError.Create(
+                        JournalAiSafeError.Create(
                         "provider-call",
                         "unauthorized",
-                        "AI provider rejected the API key.",
+                        "LLM rejected the API key.",
                         "Authorization: Bearer sk-test-secret"),
                     TimeSpan.FromMilliseconds(12),
                     httpStatus: 401,
@@ -203,10 +237,10 @@ public sealed class TodayJournalServiceTests
         Assert.NotNull(state.Draft);
         Assert.Equal(JournalStatus.Attention, state.Draft.Status);
         Assert.Equal([state.RawInputs[0].Id], state.Draft.SourceRawInputIds);
-        Assert.Contains(state.Errors, error => error.Contains("AI provider rejected the API key.", StringComparison.Ordinal));
+        Assert.Contains(state.Errors, error => error.Contains("LLM rejected the API key.", StringComparison.Ordinal));
         Assert.Contains(state.Errors, error => error.Contains("unauthorized", StringComparison.Ordinal));
         Assert.Contains(state.Errors, error => error.Contains("[redacted-value]", StringComparison.Ordinal));
-        Assert.Contains("# AI provider failed", state.Draft.Markdown);
+        Assert.Contains("# LLM generation failed", state.Draft.Markdown);
         Assert.DoesNotContain("provider: mock", state.Draft.Markdown, StringComparison.Ordinal);
         Assert.False(File.Exists(paths.EntryPath(state.Date)));
     }

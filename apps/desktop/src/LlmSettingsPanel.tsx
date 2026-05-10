@@ -45,16 +45,16 @@ export function LlmSettingsPanel({
   const [pendingRegenerate, setPendingRegenerate] = useState<{ providerId?: string } | null>(null);
 
   const selected = useMemo(
-    () => providers.find(provider => provider.id === selectedId) ?? providers[0],
+    () => providers.find(provider => provider.id === selectedId),
     [providers, selectedId]
   );
   const selectedView = settings.providers.find(provider => provider.id === selectedId);
 
-  if (!selected) {
-    return null;
-  }
-
   function updateSelected(patch: Partial<AiProviderSaveRequest>) {
+    if (!selected) {
+      return;
+    }
+
     setTestResult(null);
     setPendingRegenerate(null);
     setProviders(current =>
@@ -78,12 +78,38 @@ export function LlmSettingsPanel({
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selected) {
+      return;
+    }
+
     await onSave({ activeProviderId: selected.id, providers });
   }
 
   async function handleTest() {
+    if (!selected) {
+      return;
+    }
+
     const providerId = selected.id;
-    const result = await onTest(providerId);
+    let result: AiProviderHealthResult;
+    try {
+      result = await onTest(providerId);
+    } catch (caught) {
+      result = {
+        isSuccess: false,
+        status: "request_failed",
+        safeResponseSnippet: "",
+        httpStatus: null,
+        latency: null,
+        error: {
+          stage: "client",
+          code: "request_failed",
+          message: caught instanceof Error ? caught.message : "LLM 测试连接失败。",
+          technicalDetails: "The saved LLM test request failed before a result was returned."
+        }
+      };
+    }
+
     if (selectedIdRef.current === providerId) {
       setTestResult(result);
     }
@@ -110,7 +136,7 @@ export function LlmSettingsPanel({
       </header>
 
       <div className="llm-settings-grid">
-        <nav className="llm-provider-list" aria-label="Provider 列表">
+        <nav className="llm-provider-list" aria-label="LLM 列表">
           {settings.providers.map(provider => (
             <button
               key={provider.id}
@@ -131,75 +157,86 @@ export function LlmSettingsPanel({
           ))}
         </nav>
 
-        <form className="llm-settings-main" onSubmit={handleSave}>
-          <section className="llm-settings-card">
-            <span className="rail-label">Selected provider</span>
-            <h2>{selected.displayName}</h2>
-            <p>
-              {selectedView?.source === "environment"
-                ? "当前配置来自环境变量，API Key 不会显示，也不会回写配置文件。"
-                : "保存到本机 ai-providers.json。"}
-            </p>
-          </section>
+        {selected ? (
+          <form className="llm-settings-main" onSubmit={handleSave}>
+            <section className="llm-settings-card">
+              <span className="rail-label">当前 LLM</span>
+              <h2>{selected.displayName}</h2>
+              <p>
+                {selectedView?.source === "environment"
+                  ? "当前配置来自环境变量，API Key 不会显示，也不会回写配置文件。"
+                  : "保存到本机 ai-providers.json。"}
+              </p>
+            </section>
 
-          <section className="llm-settings-card">
-            <span className="rail-label">Basic config</span>
-            <label>
-              显示名称
-              <input
-                value={selected.displayName}
-                onChange={event => updateSelected({ displayName: event.target.value })}
-              />
-            </label>
-            <label>
-              模型
-              <input value={selected.model} onChange={event => updateSelected({ model: event.target.value })} />
-            </label>
-            <label>
-              API Key
-              <input
-                value={selected.apiKey}
-                onChange={event => updateSelected({ apiKey: event.target.value })}
-                aria-label={selectedView?.hasApiKey ? "API Key 已加载，值不显示" : "API Key 未配置"}
-              />
-            </label>
-            <label>
-              Base URL
-              <input value={selected.baseUrl} onChange={event => updateSelected({ baseUrl: event.target.value })} />
-            </label>
-            <div className="llm-settings-actions">
-              <button type="button" className="secondary-action" onClick={handleTest} disabled={isBusy}>
-                测试已保存配置
-              </button>
-              <button type="submit" className="primary-action" disabled={isBusy}>
-                启用 Provider
-              </button>
-            </div>
-          </section>
+            <section className="llm-settings-card">
+              <span className="rail-label">基础配置</span>
+              <label>
+                显示名称
+                <input
+                  value={selected.displayName}
+                  onChange={event => updateSelected({ displayName: event.target.value })}
+                />
+              </label>
+              <label>
+                模型
+                <input value={selected.model} onChange={event => updateSelected({ model: event.target.value })} />
+              </label>
+              <label>
+                API Key
+                <input
+                  value={selected.apiKey}
+                  onChange={event => updateSelected({ apiKey: event.target.value })}
+                  aria-label={selectedView?.hasApiKey ? "API Key 已加载，值不显示" : "API Key 未配置"}
+                />
+              </label>
+              <label>
+                Base URL
+                <input value={selected.baseUrl} onChange={event => updateSelected({ baseUrl: event.target.value })} />
+              </label>
+              <div className="llm-settings-actions">
+                <button type="button" className="secondary-action" onClick={handleTest} disabled={isBusy}>
+                  测试已保存配置
+                </button>
+                <button type="submit" className="primary-action" disabled={isBusy}>
+                  启用当前 LLM
+                </button>
+              </div>
+            </section>
 
-          <section className="llm-settings-card">
-            <span className="rail-label">Regenerate</span>
-            <h2>重新整理今日草稿</h2>
-            <p>{pendingRegenerate ? "这会覆盖当前草稿内容，但不会影响正式日记。" : "使用当前 Provider 重新生成 reviewing draft。"}</p>
-            <div className="llm-settings-actions">
-              <button
-                type="button"
-                className="secondary-action danger-action"
-                onClick={() => handleRegenerate("mock")}
-                disabled={isBusy}
-              >
-                用 Mock 生成一次
-              </button>
-              <button type="button" className="primary-action" onClick={() => handleRegenerate()} disabled={isBusy}>
-                重新整理草稿
-              </button>
-            </div>
+            <section className="llm-settings-card">
+              <span className="rail-label">Regenerate</span>
+              <h2>重新整理今日草稿</h2>
+              <p>{pendingRegenerate ? "这会覆盖当前草稿内容，但不会影响正式日记。" : "使用当前 LLM 重新生成 reviewing draft。"}</p>
+              <div className="llm-settings-actions">
+                <button
+                  type="button"
+                  className="secondary-action danger-action"
+                  onClick={() => handleRegenerate("mock")}
+                  disabled={isBusy}
+                >
+                  用 Mock 生成一次
+                </button>
+                <button type="button" className="primary-action" onClick={() => handleRegenerate()} disabled={isBusy}>
+                  重新整理草稿
+                </button>
+              </div>
+            </section>
+          </form>
+        ) : (
+          <section className="llm-settings-main">
+            <section className="llm-settings-card attention-panel">
+              <span className="rail-label">当前 LLM</span>
+              <h2>{selectedId}</h2>
+              <p>当前 active LLM 在配置列表中不存在。请从左侧选择一个已配置的 LLM 后保存。</p>
+            </section>
           </section>
-        </form>
+        )}
 
-        <aside className="llm-settings-side">
+        {selected ? (
+          <aside className="llm-settings-side">
           <section className="llm-settings-card">
-            <span className="rail-label">Advanced</span>
+            <span className="rail-label">高级设置</span>
             <label>
               JSON 模式
               <input value="json_object" readOnly />
@@ -237,9 +274,12 @@ export function LlmSettingsPanel({
           </section>
 
           <section className={`llm-settings-card ${testResult?.isSuccess === false ? "attention-panel" : ""}`}>
-            <span className="rail-label">Connection test</span>
+            <span className="rail-label">连接测试</span>
             <h2>{testResult ? testResult.status : "最小 JSON 请求"}</h2>
-            <p>会使用已保存的 Provider 配置，不会测试当前未保存草稿。</p>
+            <p>会使用已保存的 LLM 配置，不会测试当前未保存草稿。</p>
+            {testResult?.error?.message ? (
+              <p>{testResult.error.message}</p>
+            ) : null}
             {testResult?.error ? (
               <details>
                 <summary>安全技术详情</summary>
@@ -247,7 +287,16 @@ export function LlmSettingsPanel({
               </details>
             ) : null}
           </section>
-        </aside>
+          </aside>
+        ) : (
+          <aside className="llm-settings-side">
+            <section className="llm-settings-card attention-panel">
+              <span className="rail-label">连接测试</span>
+              <h2>provider_not_found</h2>
+              <p>选择一个已配置的 LLM 后才能测试连接或重新整理草稿。</p>
+            </section>
+          </aside>
+        )}
       </div>
     </section>
   );
