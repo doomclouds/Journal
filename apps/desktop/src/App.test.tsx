@@ -765,6 +765,27 @@ describe("App", () => {
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
   });
 
+  test("dirty inline block status disables formal save until cancel", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存的本地改动" }
+    });
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   test("inserting optional block resets regenerate confirmation", async () => {
     const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
@@ -1098,9 +1119,16 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
     const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
     fireEvent.change(focusEditor, { target: { value: "保存后的区块内容" } });
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "保存这一段" }));
 
-    await waitFor(() => expect(screen.getByText("保存后的区块内容")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
+    expect(screen.getByText("保存后的区块内容")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/blocks", {
       method: "PUT",
       headers: {
@@ -1335,6 +1363,44 @@ describe("JournalEditor", () => {
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
+  test("switching sections reverts previous dirty inline block before editing the next one", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "推进 Phase 3",
+              kind: "required",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "yesterday-review",
+              title: "昨日回顾",
+              content: "昨天完成 Phase 2",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "A 段未保存内容" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "编辑 昨天回顾" }));
+
+    expect(screen.getByRole("textbox", { name: "编辑 昨天回顾" })).toHaveValue("昨天完成 Phase 2");
+    expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
+    expect(screen.queryByText("A 段未保存内容")).not.toBeInTheDocument();
+  });
+
   test("cancels inline block editing and restores preview text", () => {
     render(
       <JournalEditor
@@ -1386,6 +1452,26 @@ describe("JournalEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
 
     expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+  });
+
+  test("canceling a temporary optional inline block removes it and restores insert action", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState()}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+        onSaveSource={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
+    expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("heading", { name: "情绪感受" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeInTheDocument();
   });
 
   test("keeps inserted optional blocks in catalog order after required sections", () => {

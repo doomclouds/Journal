@@ -17,6 +17,7 @@ type JournalEditorProps = {
   onSaveBlocks: (sections: JournalBlockEditSection[]) => void;
   onSaveSource: (markdown: string) => void;
   onLocalInteraction?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 };
 
 const jmfSectionCatalogOrder = new Map<string, number>([
@@ -66,7 +67,8 @@ export function JournalEditor({
   isBusy,
   onSaveBlocks,
   onSaveSource,
-  onLocalInteraction
+  onLocalInteraction,
+  onDirtyChange
 }: JournalEditorProps) {
   const [mode, setMode] = useState<EditorMode>("blocks");
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
@@ -97,6 +99,55 @@ export function JournalEditor({
       .sort((left, right) => left.order - right.order);
   }, [editor.availableOptionalSections, sections]);
 
+  const hasDirtyEditingSection = useMemo(() => {
+    if (!editingSectionId) {
+      return false;
+    }
+
+    const currentSection = sections.find(section => section.id === editingSectionId);
+    if (!currentSection?.isEditableInBlockMode) {
+      return false;
+    }
+
+    const baselineSection = editor.sections.find(section => section.id === editingSectionId);
+    if (!baselineSection) {
+      return currentSection.content.length > 0;
+    }
+
+    return currentSection.content !== baselineSection.content;
+  }, [editingSectionId, editor.sections, sections]);
+
+  useEffect(() => {
+    onDirtyChange?.(hasDirtyEditingSection);
+  }, [hasDirtyEditingSection, onDirtyChange]);
+
+  function resetSectionToBaseline(current: JmfSection[], sectionId: string) {
+    const baselineSection = editor.sections.find(section => section.id === sectionId);
+
+    if (!baselineSection) {
+      return current.filter(section => section.id !== sectionId);
+    }
+
+    return current.map(section =>
+      section.id === sectionId
+        ? { ...section, content: baselineSection.content }
+        : section
+    );
+  }
+
+  function resetCurrentEditingSection(current: JmfSection[]) {
+    return editingSectionId ? resetSectionToBaseline(current, editingSectionId) : current;
+  }
+
+  function editSection(sectionId: string) {
+    setSections(current =>
+      editingSectionId && editingSectionId !== sectionId
+        ? resetSectionToBaseline(current, editingSectionId)
+        : current
+    );
+    setEditingSectionId(sectionId);
+  }
+
   function updateSectionContent(id: string, content: string) {
     onLocalInteraction?.();
     setSections(current =>
@@ -107,22 +158,16 @@ export function JournalEditor({
   function insertSection(definition: JmfSectionDefinition) {
     onLocalInteraction?.();
     setSections(current =>
-      [...current, createSectionFromDefinition(definition)]
+      [...resetCurrentEditingSection(current), createSectionFromDefinition(definition)]
         .sort((left, right) => compareSections(left, right, orderById))
     );
     setEditingSectionId(definition.id);
   }
 
   function cancelSection(sectionId: string) {
-    const baselineSection = editor.sections.find(section => section.id === sectionId);
-    setSections(current =>
-      current.map(section =>
-        section.id === sectionId
-          ? { ...section, content: baselineSection?.content ?? "" }
-          : section
-      )
-    );
+    setSections(current => resetSectionToBaseline(current, sectionId));
     setEditingSectionId(null);
+    onDirtyChange?.(false);
   }
 
   function saveSection(sectionId: string) {
@@ -133,6 +178,7 @@ export function JournalEditor({
 
     onSaveBlocks([{ id: section.id, content: section.content }]);
     setEditingSectionId(null);
+    onDirtyChange?.(false);
   }
 
   return (
@@ -190,7 +236,7 @@ export function JournalEditor({
               value={section.content}
               disabled={isBusy}
               isEditing={editingSectionId === section.id}
-              onEdit={() => setEditingSectionId(section.id)}
+              onEdit={() => editSection(section.id)}
               onCancel={() => cancelSection(section.id)}
               onChange={content => updateSectionContent(section.id, content)}
               onSave={() => saveSection(section.id)}

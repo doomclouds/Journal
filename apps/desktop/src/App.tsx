@@ -49,6 +49,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
   const [pendingRegenerateDraft, setPendingRegenerateDraft] = useState(false);
+  const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,13 +85,22 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    setHasLocalUnsavedChanges(false);
+  }, [editor]);
+
   const today = editor?.today ?? null;
 
   const title = useMemo(() => {
     return today ? `${today.date.isoDate} 晨间日记` : "今日晨间日记";
   }, [today]);
 
-  const canConfirm = Boolean(editor?.canConfirm && today?.draft && today.status !== "attention");
+  const canConfirm = Boolean(
+    editor?.canConfirm
+      && today?.draft
+      && today.status !== "attention"
+      && !hasLocalUnsavedChanges
+  );
   const activeProvider = aiSettings?.providers.find(provider => provider.isActive);
   const activeProviderName = activeProvider?.displayName
     ?? (aiSettings?.activeProviderId ? aiSettings.activeProviderId : "Mock");
@@ -110,7 +120,7 @@ export default function App() {
   const uniqueAttentionErrors = Array.from(new Set(attentionErrors));
   const hasEditableJournal = Boolean(editor && (editor.markdown.trim() || editor.sections.length > 0));
   const productStatus: ProductJournalStatusView = editor
-    ? getProductJournalStatus(editor)
+    ? getProductJournalStatus(editor, hasLocalUnsavedChanges)
     : {
         id: loadState === "error" ? "needs-attention" : "organizing",
         label: loadState === "error" ? "需要处理" : "整理中",
@@ -383,6 +393,7 @@ export default function App() {
                 onSaveBlocks={handleSaveBlocks}
                 onSaveSource={handleSaveSource}
                 onLocalInteraction={resetPendingRegenerateDraft}
+                onDirtyChange={setHasLocalUnsavedChanges}
               />
             ) : null}
             {loadState !== "loading" && loadState !== "error" && !hasEditableJournal ? (
