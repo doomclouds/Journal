@@ -1,6 +1,11 @@
 namespace Journal.Infrastructure.Ai;
 
-public sealed class JournalAiSettingsService
+public interface IJournalAiSettingsReader
+{
+    Task<JournalAiSettings> ReadEffectiveAsync(CancellationToken cancellationToken);
+}
+
+public sealed class JournalAiSettingsService : IJournalAiSettingsReader
 {
     private const string Runtime = "OpenAI-compatible runtime · Agent Framework 1.5.0";
 

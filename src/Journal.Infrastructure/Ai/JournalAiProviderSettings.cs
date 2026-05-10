@@ -16,8 +16,6 @@ public sealed record JournalAiProviderSettings(
     int MaxTokens,
     string StylePreset)
 {
-    private const string PromptVersion = "journal-entry-json-v1";
-
     public bool IsMock =>
         string.Equals(Id, "mock", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Type, "mock", StringComparison.OrdinalIgnoreCase);
@@ -25,7 +23,7 @@ public sealed record JournalAiProviderSettings(
     public JournalAiMetadata ToMetadata() =>
         IsMock
             ? JournalAiMetadata.Mock
-            : new(Id, string.IsNullOrWhiteSpace(Model) ? "mock-journal" : Model, PromptVersion);
+            : new(Id, string.IsNullOrWhiteSpace(Model) ? "mock-journal" : Model, JournalAiPrompt.Version);
 }
 
 public sealed record JournalAiProviderView(
