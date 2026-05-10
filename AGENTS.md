@@ -4,19 +4,28 @@
 
 Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
 
-Current delivered scope is Phase 2:
+Current delivered scope is Phase 3:
 
 ```text
-Natural language input -> Mock AI JSON -> JMF Markdown draft -> user confirmation -> formal Markdown file
+Natural language input -> Mock AI JSON -> JMF Markdown draft -> block/source edit with JMF validation -> user confirmation -> formal Markdown file
 ```
 
-Do not assume these are implemented yet unless the code or docs say so: real AI providers, SQLite indexing, version snapshots, block/source editing, in-app recording, speech-to-text, installers, delete flows.
+Phase 3 includes the Phase 2 generation/confirmation workflow plus a safe JMF editing layer:
+
+- Backend parses draft/entry Markdown into a JMF document.
+- Block mode edits known editable sections while preserving protected/system sections.
+- Source mode can edit full Markdown, but saving is guarded by JMF validation.
+- Valid editor saves write a `reviewing` draft only.
+- Invalid editor saves write an `attention` draft and must not overwrite the formal entry.
+- The formal Markdown entry is updated only after the user confirms the current draft.
+
+Do not assume these are implemented yet unless the code or docs say so: real AI providers, SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows.
 
 ## Tech Stack
 
 - Backend: .NET 10, minimal API in `src/Journal.Api`.
 - Domain model: `src/Journal.Domain`.
-- Infrastructure: storage, clock, AI abstraction, JMF validation/rendering in `src/Journal.Infrastructure`.
+- Infrastructure: storage, clock, AI abstraction, JMF rendering/parsing/validation in `src/Journal.Infrastructure`.
 - Desktop app: Electron + React + Vite + TypeScript in `apps/desktop`.
 - Backend tests: xUnit in `tests/Journal.Tests`.
 - Frontend tests: Vitest + Testing Library in `apps/desktop`.
@@ -26,16 +35,24 @@ Do not assume these are implemented yet unless the code or docs say so: real AI 
 - API composition and endpoints: `src/Journal.Api/Program.cs`.
 - Today's main workflow: `src/Journal.Infrastructure/Today/TodayJournalService.cs`.
 - AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementation is `MockAiProvider`.
-- JMF validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
+- AI JSON validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
+- JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, and editor request/state records.
+- JMF parse/validate/compose layer: `src/Journal.Infrastructure/Jmf/JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, and `JmfMarkdownComposer.cs`.
 - Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
 - Main desktop screen: `apps/desktop/src/App.tsx`.
-- API client: `apps/desktop/src/api.ts`.
+- JMF editor UI: `apps/desktop/src/JournalEditor.tsx`, `JournalBlockCard.tsx`, `InsertBlockMenu.tsx`, and `ValidationPanel.tsx`.
+- API client and shared frontend contracts: `apps/desktop/src/api.ts`.
+- Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
 ## Product Invariants
 
 - Raw user input is the source material and must not be overwritten by summaries.
 - Formal Markdown is the durable human-readable source of truth; generated caches or indexes must be rebuildable.
 - AI output should stay behind the JSON validation and preview/confirmation boundary before it becomes a formal entry.
+- Editor saves are draft writes. `SaveBlockDraftAsync` and `SaveSourceDraftAsync` must not write directly to `entries/`.
+- JMF validation protects the formal entry: invalid source or block requests should become `attention` drafts with repair information, not partial formal writes.
+- Block mode must not edit `raw-inputs`, `keywords`, or `metadata-note`; `raw-inputs` is preserved from the baseline draft/entry.
+- Source mode can edit full Markdown, including markers and front matter, but save must pass through parser/validator before it can become confirmable.
 - The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
 - Keep the UI quiet, tool-like, fast to scan, and focused on the daily writing workflow.
 
@@ -47,6 +64,14 @@ Use PowerShell from the repository root.
 dotnet test Journal.slnx
 npm test --prefix apps/desktop
 npm run build --prefix apps/desktop
+```
+
+Useful focused checks:
+
+```powershell
+dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter TodayJournalEditorServiceTests
+dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JmfMarkdownParserTests|JmfMarkdownValidatorTests|JmfMarkdownComposerTests"
+npm test --prefix apps/desktop -- App.test.tsx
 ```
 
 Development run:
@@ -61,7 +86,7 @@ The development flow is two-process: start the .NET API first, then start the El
 
 ## Data Locations
 
-Phase 2 development data is written under `%LocalAppData%/Journal`:
+Development data is written under `%LocalAppData%/Journal`:
 
 ```text
 entries/yyyy/MM/yyyy-MM-dd.md
@@ -70,7 +95,7 @@ entries/yyyy/MM/yyyy-MM-dd.md
 .journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
 ```
 
-Be careful with changes that alter these paths or formats; update docs and tests together.
+Phase 3 continues to use the same locations. There is still no `.journal/versions/` or SQLite/index directory in delivered scope. Be careful with changes that alter these paths or formats; update docs and tests together.
 
 ## Working Rules
 
@@ -78,6 +103,7 @@ Be careful with changes that alter these paths or formats; update docs and tests
 - Keep `.NET` changes nullable-clean and aligned with the existing minimal API/service style.
 - Keep frontend changes consistent with the current dense desktop tool layout; do not turn the app into a marketing landing page.
 - When changing behavior, update or add focused tests in the relevant test project before calling the work complete.
+- When changing phase scope or delivered capabilities, update `README.md`, this `AGENTS.md`, and the relevant `docs/superpowers` asset together.
 - Before continuing feature work, explaining prior decisions, or checking delivery status, search the Superpowers assets below before guessing from memory.
 
 <!-- asset-compounding-guidance:start -->
