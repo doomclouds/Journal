@@ -149,11 +149,11 @@ public void JmfMarkdownRenderer_WritesProviderMetadataFromGenerationResult()
         new JournalAiMetadata(
             Provider: "deepseek",
             Model: "deepseek-v4-flash",
-            PromptVersion: "journal-entry-json-v1"));
+            PromptVersion: "journal-entry-json-v1.1"));
 
     Assert.Contains("provider: deepseek", markdown);
     Assert.Contains("model: deepseek-v4-flash", markdown);
-    Assert.Contains("prompt_version: journal-entry-json-v1", markdown);
+    Assert.Contains("prompt_version: journal-entry-json-v1.1", markdown);
     Assert.Contains("generated_at: \"2026-05-10T08:30:00.0000000+08:00\"", markdown);
 }
 
@@ -163,7 +163,7 @@ public void JmfMarkdownRenderer_DoesNotWriteProviderSecrets()
     var markdown = JmfMarkdownRenderer.Render(
         CreateAiJson(),
         DateTimeOffset.Parse("2026-05-10T08:30:00+08:00"),
-        new JournalAiMetadata("custom", "local-model", "journal-entry-json-v1"));
+        new JournalAiMetadata("custom", "local-model", "journal-entry-json-v1.1"));
 
     Assert.DoesNotContain("api_key", markdown, StringComparison.OrdinalIgnoreCase);
     Assert.DoesNotContain("base_url", markdown, StringComparison.OrdinalIgnoreCase);
@@ -948,7 +948,7 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
         Assert.True(result.IsSuccess);
         Assert.Equal("deepseek", result.Metadata.Provider);
         Assert.Equal("deepseek-v4-flash", result.Metadata.Model);
-        Assert.Equal("journal-entry-json-v1", result.Metadata.PromptVersion);
+        Assert.Equal("journal-entry-json-v1.1", result.Metadata.PromptVersion);
         Assert.NotNull(runtime.LastRequest);
         Assert.Equal("deepseek-v4-flash", runtime.LastRequest.Model);
         Assert.Equal("json_object", runtime.LastRequest.ResponseFormat);
@@ -1119,7 +1119,7 @@ namespace Journal.Infrastructure.Ai;
 
 public static class JournalAiPrompt
 {
-    public const string Version = "journal-entry-json-v1";
+    public const string Version = "journal-entry-json-v1.1";
 
     public static string SystemInstructions => """
         你是 Journal 的晨间日记整理器。
@@ -1128,6 +1128,8 @@ public static class JournalAiPrompt
         schema 固定为 journal-entry/v1，status 固定为 draft。
         rawInputs 必须完整保留用户原始输入，不要改写、总结或删除。
         如果 yesterdayReview、todayFocus 或 inspiration 没有足够信息，输出空数组，不要猜测或硬凑条目。
+        todayFocus 不只整理任务或待办，也整理今天已经发生的重要事件、家庭/生活片段、节日、值得记录、纪念或庆祝的事情。
+        inspiration 可整理无法自然归入昨日回顾或今日重点的观察、感受、感恩或值得保留的片段。
         只整理用户已经说过的事实，不虚构事实，不写鸡汤，不写营销文案。
         风格为 faithful：轻度整理，保留原话优先。
         """;

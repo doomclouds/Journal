@@ -165,11 +165,11 @@ public sealed class MockAiAndJmfTests
             new JournalAiMetadata(
                 Provider: "deepseek",
                 Model: "deepseek-v4-flash",
-                PromptVersion: "journal-entry-json-v1"));
+                PromptVersion: "journal-entry-json-v1.1"));
 
         Assert.Contains("provider: deepseek", markdown);
         Assert.Contains("model: deepseek-v4-flash", markdown);
-        Assert.Contains("prompt_version: journal-entry-json-v1", markdown);
+        Assert.Contains("prompt_version: journal-entry-json-v1.1", markdown);
         Assert.Contains("generated_at: \"2026-05-10T08:30:00.0000000+08:00\"", markdown);
     }
 
@@ -179,7 +179,7 @@ public sealed class MockAiAndJmfTests
         var markdown = JmfMarkdownRenderer.Render(
             CreateAiJson(),
             DateTimeOffset.Parse("2026-05-10T08:30:00+08:00"),
-            new JournalAiMetadata("custom", "local-model", "journal-entry-json-v1"));
+            new JournalAiMetadata("custom", "local-model", "journal-entry-json-v1.1"));
 
         Assert.DoesNotContain("api_key", markdown, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("base_url", markdown, StringComparison.OrdinalIgnoreCase);

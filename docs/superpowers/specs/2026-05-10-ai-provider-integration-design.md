@@ -275,7 +275,9 @@ Prompt 必须表达：
 - JSON 必须匹配 `JournalAiJson` 字段。
 - `schema` 固定为 `journal-entry/v1`。
 - `rawInputs` 必须完整保留用户原始输入。
-- `yesterdayReview` 和 `todayFocus` 至少各有一条。
+- `yesterdayReview`、`todayFocus` 和 `inspiration` 信息不足时允许为空数组，不猜测、不硬凑。
+- `todayFocus` 不只包含计划/待办，也包含今天已经发生的重要事件、家庭/生活片段、节日、值得记录、纪念或庆祝的事情。
+- `inspiration` 可以承载无法自然归入昨日回顾或今日重点的观察、感受、感恩和值得保留的片段。
 - 不虚构用户没说过的事实。
 - 可以轻度整理，但优先保留原话。
 - 不写鸡汤、夸张总结或营销文案。
@@ -283,7 +285,7 @@ Prompt 必须表达：
 Prompt 版本：
 
 ```text
-journal-entry-json-v1
+journal-entry-json-v1.1
 ```
 
 ### 7.4 成功路径
@@ -304,7 +306,7 @@ JMF front matter 保留：
 ```yaml
 provider: deepseek
 model: deepseek-v4-flash
-prompt_version: journal-entry-json-v1
+prompt_version: journal-entry-json-v1.1
 generated_at: "2026-05-10T..."
 ```
 

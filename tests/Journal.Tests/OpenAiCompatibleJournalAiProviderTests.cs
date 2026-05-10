@@ -28,7 +28,7 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
         Assert.True(result.IsSuccess);
         Assert.Equal("deepseek", result.Metadata.Provider);
         Assert.Equal("deepseek-v4-flash", result.Metadata.Model);
-        Assert.Equal("journal-entry-json-v1", result.Metadata.PromptVersion);
+        Assert.Equal("journal-entry-json-v1.1", result.Metadata.PromptVersion);
 
         var request = Assert.IsType<OpenAiCompatibleRunRequest>(runtime.CapturedRequest);
         Assert.Equal("deepseek-v4-flash", request.Model);
@@ -37,6 +37,10 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
         Assert.Contains("## Output Contract", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("只整理 `yesterdayReview`、`todayFocus` 和 `inspiration` 这三项正文结构", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("只输出 JSON", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("不是只整理任务或待办", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("已经发生的重要事件", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("值得记录、纪念或庆祝的事情", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("观察、感受、感恩或值得保留的片段", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("今天想把 AI provider 接上，先保留原始表达。", request.UserPrompt, StringComparison.Ordinal);
     }
 
