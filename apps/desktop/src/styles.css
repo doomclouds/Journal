@@ -1,6 +1,6 @@
 :root {
-  color: #252525;
-  background: #f3f1eb;
+  color: #24231f;
+  background: #eeece4;
   font-family: Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -12,9 +12,9 @@
 
 body {
   margin: 0;
-  min-width: 960px;
+  min-width: 0;
   min-height: 100vh;
-  background: #f3f1eb;
+  background: #eeece4;
 }
 
 body:has(.llm-settings-overlay) {
@@ -66,12 +66,26 @@ button:focus-visible {
   gap: 12px;
 }
 
+.productized-today-shell {
+  height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(238, 236, 228, 0.74)),
+    #eeece4;
+  color: #24231f;
+}
+
 .top-context {
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
+}
+
+.productized-today-shell .top-context {
+  border-bottom: 1px solid rgba(94, 85, 72, 0.14);
+  padding-bottom: 4px;
 }
 
 .title-block {
@@ -97,11 +111,31 @@ button:focus-visible {
   letter-spacing: 0;
 }
 
+.productized-title-block h1 {
+  color: #24231f;
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 850;
+}
+
 .productized-title-block p {
   max-width: 620px;
   margin: 8px 0 0;
-  color: #655d53;
+  color: #635d52;
   line-height: 1.5;
+}
+
+.date-mark {
+  width: fit-content;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(47, 111, 95, 0.22);
+  border-radius: 6px;
+  padding: 5px 10px;
+  background: #f7fff7;
+  color: #2f6f5f;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .status-strip {
@@ -151,22 +185,26 @@ button:focus-visible {
 }
 
 .product-status-neutral {
-  background: #f6ead3;
+  border-color: #eadbb7;
+  background: #fff7e4;
   color: #765622;
 }
 
 .product-status-good {
-  background: #dcebe4;
+  border-color: #bdd9cf;
+  background: #e7f4ed;
   color: #1f6f64;
 }
 
 .product-status-warning {
+  border-color: #ead28b;
   background: #fff0c9;
   color: #795600;
 }
 
 .product-status-danger {
-  background: #f3ddd9;
+  border-color: #e3bcb6;
+  background: #f6e2de;
   color: #8c332b;
 }
 
@@ -212,8 +250,10 @@ button:focus-visible {
 }
 
 .productized-workspace {
-  grid-template-columns: minmax(0, 1fr) 340px;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   grid-template-areas: "paper assistant";
+  gap: 18px;
 }
 
 .context-rail {
@@ -238,6 +278,12 @@ button:focus-visible {
   border-radius: 8px;
   background: #fffdf8;
   padding: 14px;
+}
+
+.today-assistant .assistant-panel {
+  border-color: rgba(99, 93, 82, 0.16);
+  background: #fffefa;
+  box-shadow: 0 12px 28px rgba(59, 50, 38, 0.06);
 }
 
 .assistant-panel > strong {
@@ -308,6 +354,13 @@ button:focus-visible {
   padding: 4px 0 4px 10px;
 }
 
+.productized-raw-list li {
+  border-left-color: #2f6f5f;
+  border-radius: 0 6px 6px 0;
+  background: #f7fbf7;
+  padding: 8px 10px;
+}
+
 .raw-list strong {
   color: #2b6860;
   font-size: 12px;
@@ -327,7 +380,9 @@ button:focus-visible {
 }
 
 .productized-journal-stage {
+  min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
 }
 
 .compact-actions {
@@ -346,6 +401,13 @@ button:focus-visible {
 
 .productized-journal-paper {
   min-height: 0;
+  border-color: rgba(96, 83, 63, 0.18);
+  background:
+    linear-gradient(90deg, rgba(47, 111, 95, 0.05) 0, rgba(47, 111, 95, 0) 72px),
+    #fffefa;
+  box-shadow:
+    0 24px 60px rgba(52, 43, 31, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .markdown-preview,
@@ -400,6 +462,7 @@ button:focus-visible {
   align-content: center;
   justify-items: center;
   gap: 10px;
+  padding-inline: clamp(24px, 7vw, 72px);
   text-align: center;
 }
 
@@ -427,6 +490,12 @@ button:focus-visible {
   padding: 12px;
 }
 
+.productized-journal-stage .compose-bar {
+  border-color: rgba(47, 111, 95, 0.18);
+  background: #fffefa;
+  box-shadow: 0 12px 28px rgba(55, 44, 30, 0.08);
+}
+
 .compose-bar form {
   min-width: 0;
   display: grid;
@@ -443,6 +512,8 @@ button:focus-visible {
 
 .compose-bar textarea {
   min-height: 86px;
+  max-height: 180px;
+  background: #fffefa;
 }
 
 .compose-secondary-actions {
@@ -467,14 +538,18 @@ button:focus-visible {
   align-content: start;
   gap: 12px;
   overflow: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 .assistant-panel-good {
-  background: #f2f8f4;
+  border-color: rgba(47, 111, 95, 0.18);
+  background: #f3faf5;
 }
 
 .assistant-panel-warning {
-  background: #fff8e5;
+  border-color: rgba(166, 126, 39, 0.22);
+  background: #fff8e8;
 }
 
 .assistant-panel-danger,
@@ -570,8 +645,9 @@ button:focus-visible {
   min-height: 100%;
   padding: 16px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 10px;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  gap: 12px;
 }
 
 .journal-editor-toolbar {
@@ -585,6 +661,16 @@ button:focus-visible {
   border-bottom: 1px solid rgba(46, 39, 32, 0.1);
   background: rgba(255, 252, 246, 0.94);
   padding-bottom: 6px;
+}
+
+.productized-editor-toolbar {
+  border-bottom-color: rgba(47, 111, 95, 0.12);
+}
+
+.productized-editor-toolbar p {
+  margin: 0;
+  color: #635d52;
+  line-height: 1.5;
 }
 
 .journal-editor [role="tablist"] {
@@ -618,7 +704,7 @@ button:focus-visible {
 .journal-editor-source {
   min-height: 0;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .insert-block-menu {
@@ -635,10 +721,17 @@ button:focus-visible {
 }
 
 .journal-block-card {
-  border: 1px solid #d8d4ca;
+  border: 1px solid rgba(94, 85, 72, 0.16);
   border-radius: 8px;
-  background: #fffdf8;
-  padding: 12px;
+  background: #fffefa;
+  padding: 14px;
+  box-shadow: 0 10px 24px rgba(52, 43, 31, 0.05);
+}
+
+.journal-block-card:has(.journal-block-inline-editor) {
+  border-color: rgba(47, 111, 95, 0.34);
+  background: #f7fbf7;
+  box-shadow: 0 12px 28px rgba(47, 111, 95, 0.1);
 }
 
 .journal-block-card textarea {
@@ -647,13 +740,35 @@ button:focus-visible {
 
 .journal-block-readonly {
   min-height: 72px;
-  border: 1px solid #d8d4ca;
+  border: 1px solid rgba(94, 85, 72, 0.12);
   border-radius: 6px;
-  background: #f4f2ec;
+  background: #fbfaf5;
   padding: 10px 12px;
-  color: #4d4a44;
+  color: #3a352e;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+
+.journal-block-inline-editor {
+  display: grid;
+  gap: 10px;
+  border-left: 4px solid #2f6f5f;
+  border-radius: 8px;
+  background: #eff8f2;
+  padding: 12px;
+}
+
+.journal-block-inline-editor textarea {
+  border-color: rgba(47, 111, 95, 0.32);
+  background: #fffefa;
+  color: #24231f;
+}
+
+.journal-block-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .journal-block-readonly p {
@@ -677,6 +792,64 @@ button:focus-visible {
   font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.journal-source-drawer {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(174, 190, 204, 0.2);
+  border-radius: 8px;
+  background: #151a20;
+  color: #e9eef3;
+  padding: 14px;
+  box-shadow: 0 18px 40px rgba(16, 20, 24, 0.28);
+}
+
+.source-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.source-drawer-head h2 {
+  margin: 0;
+  color: #f5f8fb;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.source-drawer-head p,
+.source-save-hint {
+  margin: 6px 0 0;
+  color: #aeb9c5;
+  line-height: 1.5;
+}
+
+.journal-source-drawer textarea {
+  min-height: 360px;
+  border-color: rgba(179, 206, 226, 0.22);
+  background: #0d1117;
+  color: #edf4fa;
+  font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  tab-size: 2;
+}
+
+.journal-source-drawer textarea:focus {
+  outline-color: rgba(124, 197, 179, 0.36);
+}
+
+.source-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.source-save-hint {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .journal-editor .attention-panel {
@@ -985,15 +1158,32 @@ button:focus-visible {
 }
 
 @media (max-width: 1180px) {
+  .productized-today-shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
   .productized-workspace {
+    min-height: auto;
     grid-template-columns: 1fr;
     grid-template-areas:
       "paper"
       "assistant";
-    grid-template-rows: minmax(360px, 1fr) auto;
+    grid-template-rows: auto auto;
+  }
+
+  .productized-journal-stage,
+  .productized-journal-paper {
+    min-height: auto;
+  }
+
+  .productized-journal-paper {
+    overflow: visible;
   }
 
   .today-assistant {
+    padding-right: 0;
     overflow: visible;
   }
 
@@ -1009,5 +1199,16 @@ button:focus-visible {
   .compose-hint {
     max-width: none;
     text-align: left;
+  }
+
+  .source-actions,
+  .journal-block-inline-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .source-actions button,
+  .journal-block-inline-actions button {
+    width: 100%;
   }
 }
