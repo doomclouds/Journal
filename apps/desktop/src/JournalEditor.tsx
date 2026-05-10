@@ -16,6 +16,7 @@ type JournalEditorProps = {
   isBusy: boolean;
   onSaveBlocks: (sections: JournalBlockEditSection[]) => void;
   onSaveSource: (markdown: string) => void;
+  onLocalInteraction?: () => void;
 };
 
 const jmfSectionCatalogOrder = new Map<string, number>([
@@ -60,7 +61,13 @@ function compareSections(
   return left.title.localeCompare(right.title, "zh-Hans-CN");
 }
 
-export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: JournalEditorProps) {
+export function JournalEditor({
+  editor,
+  isBusy,
+  onSaveBlocks,
+  onSaveSource,
+  onLocalInteraction
+}: JournalEditorProps) {
   const [mode, setMode] = useState<EditorMode>("blocks");
   const [sections, setSections] = useState<JmfSection[]>(editor.sections);
   const [sourceMarkdown, setSourceMarkdown] = useState(editor.markdown);
@@ -89,12 +96,14 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
   }, [editor.availableOptionalSections, sections]);
 
   function updateSectionContent(id: string, content: string) {
+    onLocalInteraction?.();
     setSections(current =>
       current.map(section => (section.id === id ? { ...section, content } : section))
     );
   }
 
   function insertSection(definition: JmfSectionDefinition) {
+    onLocalInteraction?.();
     setSections(current =>
       [...current, createSectionFromDefinition(definition)]
         .sort((left, right) => compareSections(left, right, orderById))
@@ -117,7 +126,10 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
             type="button"
             role="tab"
             aria-selected={mode === "blocks"}
-            onClick={() => setMode("blocks")}
+            onClick={() => {
+              onLocalInteraction?.();
+              setMode("blocks");
+            }}
           >
             区块模式
           </button>
@@ -125,7 +137,10 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
             type="button"
             role="tab"
             aria-selected={mode === "source"}
-            onClick={() => setMode("source")}
+            onClick={() => {
+              onLocalInteraction?.();
+              setMode("source");
+            }}
           >
             源码模式
           </button>
@@ -171,7 +186,10 @@ export function JournalEditor({ editor, isBusy, onSaveBlocks, onSaveSource }: Jo
             aria-label="编辑完整 JMF Markdown"
             value={sourceMarkdown}
             disabled={isBusy}
-            onChange={event => setSourceMarkdown(event.target.value)}
+            onChange={event => {
+              onLocalInteraction?.();
+              setSourceMarkdown(event.target.value);
+            }}
             rows={14}
           />
         </div>

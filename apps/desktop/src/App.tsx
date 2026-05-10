@@ -1,15 +1,18 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  activateAiSettings,
   addTodayInput,
   confirmTodayDraft,
   getAiSettings,
   getHealth,
   getTodayEditor,
   regenerateTodayDraft,
-  saveAiSettings,
+  revealAiProviderApiKey,
   saveBlockDraft,
   saveSourceDraft,
   testAiProvider,
+  type AiSettingsActivationResult,
+  type AiSettingsSaveRequest,
   type AiProviderHealthResult,
   type AiSettingsView,
   type JournalBlockEditSection,
@@ -44,6 +47,7 @@ export default function App() {
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
+  const [pendingRegenerateDraft, setPendingRegenerateDraft] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,8 +104,13 @@ export default function App() {
   const uniqueAttentionErrors = Array.from(new Set(attentionErrors));
   const hasEditableJournal = Boolean(editor && (editor.markdown.trim() || editor.sections.length > 0));
 
+  function resetPendingRegenerateDraft() {
+    setPendingRegenerateDraft(false);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    resetPendingRegenerateDraft();
     const trimmedInput = input.trim();
 
     if (!trimmedInput) {
@@ -136,6 +145,7 @@ export default function App() {
   async function handleConfirm() {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    resetPendingRegenerateDraft();
     setValidationError("");
     setIsSubmitting(true);
     try {
@@ -160,6 +170,7 @@ export default function App() {
   async function handleSaveBlocks(sections: JournalBlockEditSection[]) {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    resetPendingRegenerateDraft();
     setValidationError("");
     setIsSubmitting(true);
     try {
@@ -183,6 +194,7 @@ export default function App() {
   async function handleSaveSource(markdown: string) {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    resetPendingRegenerateDraft();
     setValidationError("");
     setIsSubmitting(true);
     try {
@@ -203,20 +215,23 @@ export default function App() {
     }
   }
 
-  async function handleSaveAiSettings(request: Parameters<typeof saveAiSettings>[0]) {
+  async function handleActivateAiSettings(request: AiSettingsSaveRequest): Promise<AiSettingsActivationResult> {
     const settingsRequestId = settingsRequestIdRef.current + 1;
     settingsRequestIdRef.current = settingsRequestId;
+    resetPendingRegenerateDraft();
     setIsSettingsSubmitting(true);
     try {
-      const next = await saveAiSettings(request);
+      const result = await activateAiSettings(request);
       if (settingsRequestId === settingsRequestIdRef.current) {
-        setAiSettings(next);
+        setAiSettings(result.settings);
         setApiError("");
       }
+      return result;
     } catch (caught) {
       if (settingsRequestId === settingsRequestIdRef.current) {
         setApiError(getErrorMessage(caught));
       }
+      throw caught;
     } finally {
       if (settingsRequestId === settingsRequestIdRef.current) {
         setIsSettingsSubmitting(false);
@@ -224,13 +239,21 @@ export default function App() {
     }
   }
 
-  async function handleTestAiProvider(providerId: string): Promise<AiProviderHealthResult> {
-    return await testAiProvider(providerId);
+  async function handleTestAiProvider(
+    providerId: string,
+    candidate?: AiSettingsSaveRequest
+  ): Promise<AiProviderHealthResult> {
+    return await testAiProvider(providerId, candidate);
+  }
+
+  async function handleRevealAiProviderKey(providerId: string) {
+    return await revealAiProviderApiKey(providerId);
   }
 
   async function handleRegenerateDraft(providerId?: string) {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    resetPendingRegenerateDraft();
     setValidationError("");
     setIsSubmitting(true);
     try {
@@ -267,6 +290,16 @@ export default function App() {
     }
   }
 
+  async function handleRegenerateCurrentDraft() {
+    if (!pendingRegenerateDraft) {
+      setPendingRegenerateDraft(true);
+      return;
+    }
+
+    setPendingRegenerateDraft(false);
+    await handleRegenerateDraft();
+  }
+
   function focusInput() {
     document.getElementById("today-input")?.focus();
   }
@@ -281,7 +314,15 @@ export default function App() {
         <div className="status-strip" aria-label="运行状态">
           <span className={`status-pill status-${statusLabel}`}>{statusLabel}</span>
           <span className="api-pill">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
-          <button type="button" className="llm-status-pill" aria-label={`LLM ${activeProviderName}`} onClick={() => setIsLlmPanelOpen(true)}>
+          <button
+            type="button"
+            className="llm-status-pill"
+            aria-label={`LLM ${activeProviderName}`}
+            onClick={() => {
+              resetPendingRegenerateDraft();
+              setIsLlmPanelOpen(true);
+            }}
+          >
             LLM {activeProviderName}
           </button>
         </div>
@@ -348,6 +389,7 @@ export default function App() {
                 isBusy={isBusy}
                 onSaveBlocks={handleSaveBlocks}
                 onSaveSource={handleSaveSource}
+                onLocalInteraction={resetPendingRegenerateDraft}
               />
             ) : null}
             {loadState !== "loading" && loadState !== "error" && !hasEditableJournal ? (
@@ -367,7 +409,10 @@ export default function App() {
               <textarea
                 id="today-input"
                 value={input}
-                onChange={event => setInput(event.target.value)}
+                onChange={event => {
+                  resetPendingRegenerateDraft();
+                  setInput(event.target.value);
+                }}
                 placeholder="例如：昨天把阶段 1 跑通了，今天准备做 JMF 主链路。"
                 rows={8}
                 disabled={isBusy}
@@ -389,6 +434,23 @@ export default function App() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+            </section>
+          ) : null}
+
+          {hasEditableJournal ? (
+            <section className="dock-block regenerate-panel" aria-label="重新整理">
+              <div className="section-head">
+                <h2>重新整理</h2>
+                <span>{activeProviderName}</span>
+              </div>
+              <p>
+                {pendingRegenerateDraft
+                  ? "这会覆盖当前草稿内容，但不会影响正式日记。"
+                  : "使用当前 LLM 重新整理 reviewing draft。"}
+              </p>
+              <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy}>
+                重新整理今日草稿
+              </button>
             </section>
           ) : null}
 
@@ -417,10 +479,13 @@ export default function App() {
         <LlmSettingsPanel
           settings={aiSettings}
           isBusy={isBusy || isSettingsSubmitting}
-          onClose={() => setIsLlmPanelOpen(false)}
-          onSave={handleSaveAiSettings}
+          onClose={() => {
+            resetPendingRegenerateDraft();
+            setIsLlmPanelOpen(false);
+          }}
+          onActivate={handleActivateAiSettings}
           onTest={handleTestAiProvider}
-          onRegenerate={handleRegenerateDraft}
+          onRevealApiKey={handleRevealAiProviderKey}
         />
       ) : null}
     </main>

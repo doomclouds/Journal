@@ -303,6 +303,239 @@ public sealed class JournalAiSettingsTests
     }
 
     [Fact]
+    public async Task ReadViewAsync_ReturnsMaskedPreviewForFileBackedApiKey()
+    {
+        using var workspace = TempWorkspace.Create();
+        var service = CreateService(workspace.Root, new Dictionary<string, string?>());
+
+        await service.SaveAsync(new JournalAiSettingsSaveRequest(
+            "deepseek",
+            [
+                new JournalAiProviderSaveRequest(
+                    "deepseek",
+                    "openai-compatible",
+                    "DeepSeek",
+                    "deepseek",
+                    "https://api.deepseek.com",
+                    "deepseek-v4-flash",
+                    "sk-file-backed-secret-4A7C",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var view = await service.ReadViewAsync(CancellationToken.None);
+        var provider = Assert.Single(view.Providers, item => item.Id == "deepseek");
+        var serialized = JsonSerializer.Serialize(view);
+
+        Assert.True(provider.HasApiKey);
+        Assert.True(provider.CanRevealApiKey);
+        Assert.Equal("sk-••••••••••••••••4A7C", provider.ApiKeyPreview);
+        Assert.DoesNotContain("sk-file-backed-secret-4A7C", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadViewAsync_DoesNotRevealEnvironmentBackedApiKey()
+    {
+        using var workspace = TempWorkspace.Create();
+        var service = CreateService(workspace.Root, new Dictionary<string, string?>
+        {
+            ["OPENAI_API_KEY"] = "sk-env-secret"
+        });
+
+        var view = await service.ReadViewAsync(CancellationToken.None);
+        var provider = Assert.Single(view.Providers, item => item.Id == "openai");
+        var serialized = JsonSerializer.Serialize(view);
+
+        Assert.True(provider.HasApiKey);
+        Assert.False(provider.CanRevealApiKey);
+        Assert.Equal("", provider.ApiKeyPreview);
+        Assert.DoesNotContain("sk-env-secret", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadFileApiKeyAsync_ReturnsOnlyFileBackedProviderKey()
+    {
+        using var workspace = TempWorkspace.Create();
+        var service = CreateService(workspace.Root, new Dictionary<string, string?>());
+
+        await service.SaveAsync(new JournalAiSettingsSaveRequest(
+            "deepseek",
+            [
+                new JournalAiProviderSaveRequest(
+                    "deepseek",
+                    "openai-compatible",
+                    "DeepSeek",
+                    "deepseek",
+                    "https://api.deepseek.com",
+                    "deepseek-v4-flash",
+                    "sk-file-backed-secret",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var key = await service.ReadFileApiKeyAsync("deepseek", CancellationToken.None);
+        var missing = await service.ReadFileApiKeyAsync("openai", CancellationToken.None);
+
+        Assert.NotNull(key);
+        Assert.Equal("deepseek", key.ProviderId);
+        Assert.Equal("file", key.Source);
+        Assert.Equal("sk-file-backed-secret", key.ApiKey);
+        Assert.Null(missing);
+    }
+
+    [Fact]
+    public async Task ReadFileApiKeyAsync_ReturnsNullWhenProviderIsEnvironmentBacked()
+    {
+        using var workspace = TempWorkspace.Create();
+        var fileService = CreateService(workspace.Root, new Dictionary<string, string?>());
+
+        await fileService.SaveAsync(new JournalAiSettingsSaveRequest(
+            "openai",
+            [
+                new JournalAiProviderSaveRequest(
+                    "openai",
+                    "openai-compatible",
+                    "OpenAI",
+                    "openai",
+                    "https://api.openai.com/v1",
+                    "gpt-5.4",
+                    "sk-file-secret",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var envService = CreateService(workspace.Root, new Dictionary<string, string?>
+        {
+            ["OPENAI_API_KEY"] = "sk-env-secret"
+        });
+
+        var view = await envService.ReadViewAsync(CancellationToken.None);
+        var provider = Assert.Single(view.Providers, item => item.Id == "openai");
+        var apiKey = await envService.ReadFileApiKeyAsync("openai", CancellationToken.None);
+
+        Assert.Equal("environment", provider.Source);
+        Assert.False(provider.CanRevealApiKey);
+        Assert.Null(apiKey);
+    }
+
+    [Fact]
+    public async Task ReadFileApiKeyAsync_AllowsRevealWhenEnvironmentOverridesOnlyModel()
+    {
+        using var workspace = TempWorkspace.Create();
+        var fileService = CreateService(workspace.Root, new Dictionary<string, string?>());
+
+        await fileService.SaveAsync(new JournalAiSettingsSaveRequest(
+            "openai",
+            [
+                new JournalAiProviderSaveRequest(
+                    "openai",
+                    "openai-compatible",
+                    "OpenAI",
+                    "openai",
+                    "https://api.openai.com/v1",
+                    "gpt-5.4",
+                    "sk-file-secret-9D2A",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var envService = CreateService(workspace.Root, new Dictionary<string, string?>
+        {
+            ["JOURNAL_AI_MODEL"] = "gpt-5.4-env"
+        });
+
+        var view = await envService.ReadViewAsync(CancellationToken.None);
+        var provider = Assert.Single(view.Providers, item => item.Id == "openai");
+        var apiKey = await envService.ReadFileApiKeyAsync("openai", CancellationToken.None);
+
+        Assert.Equal("environment", provider.Source);
+        Assert.Equal("gpt-5.4-env", provider.Model);
+        Assert.True(provider.HasApiKey);
+        Assert.True(provider.CanRevealApiKey);
+        Assert.Equal("sk-••••••••••••••••9D2A", provider.ApiKeyPreview);
+        Assert.NotNull(apiKey);
+        Assert.Equal("sk-file-secret-9D2A", apiKey.ApiKey);
+    }
+
+    [Fact]
+    public async Task BuildEffectiveCandidateAsync_PreservesBlankFileKeyAndAppliesEnvironmentOverlay()
+    {
+        using var workspace = TempWorkspace.Create();
+        var fileService = CreateService(workspace.Root, new Dictionary<string, string?>());
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var store = new JournalAiSettingsStore(paths);
+
+        await fileService.SaveAsync(new JournalAiSettingsSaveRequest(
+            "deepseek",
+            [
+                new JournalAiProviderSaveRequest(
+                    "deepseek",
+                    "openai-compatible",
+                    "DeepSeek",
+                    "deepseek",
+                    "https://api.deepseek.com",
+                    "deepseek-v4-flash",
+                    "file-backed-secret",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]), CancellationToken.None);
+
+        var candidateRequest = new JournalAiSettingsSaveRequest(
+            "deepseek",
+            [
+                new JournalAiProviderSaveRequest(
+                    "deepseek",
+                    "openai-compatible",
+                    "DeepSeek",
+                    "deepseek",
+                    "https://api.deepseek.com",
+                    "deepseek-candidate",
+                    "",
+                    true,
+                    45,
+                    0.2,
+                    1200,
+                    "faithful")
+            ]);
+
+        var fileCandidate = await fileService.BuildEffectiveCandidateAsync(candidateRequest, CancellationToken.None);
+        var fileProvider = Assert.Single(fileCandidate.Providers, item => item.Id == "deepseek");
+
+        Assert.Equal("file-backed-secret", fileProvider.ApiKey);
+        Assert.Equal("deepseek-candidate", fileProvider.Model);
+
+        var envService = CreateService(workspace.Root, new Dictionary<string, string?>
+        {
+            ["DEEPSEEK_API_KEY"] = "env-secret"
+        });
+
+        var envCandidate = await envService.BuildEffectiveCandidateAsync(candidateRequest, CancellationToken.None);
+        var envProvider = Assert.Single(envCandidate.Providers, item => item.Id == "deepseek");
+
+        Assert.Equal("env-secret", envProvider.ApiKey);
+        Assert.Equal("deepseek-candidate", envProvider.Model);
+
+        var persisted = await store.ReadAsync(CancellationToken.None);
+        var persistedProvider = Assert.Single(persisted.Providers, item => item.Id == "deepseek");
+        Assert.Equal("file-backed-secret", persistedProvider.ApiKey);
+    }
+
+    [Fact]
     public async Task ReadEffectiveAsync_PreservesUnknownEnvironmentProviderOverride()
     {
         using var workspace = TempWorkspace.Create();

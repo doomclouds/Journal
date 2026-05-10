@@ -43,10 +43,65 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
         return new JournalAiSettingsView(
             effective.ActiveProviderId,
             Runtime,
-            effective.Providers.Select(provider => ToView(provider, effective.ActiveProviderId, SourceOf(provider, fileSettings, isFileBacked, overlay))).ToArray());
+            effective.Providers.Select(provider =>
+            {
+                var source = SourceOf(provider, fileSettings, isFileBacked, overlay);
+                var fileProvider = fileSettings.Providers.FirstOrDefault(item =>
+                    string.Equals(item.Id, provider.Id, StringComparison.OrdinalIgnoreCase));
+                var canRevealApiKey = CanRevealFileBackedApiKey(provider, fileProvider, isFileBacked);
+                var apiKeyPreview = canRevealApiKey ? MaskApiKey(fileProvider!.ApiKey) : string.Empty;
+                return ToView(provider, effective.ActiveProviderId, source, apiKeyPreview, canRevealApiKey);
+            }).ToArray());
     }
 
     public async Task SaveAsync(JournalAiSettingsSaveRequest request, CancellationToken cancellationToken)
+    {
+        var settings = await CreateFileSettingsFromRequestAsync(request, cancellationToken);
+        await _store.WriteAsync(settings, cancellationToken);
+    }
+
+    public async Task<JournalAiSettings> BuildEffectiveCandidateAsync(
+        JournalAiSettingsSaveRequest request,
+        CancellationToken cancellationToken)
+    {
+        var fileCandidate = await CreateFileSettingsFromRequestAsync(request, cancellationToken);
+        var overlay = ResolveEnvironmentOverlay(fileCandidate);
+        return ApplyEnvironment(fileCandidate, overlay);
+    }
+
+    public async Task<JournalAiProviderApiKeyView?> ReadFileApiKeyAsync(
+        string providerId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(providerId))
+        {
+            return null;
+        }
+
+        var readResult = await _store.ReadWithMetadataAsync(cancellationToken);
+        if (!readResult.IsFileBacked)
+        {
+            return null;
+        }
+
+        var provider = readResult.Settings.Providers.FirstOrDefault(item =>
+            string.Equals(item.Id, providerId.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (provider is null || provider.IsMock || string.IsNullOrWhiteSpace(provider.ApiKey))
+        {
+            return null;
+        }
+
+        if (!CanRevealFileBackedApiKey(provider, provider, readResult.IsFileBacked))
+        {
+            return null;
+        }
+
+        return new JournalAiProviderApiKeyView(provider.Id, "file", provider.ApiKey);
+    }
+
+    private async Task<JournalAiSettings> CreateFileSettingsFromRequestAsync(
+        JournalAiSettingsSaveRequest request,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateSaveRequest(request);
@@ -61,11 +116,9 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             throw new ArgumentException($"active provider '{activeProviderId}' was not found in providers.", nameof(request));
         }
 
-        var settings = new JournalAiSettings(
+        return new JournalAiSettings(
             activeProviderId,
             request.Providers.Select(provider => ToSettings(provider, currentFileSettings)).ToArray());
-
-        await _store.WriteAsync(settings, cancellationToken);
     }
 
     private static void ValidateSaveRequest(JournalAiSettingsSaveRequest request)
@@ -197,6 +250,10 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private bool HasEnvironmentApiKey(string providerId) =>
+        !string.IsNullOrWhiteSpace(GetTrimmed("JOURNAL_AI_API_KEY"))
+        || !string.IsNullOrWhiteSpace(FirstConfiguredProviderKeyValue(providerId));
+
     private static JournalAiProviderSettings ToSettings(
         JournalAiProviderSaveRequest provider,
         JournalAiSettings currentFileSettings)
@@ -222,8 +279,28 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             provider.StylePreset.Trim());
     }
 
-    private static JournalAiProviderView ToView(JournalAiProviderSettings provider, string activeProviderId, string source) =>
-        new(
+    private bool CanRevealFileBackedApiKey(
+        JournalAiProviderSettings provider,
+        JournalAiProviderSettings? fileProvider,
+        bool isFileBacked)
+    {
+        return isFileBacked
+            && !provider.IsMock
+            && fileProvider is not null
+            && !string.IsNullOrWhiteSpace(fileProvider.ApiKey)
+            && !HasEnvironmentApiKey(provider.Id);
+    }
+
+    private static JournalAiProviderView ToView(
+        JournalAiProviderSettings provider,
+        string activeProviderId,
+        string source,
+        string apiKeyPreview,
+        bool canRevealApiKey)
+    {
+        var hasApiKey = provider.IsMock || !string.IsNullOrWhiteSpace(provider.ApiKey);
+
+        return new JournalAiProviderView(
             provider.Id,
             provider.Type,
             provider.DisplayName,
@@ -232,13 +309,29 @@ public sealed class JournalAiSettingsService : IJournalAiSettingsReader
             provider.Model,
             provider.IsEnabled,
             string.Equals(provider.Id, activeProviderId, StringComparison.OrdinalIgnoreCase),
-            provider.IsMock || !string.IsNullOrWhiteSpace(provider.ApiKey),
+            hasApiKey,
+            apiKeyPreview,
+            canRevealApiKey,
             source,
             provider.TimeoutSeconds,
             provider.Temperature,
             provider.MaxTokens,
             provider.StylePreset,
             "not-tested");
+    }
+
+    private static string MaskApiKey(string apiKey)
+    {
+        var trimmed = apiKey.Trim();
+        if (trimmed.Length <= 8)
+        {
+            return "••••";
+        }
+
+        var prefix = trimmed.Length >= 3 ? trimmed[..3] : string.Empty;
+        var suffix = trimmed[^4..];
+        return $"{prefix}••••••••••••••••{suffix}";
+    }
 
     private static string SourceOf(
         JournalAiProviderSettings provider,

@@ -62,6 +62,16 @@ public sealed class JournalAiGenerationService
         CancellationToken cancellationToken)
     {
         var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
+        return await CheckAsync(providerId, settings, cancellationToken);
+    }
+
+    public async Task<JournalAiProviderHealthResult> CheckAsync(
+        string? providerId,
+        JournalAiSettings settings,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
         if (!TryResolveProvider(settings, providerId, out var providerSettings, out var error))
         {
             return JournalAiProviderHealthResult.Failure(error.Code, null, null, error);
