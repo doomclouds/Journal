@@ -27,7 +27,13 @@ public sealed class JournalAiGenerationService
         CancellationToken cancellationToken)
     {
         var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
-        var providerSettings = ResolveProvider(settings, providerIdOverride);
+        if (!TryResolveProvider(settings, providerIdOverride, out var providerSettings, out var error))
+        {
+            return JournalAiProviderResult.Failure(
+                CreateUnknownProviderMetadata(providerIdOverride),
+                error);
+        }
+
         IJournalAiProvider provider = providerSettings.IsMock ? _mockProvider : _openAiCompatibleProvider;
         var result = await provider.GenerateAsync(
             new JournalAiGenerationRequest(date, rawInputs, generatedAt, providerSettings),
@@ -55,18 +61,57 @@ public sealed class JournalAiGenerationService
         CancellationToken cancellationToken)
     {
         var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
-        var providerSettings = ResolveProvider(settings, providerId);
+        if (!TryResolveProvider(settings, providerId, out var providerSettings, out var error))
+        {
+            return JournalAiProviderHealthResult.Failure(error.Code, null, null, error);
+        }
+
         IJournalAiProvider provider = providerSettings.IsMock ? _mockProvider : _openAiCompatibleProvider;
         return await provider.CheckAsync(providerSettings, cancellationToken);
     }
 
-    private static JournalAiProviderSettings ResolveProvider(JournalAiSettings settings, string? providerIdOverride)
+    private static bool TryResolveProvider(
+        JournalAiSettings settings,
+        string? providerIdOverride,
+        out JournalAiProviderSettings providerSettings,
+        out JournalAiSafeError error)
     {
-        var providerId = string.IsNullOrWhiteSpace(providerIdOverride)
-            ? settings.ActiveProviderId
-            : providerIdOverride.Trim();
-        return settings.Providers.FirstOrDefault(provider =>
-                string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase))
-            ?? settings.Providers.First(provider => provider.IsMock);
+        var isExplicitOverride = !string.IsNullOrWhiteSpace(providerIdOverride);
+        var providerId = isExplicitOverride
+            ? providerIdOverride!.Trim()
+            : settings.ActiveProviderId;
+        var resolvedProvider = settings.Providers.FirstOrDefault(provider =>
+            string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase));
+        if (resolvedProvider is not null)
+        {
+            providerSettings = resolvedProvider;
+            error = null!;
+            return true;
+        }
+
+        if (!isExplicitOverride)
+        {
+            providerSettings = settings.Providers.FirstOrDefault(provider => provider.IsMock)
+                ?? JournalAiSettings.CreateDefault().Providers.Single(provider => provider.IsMock);
+            error = null!;
+            return true;
+        }
+
+        providerSettings = null!;
+        error = CreateProviderNotFoundError(providerId);
+        return false;
     }
+
+    private static JournalAiSafeError CreateProviderNotFoundError(string providerId) =>
+        JournalAiSafeError.Create(
+            "settings",
+            "provider_not_found",
+            $"AI provider '{providerId}' was not found.",
+            $"Provider '{providerId}' was not found in effective AI settings.");
+
+    private static JournalAiMetadata CreateUnknownProviderMetadata(string? providerIdOverride) =>
+        new(
+            string.IsNullOrWhiteSpace(providerIdOverride) ? "unknown" : providerIdOverride.Trim(),
+            "unknown",
+            JournalAiPrompt.Version);
 }

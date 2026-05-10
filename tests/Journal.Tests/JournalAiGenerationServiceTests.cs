@@ -65,6 +65,48 @@ public sealed class JournalAiGenerationServiceTests
         Assert.Contains("schema must be journal-entry/v1", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GenerateAsync_WithUnknownProviderOverrideReturnsProviderNotFound()
+    {
+        var settings = JournalAiSettings.CreateDefault();
+        var service = new JournalAiGenerationService(
+            new StaticSettingsService(settings),
+            new MockAiProvider(),
+            new OpenAiCompatibleJournalAiProvider(new ThrowingRuntime()));
+        var date = JournalDate.From(new DateOnly(2026, 5, 10));
+
+        var result = await service.GenerateAsync(
+            date,
+            [],
+            DateTimeOffset.Parse("2026-05-10T08:30:00+08:00"),
+            providerIdOverride: "missing-provider",
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.AiJson);
+        var error = Assert.IsType<JournalAiSafeError>(result.Error);
+        Assert.Equal("provider_not_found", error.Code);
+        Assert.Contains("missing-provider", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CheckAsync_WithUnknownProviderReturnsProviderNotFound()
+    {
+        var settings = JournalAiSettings.CreateDefault();
+        var service = new JournalAiGenerationService(
+            new StaticSettingsService(settings),
+            new MockAiProvider(),
+            new OpenAiCompatibleJournalAiProvider(new ThrowingRuntime()));
+
+        var result = await service.CheckAsync("missing-provider", CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("provider_not_found", result.Status);
+        var error = Assert.IsType<JournalAiSafeError>(result.Error);
+        Assert.Equal("provider_not_found", error.Code);
+        Assert.Contains("missing-provider", error.Message, StringComparison.Ordinal);
+    }
+
     private static JournalAiJson CreateInvalidAiJson() =>
         new(
             "legacy",

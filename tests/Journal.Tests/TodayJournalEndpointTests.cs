@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Journal.Domain.Entries;
+using Journal.Infrastructure.Ai;
 using Journal.Infrastructure.Clock;
 using Journal.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -363,6 +364,18 @@ public sealed class TodayJournalEndpointTests
         Assert.Equal("markdown is required", document.RootElement.GetProperty("error").GetString());
     }
 
+    [Fact]
+    public void Services_ResolveJournalAiSettingsServiceConcreteAndReaderAsSameInstance()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+
+        var concrete = factory.Services.GetRequiredService<JournalAiSettingsService>();
+        var reader = factory.Services.GetRequiredService<IJournalAiSettingsReader>();
+
+        Assert.Same(concrete, reader);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string root) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -371,8 +384,10 @@ public sealed class TodayJournalEndpointTests
                 {
                     services.RemoveAll<JournalStorageOptions>();
                     services.RemoveAll<IJournalClock>();
+                    services.RemoveAll<IJournalAiEnvironment>();
                     services.AddSingleton(new JournalStorageOptions(root));
                     services.AddSingleton<IJournalClock>(new FixedJournalClock(FixedDay, FixedNow));
+                    services.AddSingleton<IJournalAiEnvironment>(new EmptyJournalAiEnvironment());
                 });
             });
 
@@ -381,6 +396,11 @@ public sealed class TodayJournalEndpointTests
         public DateOnly Today => today;
 
         public DateTimeOffset Now => now;
+    }
+
+    private sealed class EmptyJournalAiEnvironment : IJournalAiEnvironment
+    {
+        public string? Get(string name) => null;
     }
 
     private sealed class TempWorkspace : IDisposable

@@ -34,7 +34,14 @@ builder.Services.AddSingleton<IJournalClock, SystemJournalClock>();
 builder.Services.AddSingleton<RawInputStore>();
 builder.Services.AddSingleton<DraftStore>();
 builder.Services.AddSingleton<EntryStore>();
-builder.Services.AddSingleton<IJournalAiProvider, MockAiProvider>();
+builder.Services.AddSingleton<JournalAiSettingsStore>();
+builder.Services.AddSingleton<IJournalAiEnvironment, SystemJournalAiEnvironment>();
+builder.Services.AddSingleton<JournalAiSettingsService>();
+builder.Services.AddSingleton<IJournalAiSettingsReader>(sp => sp.GetRequiredService<JournalAiSettingsService>());
+builder.Services.AddSingleton<MockAiProvider>();
+builder.Services.AddSingleton<IJournalAiAgentRuntime, OpenAiCompatibleAgentRuntime>();
+builder.Services.AddSingleton<OpenAiCompatibleJournalAiProvider>();
+builder.Services.AddSingleton<JournalAiGenerationService>();
 builder.Services.AddSingleton<TodayJournalService>();
 
 var app = builder.Build();
