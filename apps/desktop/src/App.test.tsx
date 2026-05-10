@@ -1281,6 +1281,33 @@ describe("App", () => {
     });
   });
 
+  test("dirty source edits disable block editing and insertion until source is saved or reset", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "展开高级源码" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" }), {
+      target: { value: "# 2026-05-08\n\n源码本地改动还没保存" }
+    });
+
+    expect(within(screen.getByLabelText("今日状态")).getByText("有未保存修改")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
+
+    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue("# 2026-05-08\n\n源码本地改动还没保存");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   test("disables block actions and confirm actions while selected block save is pending", async () => {
     const blockSaveDeferred = createDeferred<Response>();
     const fetchMock = vi
@@ -1380,10 +1407,10 @@ describe("App", () => {
       throw new Error("Expected raw input form");
     }
 
-    fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
     fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "准备保存的本地内容" }
     });
+    fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
     fireEvent.submit(inputForm);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");

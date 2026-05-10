@@ -127,6 +127,7 @@ export function JournalEditor({
   }, [hasLocalDirty, onDirtyChange]);
 
   const isSourceSaveDisabled = isBusy || hasDirtyEditingSection;
+  const areBlockSwitchActionsDisabled = isBusy || hasLocalDirty;
 
   function resetSectionToBaseline(current: JmfSection[], sectionId: string) {
     const baselineSection = editor.sections.find(section => section.id === sectionId);
@@ -147,7 +148,7 @@ export function JournalEditor({
   }
 
   function editSection(sectionId: string) {
-    if (hasDirtyEditingSection && editingSectionId !== sectionId) {
+    if (hasLocalDirty && editingSectionId !== sectionId) {
       return;
     }
 
@@ -167,7 +168,7 @@ export function JournalEditor({
   }
 
   function insertSection(definition: JmfSectionDefinition) {
-    if (hasDirtyEditingSection) {
+    if (hasLocalDirty) {
       return;
     }
 
@@ -225,7 +226,7 @@ export function JournalEditor({
       <div className="journal-editor-blocks">
         <InsertBlockMenu
           sections={insertableSections}
-          disabled={isBusy || hasDirtyEditingSection}
+          disabled={areBlockSwitchActionsDisabled}
           onInsert={insertSection}
         />
         {sections.map(section => (
@@ -233,7 +234,7 @@ export function JournalEditor({
             key={section.id}
             section={section}
             value={section.content}
-            disabled={isBusy || (hasDirtyEditingSection && editingSectionId !== section.id)}
+            disabled={isBusy || (hasLocalDirty && editingSectionId !== section.id)}
             isEditing={editingSectionId === section.id}
             onEdit={() => editSection(section.id)}
             onCancel={() => cancelSection(section.id)}
@@ -254,7 +255,7 @@ export function JournalEditor({
           <textarea
             aria-label="编辑完整 JMF Markdown"
             value={sourceMarkdown}
-            disabled={isBusy}
+            disabled={isBusy || hasDirtyEditingSection}
             onChange={event => {
               onLocalInteraction?.();
               setSourceMarkdown(event.target.value);
