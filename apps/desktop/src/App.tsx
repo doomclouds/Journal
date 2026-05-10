@@ -91,9 +91,14 @@ export default function App() {
   }, [today]);
 
   const canConfirm = Boolean(editor?.canConfirm && today?.draft && today.status !== "attention");
-  const activeProviderName = aiSettings?.providers.find(provider => provider.isActive)?.displayName
+  const activeProvider = aiSettings?.providers.find(provider => provider.isActive);
+  const activeProviderName = activeProvider?.displayName
     ?? (aiSettings?.activeProviderId ? aiSettings.activeProviderId : "Mock");
-  const activeProviderStatus = `${activeProviderName} 可用`;
+  const activeProviderStatus = activeProvider
+    ? `${activeProvider.displayName} 可用`
+    : aiSettings?.activeProviderId
+      ? `${aiSettings.activeProviderId} 需要配置`
+      : "Mock 可用";
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
@@ -463,7 +468,7 @@ export default function App() {
               </div>
               <div>
                 <dt>整理方式</dt>
-                <dd>{activeProviderName} 可用。</dd>
+                <dd>{activeProviderStatus}。</dd>
               </div>
               <div>
                 <dt>保存目标</dt>
@@ -485,9 +490,6 @@ export default function App() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-              <button type="button" className="secondary-action" onClick={handleRegenerateCurrentDraft} disabled={isBusy}>
-                重新整理
-              </button>
             </section>
           ) : null}
 

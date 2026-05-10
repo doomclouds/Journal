@@ -418,7 +418,7 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "LLM DeepSeek" })).toHaveTextContent("DeepSeek 可用");
   });
 
-  test("shows unknown active LLM id instead of falling back to Mock", async () => {
+  test("shows unknown active LLM id as needing configuration instead of falling back to Mock", async () => {
     mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
@@ -427,7 +427,9 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toHaveTextContent("missing-provider 可用");
+    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toHaveTextContent("missing-provider 需要配置");
+    expect(screen.getByText("missing-provider 需要配置。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LLM missing-provider" })).not.toHaveTextContent("missing-provider 可用");
     expect(screen.queryByRole("button", { name: "LLM Mock" })).not.toBeInTheDocument();
   });
 
@@ -965,6 +967,39 @@ describe("App", () => {
     expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "确认写入正式日记" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
+  });
+
+  test("keeps regenerate confirmation and action together in needs-attention state", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState({
+        status: "attention",
+        validation: {
+          isValid: false,
+          issues: [
+            {
+              code: "missing-title",
+              message: "title is required",
+              repairHint: "补齐标题后再确认。"
+            }
+          ]
+        },
+        canConfirm: false,
+        today: attentionToday
+      }) },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    await screen.findByText("正式日记没有被覆盖，原始表达仍然保留。");
+
+    expect(screen.getAllByRole("button", { name: "重新整理" })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "重新整理" })).toHaveLength(1);
   });
 
   test("confirms draft and refreshes from today editor state", async () => {
