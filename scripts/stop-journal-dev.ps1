@@ -21,7 +21,17 @@ function Stop-ProcessIfRunning {
     }
 
     Write-Host "Stopping $($process.ProcessName) PID $ProcessId ($Reason)"
-    Stop-Process -Id $ProcessId -Force
+    try {
+        Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+    }
+    catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
+        $stillRunning = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if ($stillRunning) {
+            throw
+        }
+
+        Write-Host "Process PID $ProcessId already exited."
+    }
 }
 
 function Stop-RepoProcess {

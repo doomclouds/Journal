@@ -54,10 +54,27 @@ describe("Today workbench productized CSS contract", () => {
     return match?.[1] ?? "";
   }
 
-  test("defines the main productized workbench regions", () => {
-    expect(css).toMatch(/\.productized-workspace\s*\{/);
+  test("defines command surface shell regions", () => {
+    expect(css).toMatch(/\.desktop-shell\s*\{/);
+    expect(css).toMatch(/\.app-window\s*\{/);
+    expect(css).toMatch(/\.menubar\s*\{/);
+    expect(css).toMatch(/\.command-workspace\s*\{/);
     expect(css).toMatch(/\.today-assistant\s*\{/);
     expect(css).toMatch(/\.compose-bar\s*\{/);
+  });
+
+  test("uses three columns on desktop and one column on narrow layouts", () => {
+    expect(css).toMatch(
+      /\.command-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(240px,\s*0\.78fr\)\s+minmax\(520px,\s*1\.45fr\)\s+minmax\(320px,\s*0\.95fr\);/s
+    );
+    expect(css).toMatch(/@media\s*\(max-width:\s*1120px\)/);
+    expect(css).toMatch(/\.command-workspace\s*\{[^}]*grid-template-columns:\s*1fr;/s);
+  });
+
+  test("keeps feedback messages in a dedicated row before the workbench", () => {
+    expect(css).toMatch(/\.app-window\s*\{[^}]*grid-template-rows:\s*32px\s+44px\s+auto\s+auto\s+minmax\(0,\s*1fr\);/s);
+    expect(css).toMatch(/\.feedback-row\s*\{/);
+    expect(css).toMatch(/\.feedback-row:empty\s*\{[^}]*display:\s*none;/s);
   });
 
   test("does not expose advanced source drawer styles in the daily workbench", () => {
@@ -97,6 +114,7 @@ describe("Today workbench productized CSS contract", () => {
   test("collapses to one primary scroll column below 1180px", () => {
     const narrowLayoutCss = getNarrowLayoutCss();
 
+    expect(css).toMatch(/@media\s*\(max-width:\s*1120px\)[\s\S]*\.command-workspace\s*\{[^}]*grid-template-columns:\s*1fr;/);
     expect(narrowLayoutCss).toMatch(/\.productized-workspace\s*\{[^}]*grid-template-columns:\s*1fr;/s);
     expect(narrowLayoutCss).toMatch(/\.today-assistant\s*\{[^}]*overflow:\s*visible;/s);
     expect(narrowLayoutCss).toMatch(/\.compose-bar,\s*\.compose-bar\s+form\s*\{[^}]*grid-template-columns:\s*1fr;/s);

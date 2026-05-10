@@ -388,7 +388,7 @@ describe("App", () => {
     );
     expect(screen.getAllByText("今日材料").length).toBeGreaterThan(0);
     expect(screen.getByText("整理状态")).toBeInTheDocument();
-    expect(screen.getByText("下一步")).toBeInTheDocument();
+    expect(screen.getAllByText("下一步").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "LLM Mock" })).toHaveTextContent("Mock 可用");
     expect(screen.queryByText("reviewing")).not.toBeInTheDocument();
     expect(screen.queryByText("Raw inputs")).not.toBeInTheDocument();
@@ -428,7 +428,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toHaveTextContent("missing-provider 需要配置");
-    expect(screen.getByText("missing-provider 需要配置。")).toBeInTheDocument();
+    expect(screen.getAllByText(/missing-provider 需要配置/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "LLM missing-provider" })).not.toHaveTextContent("missing-provider 可用");
     expect(screen.queryByRole("button", { name: "LLM Mock" })).not.toBeInTheDocument();
   });
@@ -447,6 +447,23 @@ describe("App", () => {
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
     expect(screen.getByText("测试会向当前 LLM 发送一次最小请求，可能产生少量 token 消耗。")).toBeInTheDocument();
+  });
+
+  test("LLM settings shows provider configuration without style selector buttons", async () => {
+    vi.stubGlobal("fetch", createInitialFetchMock());
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /LLM/ }));
+
+    const panel = screen.getByRole("region", { name: "LLM 配置面板" });
+    expect(within(panel).getByText("模型来源")).toBeInTheDocument();
+    expect(within(panel).getByText("连接信息")).toBeInTheDocument();
+    expect(within(panel).getByText("配置来源")).toBeInTheDocument();
+    expect(within(panel).getByText("最近诊断")).toBeInTheDocument();
+    expect(within(panel).getByText("忠实整理")).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "轻度润色" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "结构优先" })).not.toBeInTheDocument();
   });
 
   test("tests provider and shows safe technical details", async () => {

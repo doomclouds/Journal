@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { TodayEditorState } from "./api";
 import {
+  getAssistantSummary,
   getProductJournalStatus,
+  getRawInputPreview,
   getSectionDisplayTitle,
   getSectionKindLabel,
+  getStaticAiStyleLabel,
   hasSourceDiagnostics
 } from "./todayWorkbenchView";
 
@@ -69,6 +72,21 @@ describe("todayWorkbenchView", () => {
     expect(status.label).toBe("需要处理");
   });
 
+  test("uses product language for attention state", () => {
+    const status = getProductJournalStatus(createEditor({
+      status: "attention",
+      canConfirm: false,
+      validation: {
+        isValid: false,
+        issues: []
+      }
+    }));
+
+    expect(status.label).toBe("需要处理");
+    expect(status.nextStepText).toContain("日记结构");
+    expect(status.nextStepText).not.toContain("JMF");
+  });
+
   test("uses validation invalid flag before reviewing readiness even without display issues", () => {
     const invalidWithoutIssues = {
       isValid: false,
@@ -96,6 +114,32 @@ describe("todayWorkbenchView", () => {
     expect(getSectionDisplayTitle("yesterday-review", "昨日回顾")).toBe("昨天回顾");
     expect(getSectionDisplayTitle("future-notes", "未来备注")).toBe("未来提醒");
     expect(getSectionDisplayTitle("gratitude", "感恩记录")).toBe("感恩记录");
+  });
+
+  test("maps raw inputs to today materials", () => {
+    expect(getSectionDisplayTitle("raw-inputs", "原始输入")).toBe("今日材料");
+  });
+
+  test("creates a short raw input preview", () => {
+    expect(getRawInputPreview("今天想把主界面从调试面板改成真正的工作台", 12)).toBe("今天想把主界面从...");
+  });
+
+  test("summarizes assistant counts", () => {
+    const summary = getAssistantSummary({
+      rawInputCount: 3,
+      editableSectionCount: 4,
+      dirtySectionCount: 1
+    });
+
+    expect(summary).toEqual({
+      rawInputCount: "3",
+      sectionCount: "4",
+      editedCount: "1"
+    });
+  });
+
+  test("exposes static AI style copy without making it configurable", () => {
+    expect(getStaticAiStyleLabel()).toBe("忠实整理");
   });
 
   test("maps section kind label by editability", () => {

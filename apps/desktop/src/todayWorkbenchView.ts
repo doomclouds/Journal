@@ -107,6 +107,33 @@ export function getSectionKindLabel(id: string, isEditableInBlockMode: boolean):
   return isEditableInBlockMode ? "可编辑" : "只读";
 }
 
+export function getRawInputPreview(text: string, maxLength = 32): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 4))}...`;
+}
+
+export type AssistantSummaryInput = {
+  rawInputCount: number;
+  editableSectionCount: number;
+  dirtySectionCount: number;
+};
+
+export function getAssistantSummary(input: AssistantSummaryInput) {
+  return {
+    rawInputCount: String(input.rawInputCount),
+    sectionCount: String(input.editableSectionCount),
+    editedCount: String(input.dirtySectionCount)
+  };
+}
+
+export function getStaticAiStyleLabel(): string {
+  return "忠实整理";
+}
+
 export function hasSourceDiagnostics(validation: JmfValidationResult | null | undefined): boolean {
   return Boolean(validation?.issues.length);
 }
