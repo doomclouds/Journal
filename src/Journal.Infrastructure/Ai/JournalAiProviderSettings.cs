@@ -36,6 +36,8 @@ public sealed record JournalAiProviderView(
     bool IsEnabled,
     bool IsActive,
     bool HasApiKey,
+    string ApiKeyPreview,
+    bool CanRevealApiKey,
     string Source,
     int TimeoutSeconds,
     double Temperature,
@@ -47,6 +49,16 @@ public sealed record JournalAiSettingsView(
     string ActiveProviderId,
     string Runtime,
     IReadOnlyList<JournalAiProviderView> Providers);
+
+public sealed record JournalAiProviderApiKeyView(
+    string ProviderId,
+    string Source,
+    string ApiKey);
+
+public sealed record JournalAiSettingsActivationResult(
+    bool Saved,
+    JournalAiSettingsView Settings,
+    JournalAiProviderHealthResult TestResult);
 
 public sealed record JournalAiProviderSaveRequest(
     string Id,

@@ -64,6 +64,17 @@ app.MapGet("/settings/ai", async (JournalAiSettingsService service, Cancellation
     return Results.Ok(view);
 });
 
+app.MapGet("/settings/ai/{providerId}/api-key", async (
+    string providerId,
+    JournalAiSettingsService service,
+    CancellationToken cancellationToken) =>
+{
+    var result = await service.ReadFileApiKeyAsync(providerId, cancellationToken);
+    return result is null
+        ? Results.NotFound(new { error = "file-backed API key was not found" })
+        : Results.Ok(result);
+});
+
 app.MapPut("/settings/ai", async (
     JournalAiSettingsSaveRequest request,
     JournalAiSettingsService service,
