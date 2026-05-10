@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Journal 今日工作台产品化原型</title>
+  <style>
+    :root {
+      --bg: #f3f0e8;
+      --paper: #fffdf8;
+      --paper-warm: #fbf7ee;
+      --ink: #25221d;
+      --muted: #756e63;
+      --soft: #8b8377;
+      --line: #ddd5c7;
+      --line-strong: #cfc5b4;
+      --sage: #2f6d62;
+      --sage-soft: #e1eee8;
+      --sage-line: #b8d4ca;
+      --gold: #946523;
+      --gold-soft: #f6ead6;
+      --rose: #a84d3f;
+      --rose-soft: #f7e3df;
+      --dark: #2b251f;
+      --dark-2: #382f27;
+      --dark-3: #463a30;
+      --dark-line: #5b4d3f;
+      --dark-text: #f3e8da;
+      --shadow: 0 18px 48px rgba(44, 38, 28, 0.10);
+      color: var(--ink);
+      background: #ebe7dd;
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 960px;
+      background:
+        linear-gradient(180deg, #eee9df 0, #f7f3eb 220px, #ebe7dd 100%);
+    }
+
+    button,
+    textarea,
+    input {
+      font: inherit;
+    }
+
+    .prototype-shell {
+      width: min(1480px, calc(100vw - 48px));
+      margin: 24px auto 40px;
+      display: grid;
+      gap: 22px;
+    }
+
+    .prototype-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      border: 1px solid #d8d0c2;
+      border-radius: 12px;
+      background: #fffaf1;
+      padding: 16px 18px;
+      color: var(--muted);
+      line-height: 1.6;
+      box-shadow: 0 8px 24px rgba(44, 38, 28, 0.06);
+    }
+
+    .prototype-note strong {
+      color: var(--ink);
+    }
+
+    .app-window {
+      border: 1px solid #d4ccbd;
+      border-radius: 16px;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .window-chrome {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid #d8d0c2;
+      background: #f8f5ed;
+      padding: 0 16px;
+      color: #5e554b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .window-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      background: #d9d0c2;
+    }
+
+    .today-workbench {
+      min-height: 1100px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 18px;
+      padding: 22px;
+    }
+
+    .top-context {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 22px;
+    }
+
+    .today-title {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .date-mark {
+      color: var(--sage);
+      font-size: 54px;
+      font-weight: 900;
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .title-copy h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 30px;
+      line-height: 1.14;
+      letter-spacing: 0;
+    }
+
+    .title-copy p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .pill {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper);
+      color: #4f473e;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .pill.good {
+      border-color: var(--sage-line);
+      background: var(--sage-soft);
+      color: var(--sage);
+    }
+
+    .pill.warn {
+      border-color: #e0c596;
+      background: var(--gold-soft);
+      color: var(--gold);
+    }
+
+    .workbench-layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .paper-column {
+      min-width: 0;
+      display: grid;
+      gap: 14px;
+    }
+
+    .journal-paper {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper);
+      padding: 54px 68px;
+      box-shadow: 0 10px 30px rgba(44, 38, 28, 0.06);
+    }
+
+    .paper-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 28px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .journal-paper h2 {
+      margin: 0 0 10px;
+      color: #211e1a;
+      font-size: 38px;
+      line-height: 1.12;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .journal-lead {
+      max-width: 800px;
+      margin: 0 0 34px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.72;
+    }
+
+    .journal-block {
+      position: relative;
+      border-top: 1px solid #e5ded1;
+      padding-top: 22px;
+      margin-top: 24px;
+    }
+
+    .journal-block h3 {
+      margin: 0 0 12px;
+      color: #302b25;
+      font-size: 20px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .journal-block p,
+    .journal-block li {
+      color: #403a32;
+      font-size: 16px;
+      line-height: 1.78;
+    }
+
+    .journal-block p {
+      margin: 0;
+    }
+
+    .journal-block ul {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .block-tools {
+      position: absolute;
+      top: 16px;
+      right: 0;
+      display: flex;
+      gap: 8px;
+      opacity: 0.9;
+    }
+
+    .inline-editing {
+      border: 1px solid #aed0c6;
+      border-radius: 12px;
+      background: #f7fbf8;
+      padding: 18px;
+      margin: 26px -18px 0;
+    }
+
+    .inline-editor {
+      min-height: 132px;
+      border: 1px solid #b6d2ca;
+      border-radius: 9px;
+      background: #fffefa;
+      padding: 13px 15px;
+      color: #473f36;
+      font-size: 16px;
+      line-height: 1.74;
+    }
+
+    .edit-hint {
+      margin-top: 9px;
+      color: #5d7f76;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .compose-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper);
+      padding: 10px;
+      box-shadow: 0 8px 24px rgba(44, 38, 28, 0.06);
+    }
+
+    .compose-field {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      border: 1px solid #e0d8ca;
+      border-radius: 9px;
+      background: var(--paper-warm);
+      color: #887f73;
+      padding: 0 15px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .btn {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      border-color: var(--sage);
+      background: var(--sage);
+      color: var(--paper);
+    }
+
+    .btn.subtle {
+      color: var(--sage);
+    }
+
+    .btn.danger {
+      border-color: #d9b5ad;
+      background: #fff7f4;
+      color: var(--rose);
+    }
+
+    .assistant-column {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper);
+      padding: 15px;
+      box-shadow: 0 8px 22px rgba(44, 38, 28, 0.04);
+    }
+
+    .panel h3 {
+      margin: 0 0 8px;
+      color: #2f2a24;
+      font-size: 16px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .panel.next {
+      border-color: var(--sage-line);
+      background: var(--sage-soft);
+    }
+
+    .panel.next h3 {
+      color: var(--sage);
+    }
+
+    .panel.warn {
+      border-color: #e0c596;
+      background: var(--gold-soft);
+    }
+
+    .panel.warn h3 {
+      color: var(--gold);
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 9px;
+      margin-top: 12px;
+    }
+
+    .summary-item {
+      border-top: 1px solid #e6dfd3;
+      padding-top: 9px;
+      color: #514a42;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .summary-item strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #302b25;
+      font-size: 12px;
+    }
+
+    .source-drawer {
+      border: 1px solid var(--dark-line);
+      border-radius: 12px;
+      background: var(--dark);
+      color: var(--dark-text);
+      padding: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 26px rgba(44, 38, 28, 0.12);
+    }
+
+    .source-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .source-head h3 {
+      margin: 0;
+      color: var(--dark-text);
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .source-head span {
+      color: #c8b8a2;
+      font-size: 12px;
+    }
+
+    .code-panel {
+      min-height: 250px;
+      border: 1px solid var(--dark-line);
+      border-radius: 9px;
+      background: var(--dark-2);
+      color: #f2e7d8;
+      padding: 13px;
+      font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+      font-size: 12px;
+      line-height: 1.62;
+      overflow-wrap: anywhere;
+    }
+
+    .source-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 11px;
+    }
+
+    .source-actions .btn {
+      border-color: var(--dark-line);
+      background: var(--dark-3);
+      color: var(--dark-text);
+    }
+
+    .source-actions .btn.primary {
+      border-color: #d8c3a0;
+      background: #d8c3a0;
+      color: var(--dark);
+    }
+
+    .scenario-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .scenario-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fffefa;
+      padding: 16px;
+      min-height: 180px;
+      box-shadow: 0 8px 22px rgba(44, 38, 28, 0.05);
+    }
+
+    .scenario-card h2 {
+      margin: 0 0 9px;
+      font-size: 18px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .scenario-card p,
+    .scenario-card li {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .scenario-card ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+    }
+
+    .empty-card {
+      border-color: var(--sage-line);
+      background: #f7fbf8;
+    }
+
+    .attention-card {
+      border-color: #e3bdb5;
+      background: var(--rose-soft);
+    }
+
+    .compact-card {
+      background: #f8f4eb;
+    }
+
+    .compact-preview {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--paper);
+      padding: 12px;
+    }
+
+    .compact-preview .mini-line {
+      height: 8px;
+      border-radius: 999px;
+      background: #ded6c8;
+      margin: 8px 0;
+    }
+
+    .compact-preview .mini-line.short {
+      width: 62%;
+    }
+
+    .design-contract {
+      display: grid;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--paper);
+      box-shadow: 0 8px 22px rgba(44, 38, 28, 0.05);
+    }
+
+    .contract-row {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      border-top: 1px solid var(--line);
+    }
+
+    .contract-row:first-child {
+      border-top: 0;
+    }
+
+    .contract-row strong {
+      padding: 14px 16px;
+      border-right: 1px solid var(--line);
+      background: #f8f4eb;
+      color: #302b25;
+      font-size: 13px;
+    }
+
+    .contract-row span {
+      padding: 14px 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.58;
+    }
+
+    .section-heading {
+      margin: 8px 0 0;
+      color: #342e27;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .section-caption {
+      margin: 4px 0 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1180px) {
+      body {
+        min-width: 760px;
+      }
+
+      .prototype-shell {
+        width: min(980px, calc(100vw - 28px));
+        margin: 14px auto 28px;
+      }
+
+      .prototype-note,
+      .top-context,
+      .compose-bar,
+      .contract-row {
+        grid-template-columns: 1fr;
+      }
+
+      .prototype-note {
+        display: grid;
+      }
+
+      .status-strip {
+        justify-content: flex-start;
+      }
+
+      .workbench-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .today-workbench {
+        min-height: 0;
+        padding: 16px;
+      }
+
+      .journal-paper {
+        padding: 36px 34px;
+      }
+
+      .assistant-column {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .source-drawer {
+        grid-column: 1 / -1;
+      }
+
+      .scenario-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .contract-row strong {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype-shell">
+    <section class="prototype-note" aria-label="原型说明">
+      <div>
+        <strong>Journal 今日工作台产品化原型</strong>
+        <div>这是一个典型案例，不是头脑风暴稿拷贝。内容刻意放得更满，用来验证家庭、工作、学习、健康、感恩、未来提醒、源码高级层同时存在时，主界面是否仍然像日记产品。</div>
+      </div>
+      <div>
+        <strong>设计判断</strong>
+        <div>默认看日记，点击段落才编辑；底部承担写作和主操作；右侧只回答下一步、材料和状态；JMF 源码保留暗色高级抽屉。</div>
+      </div>
+    </section>
+
+    <section class="app-window" aria-label="默认今日工作台">
+      <div class="window-chrome">
+        <span>Journal</span>
+        <div class="window-controls" aria-hidden="true">
+          <span class="window-dot"></span>
+          <span class="window-dot"></span>
+          <span class="window-dot"></span>
+        </div>
+      </div>
+
+      <div class="today-workbench">
+        <header class="top-context">
+          <div class="today-title">
+            <div class="date-mark">10</div>
+            <div class="title-copy">
+              <h1>5月10日 · 晨间日记</h1>
+              <p>周日，已保留 4 条原始表达。AI 整理稿待确认保存。</p>
+            </div>
+          </div>
+          <div class="status-strip" aria-label="今日状态">
+            <span class="pill good">可保存</span>
+            <span class="pill">DeepSeek 可用</span>
+            <span class="pill">本地 Markdown</span>
+          </div>
+        </header>
+
+        <section class="workbench-layout">
+          <section class="paper-column" aria-label="日记纸面">
+            <article class="journal-paper">
+              <div class="paper-meta">
+                <span>今日整理稿</span>
+                <span>结构已通过 · 保存前仍可微调</span>
+              </div>
+
+              <h2>把“能用”继续打磨成“好用”</h2>
+              <p class="journal-lead">
+                今天的重点不是再证明链路能跑通，而是把已经跑通的能力变得更自然。原始表达仍然保留，AI 只是帮我把一天里值得留下的事情整理成清楚的日记。
+              </p>
+
+              <section class="journal-block">
+                <div class="block-tools">
+                  <span class="btn subtle">编辑</span>
+                </div>
+                <h3>今天发生了什么</h3>
+                <ul>
+                  <li>上午和家人一起过母亲节，吃饭、散步，整体是很放松的一段时间。</li>
+                  <li>回来看 Journal 时发现主界面越来越像调试面板：状态、raw input、JMF、文件路径都摆在同一层。</li>
+                  <li>LLM 配置界面已经做过一轮产品化优化，今天开始把同样的思路带回日记主界面。</li>
+                </ul>
+              </section>
+
+              <section class="journal-block inline-editing">
+                <h3>值得庆祝</h3>
+                <div class="inline-editor">
+                  真实模型链路已经可以跑通，DeepSeek API Key 也能从用户级环境变量自动加载。现在的问题从“系统能不能工作”转成“每天打开是否愿意使用”，这是一个很好的阶段变化。
+                </div>
+                <div class="edit-hint">段落编辑只影响当前草稿。保存这一段后会重新校验 JMF 结构，正式日记仍要最后确认。</div>
+                <div class="source-actions">
+                  <span class="btn">取消</span>
+                  <span class="btn primary">保存这一段</span>
+                </div>
+              </section>
+
+              <section class="journal-block">
+                <h3>今天想推进</h3>
+                <ul>
+                  <li>把今日工作台重做成“日记纸面优先”的产品界面。</li>
+                  <li>让底部输入承担日常写作入口，右侧只保留下一步、材料和整理状态。</li>
+                  <li>把源码模式做成高级抽屉，保留暗色专业感，但不再默认压在纸面上。</li>
+                </ul>
+              </section>
+
+              <section class="journal-block">
+                <h3>学习与洞察</h3>
+                <p>
+                  功能跑通以后，继续堆功能很容易，但真正决定使用体验的是信息层级。用户每天需要的是“我今天写了什么、现在能不能保存、出了问题怎么修”，不是一排工程状态。
+                </p>
+              </section>
+
+              <section class="journal-block">
+                <h3>健康与节奏</h3>
+                <p>
+                  今天提醒自己不要把开发节奏拉得太紧。可以做深，但不要把每一个界面都做成排障现场。界面也应该给人一点喘气空间。
+                </p>
+              </section>
+
+              <section class="journal-block">
+                <h3>感恩</h3>
+                <p>
+                  感谢今天和家人待在一起的时间，也感谢这个项目已经进入“体验是否舒服”的阶段。能进入这个阶段，本身说明基础链路已经站住了。
+                </p>
+              </section>
+
+              <section class="journal-block">
+                <h3>未来提醒</h3>
+                <p>
+                  明天继续检查主界面的交互细节：窄窗口、未保存段落、重新整理确认、attention 修复路径。不要让它在边界状态下又长回调试台。
+                </p>
+              </section>
+            </article>
+
+            <section class="compose-bar" aria-label="底部输入和主操作">
+              <div class="compose-field">补充一句今天的事，或者让 AI 基于当前材料重新整理这一版...</div>
+              <span class="btn">重新整理</span>
+              <span class="btn primary">保存日记</span>
+            </section>
+          </section>
+
+          <aside class="assistant-column" aria-label="今日助手">
+            <section class="panel next">
+              <h3>下一步</h3>
+              <p>这篇草稿可以保存。你也可以先编辑纸面里的某一段，再保存正式日记。</p>
+              <div class="summary-list">
+                <span class="btn primary">确认保存</span>
+              </div>
+            </section>
+
+            <section class="panel">
+              <h3>今日材料</h3>
+              <p>原始表达不会被覆盖。默认只展示摘要，需要时再展开完整内容。</p>
+              <div class="summary-list">
+                <div class="summary-item">
+                  <strong>09:12</strong>
+                  今天记录了母亲节和家人一起吃饭、散步，心情比较放松。
+                </div>
+                <div class="summary-item">
+                  <strong>09:18</strong>
+                  发现主界面像调试面板，希望达到商用产品可用的交互水平。
+                </div>
+                <div class="summary-item">
+                  <strong>09:26</strong>
+                  选择日记纸面优先，源码保留暗色高级层。
+                </div>
+                <div class="summary-item">
+                  <strong>09:40</strong>
+                  希望正式原型内容更完整，不要只截取局部。
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <h3>整理状态</h3>
+              <p>把技术结果翻译成用户能判断的状态。</p>
+              <div class="summary-list">
+                <div class="summary-item">
+                  <strong>结构</strong>
+                  7 个日记段落已通过 JMF 校验。
+                </div>
+                <div class="summary-item">
+                  <strong>LLM</strong>
+                  DeepSeek 整理，JSON 模式已开启。
+                </div>
+                <div class="summary-item">
+                  <strong>保存目标</strong>
+                  保存后写入本地正式 Markdown。
+                </div>
+              </div>
+            </section>
+
+            <section class="panel warn">
+              <h3>可添加内容</h3>
+              <p>新增块作为次级动作出现，不再铺成一排按钮。</p>
+              <div class="summary-list">
+                <span class="btn">添加灵感</span>
+                <span class="btn">添加未来提醒</span>
+              </div>
+            </section>
+
+            <section class="source-drawer" aria-label="高级源码抽屉">
+              <div class="source-head">
+                <h3>高级：JMF 源码</h3>
+                <span>展开后暗色</span>
+              </div>
+              <div class="code-panel">
+---<br>
+date: 2026-05-10<br>
+status: draft<br>
+llm: deepseek<br>
+---<br><br>
+&lt;!-- journal:section id="today-focus" --&gt;<br>
+## 今天想推进<br>
+- 把今日工作台重做成日记纸面优先。<br>
+- 保留源码能力，但默认进入高级抽屉。<br><br>
+&lt;!-- journal:section id="gratitude" --&gt;<br>
+## 感恩<br>
+感谢今天和家人待在一起的时间。
+              </div>
+              <div class="source-actions">
+                <span class="btn">校验结构</span>
+                <span class="btn primary">保存源码草稿</span>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </div>
+    </section>
+
+    <h2 class="section-heading">其它关键状态</h2>
+    <p class="section-caption">这些状态不需要和默认主界面一样完整，但实现时必须覆盖，否则真实使用时又会露出调试面板气质。</p>
+
+    <section class="scenario-strip" aria-label="关键状态卡片">
+      <article class="scenario-card empty-card">
+        <h2>空状态</h2>
+        <p>今天还没有记录时，不显示“没有可编辑 JMF 草稿”。默认提示用户直接写一句原话。</p>
+        <ul>
+          <li>标题：今天先写一句</li>
+          <li>输入：今天发生了什么？直接写原话...</li>
+          <li>按钮：生成草稿</li>
+        </ul>
+      </article>
+
+      <article class="scenario-card attention-card">
+        <h2>需要处理态</h2>
+        <p>草稿不能保存时，先解释产品含义，再把技术错误放进高级详情。</p>
+        <ul>
+          <li>正式日记没有被覆盖</li>
+          <li>原始表达仍然保留</li>
+          <li>可重新整理或手动修复</li>
+        </ul>
+      </article>
+
+      <article class="scenario-card compact-card">
+        <h2>窄窗口</h2>
+        <p>窄窗口使用单列：纸面、底部输入、下一步、材料、状态、高级源码。只保留一个主要滚动容器。</p>
+        <div class="compact-preview" aria-hidden="true">
+          <div class="mini-line"></div>
+          <div class="mini-line"></div>
+          <div class="mini-line short"></div>
+        </div>
+      </article>
+    </section>
+
+    <h2 class="section-heading">实现合同</h2>
+    <p class="section-caption">这些规则用于约束后续实现，防止界面在开发中重新变回工程调试台。</p>
+
+    <section class="design-contract" aria-label="实现合同">
+      <div class="contract-row">
+        <strong>顶部状态</strong>
+        <span>只展示待开始、整理中、可保存、有未保存修改、需要处理、已保存。后端枚举只作为内部映射。</span>
+      </div>
+      <div class="contract-row">
+        <strong>日记纸面</strong>
+        <span>默认阅读态。段落 hover 或 focus 后显示编辑入口，点击后只该段进入 inline editor。</span>
+      </div>
+      <div class="contract-row">
+        <strong>底部输入</strong>
+        <span>承载日常写作入口和主操作。空状态显示生成草稿，有草稿时显示重新整理和保存日记。</span>
+      </div>
+      <div class="contract-row">
+        <strong>今日助手</strong>
+        <span>只回答下一步、今日材料、整理状态和可添加内容，不把所有技术事实平铺出来。</span>
+      </div>
+      <div class="contract-row">
+        <strong>高级源码</strong>
+        <span>默认折叠，展开后使用暗色背景。这里才显示 front matter、JMF marker 和技术错误。</span>
+      </div>
+      <div class="contract-row">
+        <strong>响应式</strong>
+        <span>宽屏两列，窄窗口单列。主界面只允许一个主要滚动容器，避免多滚动条。</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
