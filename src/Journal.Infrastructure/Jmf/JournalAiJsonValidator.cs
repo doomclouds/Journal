@@ -35,16 +35,6 @@ public static class JournalAiJsonValidator
             errors.Add("rawInputs must contain at least one item.");
         }
 
-        if (IsEmpty(aiJson.YesterdayReview))
-        {
-            errors.Add("yesterdayReview must contain at least one item.");
-        }
-
-        if (IsEmpty(aiJson.TodayFocus))
-        {
-            errors.Add("todayFocus must contain at least one item.");
-        }
-
         return errors.Count == 0
             ? JournalAiValidationResult.Valid
             : JournalAiValidationResult.Invalid(errors.ToArray());

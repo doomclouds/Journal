@@ -41,7 +41,7 @@ public sealed class MockAiAndJmfTests
     }
 
     [Fact]
-    public void JournalAiJsonValidator_ReturnsInvalidWhenRequiredSectionsAreMissing()
+    public void JournalAiJsonValidator_ReturnsInvalidWhenSchemaOrRawInputsAreMissing()
     {
         var aiJson = new JournalAiJson(
             "legacy-schema",
@@ -61,14 +61,26 @@ public sealed class MockAiAndJmfTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.Contains("schema must be journal-entry/v1", StringComparison.Ordinal));
         Assert.Contains(result.Errors, error => error.Contains("rawInputs", StringComparison.Ordinal));
-        Assert.Contains(result.Errors, error => error.Contains("yesterdayReview", StringComparison.Ordinal));
-        Assert.Contains(result.Errors, error => error.Contains("todayFocus", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Errors, error => error.Contains("yesterdayReview", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Errors, error => error.Contains("todayFocus", StringComparison.Ordinal));
     }
 
     [Fact]
     public void JournalAiJsonValidator_AcceptsJournalEntryV1Schema()
     {
         var result = JournalAiJsonValidator.Validate(CreateAiJson());
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void JournalAiJsonValidator_AllowsEmptyStructuredSectionsWhenRawInputIsPreserved()
+    {
+        var result = JournalAiJsonValidator.Validate(CreateAiJson(
+            yesterdayReview: [],
+            todayFocus: [],
+            inspiration: []));
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Errors);

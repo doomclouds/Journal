@@ -1127,7 +1127,7 @@ public static class JournalAiPrompt
         JSON 必须匹配 JournalAiJson 字段：schema, date, monthDay, status, tags, topics, mood, rawInputs, yesterdayReview, todayFocus, inspiration。
         schema 固定为 journal-entry/v1，status 固定为 draft。
         rawInputs 必须完整保留用户原始输入，不要改写、总结或删除。
-        yesterdayReview 和 todayFocus 至少各输出一条。
+        如果 yesterdayReview、todayFocus 或 inspiration 没有足够信息，输出空数组，不要猜测或硬凑条目。
         只整理用户已经说过的事实，不虚构事实，不写鸡汤，不写营销文案。
         风格为 faithful：轻度整理，保留原话优先。
         """;
