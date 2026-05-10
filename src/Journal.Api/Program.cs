@@ -34,7 +34,14 @@ builder.Services.AddSingleton<IJournalClock, SystemJournalClock>();
 builder.Services.AddSingleton<RawInputStore>();
 builder.Services.AddSingleton<DraftStore>();
 builder.Services.AddSingleton<EntryStore>();
-builder.Services.AddSingleton<IJournalAiProvider, MockAiProvider>();
+builder.Services.AddSingleton<JournalAiSettingsStore>();
+builder.Services.AddSingleton<IJournalAiEnvironment, SystemJournalAiEnvironment>();
+builder.Services.AddSingleton<JournalAiSettingsService>();
+builder.Services.AddSingleton<IJournalAiSettingsReader>(sp => sp.GetRequiredService<JournalAiSettingsService>());
+builder.Services.AddSingleton<MockAiProvider>();
+builder.Services.AddSingleton<IJournalAiAgentRuntime, OpenAiCompatibleAgentRuntime>();
+builder.Services.AddSingleton<OpenAiCompatibleJournalAiProvider>();
+builder.Services.AddSingleton<JournalAiGenerationService>();
 builder.Services.AddSingleton<TodayJournalService>();
 
 var app = builder.Build();
@@ -49,6 +56,43 @@ app.MapGet("/health", (IHostEnvironment environment) =>
         ApplicationInfo.Version,
         environment.EnvironmentName,
         DateTimeOffset.Now));
+});
+
+app.MapGet("/settings/ai", async (JournalAiSettingsService service, CancellationToken cancellationToken) =>
+{
+    var view = await service.ReadViewAsync(cancellationToken);
+    return Results.Ok(view);
+});
+
+app.MapPut("/settings/ai", async (
+    JournalAiSettingsSaveRequest request,
+    JournalAiSettingsService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        await service.SaveAsync(request, cancellationToken);
+        var view = await service.ReadViewAsync(cancellationToken);
+        return Results.Ok(view);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/settings/ai/test", async (
+    AiProviderTestRequest request,
+    JournalAiGenerationService service,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.ProviderId))
+    {
+        return Results.BadRequest(new { error = "providerId is required" });
+    }
+
+    var health = await service.CheckAsync(request.ProviderId, cancellationToken);
+    return Results.Ok(health);
 });
 
 app.MapGet("/journal/today", async (TodayJournalService service, CancellationToken cancellationToken) =>
@@ -82,6 +126,29 @@ app.MapPost("/journal/today/draft/confirm", async (TodayJournalService service, 
     {
         return Results.Conflict(new { error = exception.Message });
     }
+});
+
+app.MapPost("/journal/today/draft/regenerate", async (
+    HttpRequest httpRequest,
+    TodayJournalService service,
+    CancellationToken cancellationToken) =>
+{
+    RegenerateTodayDraftRequest? request = null;
+    if (httpRequest.ContentLength is > 0)
+    {
+        try
+        {
+            request = await httpRequest.ReadFromJsonAsync<RegenerateTodayDraftRequest>(
+                cancellationToken: cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return Results.BadRequest(new { error = "invalid request body" });
+        }
+    }
+
+    var state = await service.RegenerateDraftAsync(request?.ProviderId, cancellationToken);
+    return Results.Ok(state);
 });
 
 app.MapGet("/journal/today/editor", async (TodayJournalService service, CancellationToken cancellationToken) =>
@@ -138,6 +205,10 @@ public partial class Program
 }
 
 public sealed record AddTodayInputRequest(string Text, string? Source);
+
+public sealed record AiProviderTestRequest(string ProviderId);
+
+public sealed record RegenerateTodayDraftRequest(string? ProviderId);
 
 public sealed record HealthResponse(
     string App,

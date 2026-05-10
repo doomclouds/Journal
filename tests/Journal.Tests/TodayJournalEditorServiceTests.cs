@@ -284,22 +284,45 @@ public sealed class TodayJournalEditorServiceTests
         Assert.Equal(originalDraft.Errors, storedDraft.Errors);
     }
 
-    private static TodayJournalService CreateService(LocalJournalPaths paths, IJournalAiProvider? aiProvider = null) =>
+    private static TodayJournalService CreateService(LocalJournalPaths paths) =>
         new(
             new RawInputStore(paths),
             new DraftStore(paths),
             new EntryStore(paths),
-            aiProvider ?? new MockAiProvider(),
+            CreateGenerationService(),
             new FixedJournalClock(FixedDay, FixedNow));
 
     private static LocalJournalPaths CreatePaths(string root) =>
         new(new JournalStorageOptions(root));
+
+    private static JournalAiGenerationService CreateGenerationService() =>
+        new(
+            new StaticSettingsReader(JournalAiSettings.CreateDefault()),
+            new MockAiProvider(),
+            new OpenAiCompatibleJournalAiProvider(new StaticRuntime(
+                OpenAiCompatibleRunResult.Failure(
+                    JournalAiSafeError.Create("test", "unexpected_runtime_call", "Runtime should not be called.", "Runtime should not be called."),
+                    TimeSpan.Zero))));
 
     private sealed class FixedJournalClock(DateOnly today, DateTimeOffset now) : IJournalClock
     {
         public DateOnly Today => today;
 
         public DateTimeOffset Now => now;
+    }
+
+    private sealed class StaticSettingsReader(JournalAiSettings settings) : IJournalAiSettingsReader
+    {
+        public Task<JournalAiSettings> ReadEffectiveAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(settings);
+    }
+
+    private sealed class StaticRuntime(OpenAiCompatibleRunResult result) : IJournalAiAgentRuntime
+    {
+        public Task<OpenAiCompatibleRunResult> RunJsonAsync(
+            OpenAiCompatibleRunRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(result);
     }
 
     private sealed class TempWorkspace : IDisposable

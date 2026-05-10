@@ -14,7 +14,22 @@ public sealed class MockAiProvider : IJournalAiProvider
     private static readonly string[] InspirationKeywords = ["想到", "灵感", "应该", "可以", "原则"];
     private static readonly string[] MoodKeywords = ["有推进感", "平静", "开心", "焦虑", "累"];
 
-    public JournalAiJson Generate(JournalDate date, IReadOnlyList<RawInput> rawInputs, DateTimeOffset generatedAt)
+    public string ProviderId => "mock";
+
+    public Task<JournalAiProviderResult> GenerateAsync(
+        JournalAiGenerationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var aiJson = GenerateJson(request.Date, request.RawInputs);
+        return Task.FromResult(JournalAiProviderResult.Success(aiJson, JournalAiMetadata.Mock));
+    }
+
+    public Task<JournalAiProviderHealthResult> CheckAsync(
+        JournalAiProviderSettings settings,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(JournalAiProviderHealthResult.Success("{\"ok\":true}", TimeSpan.Zero));
+
+    private static JournalAiJson GenerateJson(JournalDate date, IReadOnlyList<RawInput> rawInputs)
     {
         var inputTexts = rawInputs
             .Select(input => input.Text.Trim())

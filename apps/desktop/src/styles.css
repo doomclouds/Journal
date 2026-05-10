@@ -139,6 +139,19 @@ button:focus-visible {
   color: #8c332b;
 }
 
+.llm-status-pill {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d3cfc5;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #fff8ed;
+  color: #2b6860;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .api-error,
 .validation-error {
   margin: 0;
@@ -495,7 +508,126 @@ button:focus-visible {
   padding: 14px;
 }
 
-@media (max-width: 1080px) {
+.llm-settings-overlay {
+  position: fixed;
+  inset: 10px;
+  z-index: 10;
+  display: grid;
+  grid-template-rows: 54px minmax(0, 1fr);
+  border: 1px solid #bdb7aa;
+  border-radius: 8px;
+  background: rgba(243, 241, 235, 0.96);
+  box-shadow: 0 28px 80px rgba(42, 36, 28, 0.24);
+}
+
+.llm-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #d8d4ca;
+  padding: 0 16px;
+  background: rgba(255, 253, 248, 0.88);
+}
+
+.llm-settings-head div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.llm-settings-head span,
+.llm-provider-card span,
+.llm-provider-card small,
+.llm-settings-card p {
+  color: #655d53;
+  font-size: 12px;
+}
+
+.llm-settings-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(360px, 1fr) 320px;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.llm-provider-list,
+.llm-settings-main,
+.llm-settings-side {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+}
+
+.llm-provider-card,
+.llm-settings-card {
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.llm-provider-card {
+  min-height: 78px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.llm-provider-card.active {
+  border-color: rgba(43, 104, 96, 0.38);
+  background: #eef6f1;
+}
+
+.llm-settings-card {
+  padding: 14px;
+}
+
+.llm-settings-card h2 {
+  margin: 6px 0 10px;
+  font-size: 16px;
+}
+
+.llm-settings-card label {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: #2d2823;
+  font-weight: 800;
+}
+
+.llm-settings-card input {
+  min-height: 38px;
+  border: 1px solid #c9c5bb;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: #252525;
+  padding: 0 10px;
+}
+
+.llm-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.danger-action {
+  border-color: rgba(168, 66, 53, 0.28);
+  color: #8c332b;
+}
+
+.llm-settings-card pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #655d53;
+}
+
+@media (max-width: 1180px) {
   .today-shell {
     padding: 14px;
     gap: 12px;
@@ -537,5 +669,10 @@ button:focus-visible {
   .markdown-preview,
   .empty-paper {
     padding: 28px 34px;
+  }
+
+  .llm-settings-grid {
+    grid-template-columns: 1fr;
+    overflow: auto;
   }
 }

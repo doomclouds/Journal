@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <!--
+    Journal Phase 5 LLM Provider configuration prototype.
+
+    我的假设：
+    - 这不是独立设置中心，而是从今日工作台顶部 LLM 状态入口打开的低频配置面板。
+    - 视觉语言继承 Phase 2/3 原型：暖灰背景、纸面主舞台、辅助 dock、克制状态条。
+    - 首版重点是“真实模型替换 Mock”，不是展示一个花哨模型市场。
+    - OpenAI / DeepSeek / 智谱 / Custom 都走 OpenAI-compatible runtime。
+    - Mock 是未配置默认，不是真实 Provider 失败后的静默回退。
+
+    未解的问题：
+    - OpenAI 和智谱的默认模型名可能会随时间变化；原型只表现可手填模型，不绑定最终默认值。
+    - 连接测试的详细错误码最终以实现返回为准；原型展示安全摘要和折叠技术详情结构。
+
+    如果你看到这里觉得“配置面板压过日记主流程”或“AI 入口不够显眼”，现在是最适合调整的时候。
+    This file is design material only, not production frontend code.
+  -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Journal LLM Provider Configuration Prototype</title>
+  <style>
+    :root {
+      --bg: #f3f0e8;
+      --bg-cool: #e7eeeb;
+      --paper: #fffdf7;
+      --paper-soft: #faf6ee;
+      --ink: #22241f;
+      --ink-2: #45483f;
+      --muted: #7f8277;
+      --line: rgba(38, 42, 34, 0.13);
+      --line-strong: rgba(38, 42, 34, 0.23);
+      --sage: #6f8a77;
+      --sage-dark: #2f604a;
+      --blue: #536b7d;
+      --sun: #b68642;
+      --clay: #b46a55;
+      --red: #8d4038;
+      --green-soft: rgba(111, 138, 119, 0.13);
+      --blue-soft: rgba(83, 107, 125, 0.12);
+      --sun-soft: rgba(182, 134, 66, 0.14);
+      --red-soft: rgba(141, 64, 56, 0.12);
+      --shadow-soft: 0 20px 60px rgba(43, 38, 30, 0.10);
+      --shadow-paper: 0 28px 80px rgba(47, 42, 32, 0.15);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1040px;
+      min-height: 100vh;
+      background:
+        linear-gradient(120deg, rgba(111, 138, 119, 0.15), transparent 38%),
+        linear-gradient(180deg, #fbfaf5 0%, var(--bg) 48%, var(--bg-cool) 100%);
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.9);
+      color: var(--ink);
+      outline: none;
+    }
+
+    input,
+    select {
+      height: 36px;
+      padding: 0 10px;
+    }
+
+    textarea {
+      min-height: 80px;
+      padding: 10px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus,
+    button:focus-visible {
+      outline: 3px solid rgba(47, 96, 74, 0.18);
+      outline-offset: 2px;
+    }
+
+    .app {
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .shell {
+      min-height: calc(100vh - 36px);
+      display: grid;
+      grid-template-rows: 64px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      background: rgba(255, 253, 247, 0.70);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.82);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand strong {
+      font-size: 18px;
+    }
+
+    .brand span,
+    .top-meta,
+    .pill,
+    .label,
+    .field small,
+    .provider-meta,
+    .config-note,
+    .result-row span,
+    .draft-warning p {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .top-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--sage-dark);
+      box-shadow: 0 0 0 4px rgba(47, 96, 74, 0.12);
+    }
+
+    .top-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .llm-button,
+    .ghost,
+    .primary,
+    .danger-lite,
+    .provider-card,
+    .segmented,
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.72);
+    }
+
+    .llm-button,
+    .ghost,
+    .primary,
+    .danger-lite {
+      min-height: 34px;
+      padding: 0 12px;
+      color: var(--ink-2);
+      font-weight: 700;
+    }
+
+    .llm-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 142px;
+      justify-content: space-between;
+      background: #fff8ed;
+    }
+
+    .llm-button b {
+      color: var(--sage-dark);
+    }
+
+    .primary {
+      color: #fffdf7;
+      border-color: var(--sage-dark);
+      background: var(--sage-dark);
+    }
+
+    .danger-lite {
+      color: var(--red);
+      border-color: rgba(141, 64, 56, 0.22);
+      background: rgba(141, 64, 56, 0.07);
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr) 340px;
+      gap: 16px;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    .rail,
+    .dock,
+    .settings-panel {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .panel,
+    .paper,
+    .settings-card,
+    .provider-card,
+    .test-result,
+    .draft-warning {
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.78);
+    }
+
+    .panel,
+    .settings-card,
+    .test-result,
+    .draft-warning {
+      padding: 14px;
+    }
+
+    .label {
+      display: inline-block;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    .panel h2,
+    .settings-card h2,
+    .dock h2 {
+      margin: 6px 0 10px;
+      font-size: 15px;
+    }
+
+    .panel p,
+    .dock p,
+    .settings-card p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .date-card strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 38px;
+      line-height: 1;
+    }
+
+    .source-list {
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 7px;
+    }
+
+    .source-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 9px;
+      border: 1px solid rgba(38, 42, 34, 0.10);
+      background: rgba(250, 246, 238, 0.72);
+      font-size: 12px;
+    }
+
+    .source-list .active {
+      color: var(--sage-dark);
+      font-weight: 800;
+    }
+
+    .journal-stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .stage-title strong {
+      display: block;
+      font-size: 15px;
+    }
+
+    .stage-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .paper {
+      min-height: 0;
+      overflow: auto;
+      box-shadow: var(--shadow-paper);
+      background:
+        linear-gradient(90deg, rgba(83, 107, 125, 0.08), transparent 16%),
+        var(--paper);
+    }
+
+    .paper-inner {
+      width: min(780px, calc(100% - 76px));
+      margin: 0 auto;
+      padding: 46px 0 58px;
+    }
+
+    .paper-heading {
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .paper-heading h1 {
+      margin-bottom: 10px;
+      font-size: 34px;
+      line-height: 1.12;
+    }
+
+    .paper-heading p,
+    .doc-section p,
+    .doc-section li {
+      color: var(--ink-2);
+      line-height: 1.72;
+    }
+
+    .doc-section {
+      margin-bottom: 26px;
+    }
+
+    .doc-section h2 {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tags span,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 9px;
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--paper-soft);
+    }
+
+    .dock {
+      grid-template-columns: 1fr;
+    }
+
+    .config-source {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .config-source .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--ink-2);
+    }
+
+    .settings-overlay {
+      position: fixed;
+      inset: 6px;
+      display: grid;
+      grid-template-rows: 46px minmax(0, 1fr);
+      border: 1px solid var(--line-strong);
+      background: rgba(243, 240, 232, 0.94);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 34px 100px rgba(37, 34, 28, 0.22);
+      z-index: 10;
+    }
+
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.78);
+    }
+
+    .settings-head strong {
+      font-size: 16px;
+    }
+
+    .settings-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 260px minmax(420px, 1fr) 360px;
+      gap: 12px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .provider-list {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+
+    .provider-card {
+      width: 100%;
+      min-height: 82px;
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      text-align: left;
+    }
+
+    .provider-card.active {
+      border-color: rgba(47, 96, 74, 0.38);
+      background: rgba(239, 246, 240, 0.92);
+      box-shadow: inset 0 0 0 1px rgba(47, 96, 74, 0.16);
+    }
+
+    .provider-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .provider-top strong {
+      font-size: 14px;
+    }
+
+    .provider-state {
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--sage-dark);
+    }
+
+    .provider-card.warn .provider-state {
+      color: var(--sun);
+    }
+
+    .provider-card.error .provider-state {
+      color: var(--red);
+    }
+
+    .provider-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .settings-main,
+    .settings-side {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .settings-side {
+      gap: 10px;
+    }
+
+    .settings-side .settings-card,
+    .settings-side .test-result {
+      padding: 10px;
+    }
+
+    .settings-side h2 {
+      margin: 4px 0 8px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    .readonly-input {
+      display: flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      background: rgba(236, 232, 221, 0.62);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      width: max-content;
+      max-width: 100%;
+      gap: 4px;
+      padding: 4px;
+      background: #ebe5d9;
+    }
+
+    .segmented button {
+      min-height: 30px;
+      padding: 0 11px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .segmented button.active {
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: 0 8px 22px rgba(43, 38, 30, 0.08);
+    }
+
+    .config-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .test-result {
+      background:
+        linear-gradient(90deg, rgba(111, 138, 119, 0.10), transparent 60%),
+        rgba(255, 253, 247, 0.8);
+    }
+
+    .test-result.error {
+      background:
+        linear-gradient(90deg, rgba(141, 64, 56, 0.10), transparent 60%),
+        rgba(255, 253, 247, 0.8);
+    }
+
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    .result-row:last-child {
+      border-bottom: 0;
+    }
+
+    .result-row strong {
+      color: var(--ink-2);
+    }
+
+    .details-box {
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      background: rgba(250, 246, 238, 0.68);
+    }
+
+    .details-box summary {
+      cursor: pointer;
+      padding: 8px 10px;
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .details-box pre {
+      margin: 0;
+      padding: 0 10px 10px;
+      color: var(--muted);
+      white-space: pre-wrap;
+      font-size: 12px;
+      line-height: 1.55;
+      font-family: "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+    }
+
+    .draft-warning {
+      background: rgba(182, 134, 66, 0.10);
+    }
+
+    .draft-warning strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #765a23;
+    }
+
+    .provider-summary {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 1220px) {
+      .workspace {
+        grid-template-columns: 210px minmax(0, 1fr);
+      }
+
+      .dock {
+        display: none;
+      }
+
+      .settings-grid {
+        grid-template-columns: 240px minmax(0, 1fr);
+      }
+
+      .settings-side {
+        display: none;
+      }
+    }
+
+    @media (max-width: 980px) {
+      body {
+        min-width: 760px;
+      }
+
+      .topbar {
+        grid-template-columns: 1fr;
+        height: auto;
+        padding: 14px 18px;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        display: none;
+      }
+
+      .settings-overlay {
+        inset: 10px;
+      }
+
+      .settings-grid {
+        grid-template-columns: 1fr;
+        overflow: auto;
+      }
+
+      .provider-list,
+      .settings-main {
+        overflow: visible;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="shell" aria-label="Journal LLM 配置原型">
+      <header class="topbar">
+        <div class="brand">
+          <strong>Journal</strong>
+          <span>LLM Provider prototype</span>
+        </div>
+        <div class="top-meta">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>2026-05-10 晨间日记</span>
+          <span class="pill">reviewing draft</span>
+        </div>
+        <div class="top-actions">
+          <button class="llm-button" type="button" id="openSettings">
+            <span>LLM</span>
+            <b id="llmLabel">DeepSeek</b>
+            <span>▾</span>
+          </button>
+          <button class="primary" type="button">确认保存</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="rail">
+          <section class="panel date-card">
+            <span class="label">Today</span>
+            <strong>05-10</strong>
+            <p>当前草稿由真实模型整理，正式文件仍需确认后写入。</p>
+          </section>
+
+          <section class="panel">
+            <span class="label">LLM source</span>
+            <h2>来源优先级</h2>
+            <ul class="source-list">
+              <li><span>JOURNAL_AI_*</span><span class="active">active</span></li>
+              <li><span>Provider key</span><span>fallback</span></li>
+              <li><span>ai-providers.json</span><span>file</span></li>
+              <li><span>Mock</span><span>default</span></li>
+            </ul>
+          </section>
+
+          <section class="panel">
+            <span class="label">Boundary</span>
+            <h2>模型不能写 Markdown</h2>
+            <p>真实模型只输出 JournalAiJson；JMF Markdown 仍由后端 renderer 生成。</p>
+          </section>
+        </aside>
+
+        <section class="journal-stage">
+          <div class="stage-toolbar">
+            <div class="stage-title">
+              <strong>今日草稿</strong>
+              <span>LLM 状态在顶部可见，配置面板不会抢占写作主流程。</span>
+            </div>
+            <div class="top-actions">
+              <button class="ghost" type="button">补充输入</button>
+              <button class="ghost" type="button">重新整理草稿</button>
+            </div>
+          </div>
+
+          <article class="paper">
+            <div class="paper-inner">
+              <header class="paper-heading">
+                <h1>2026-05-10 晨间日记</h1>
+                <p>真实模型负责整理，原始表达仍是底片。失败只进入 attention，不污染正式文件。</p>
+              </header>
+
+              <section class="doc-section">
+                <h2>原始输入</h2>
+                <p>今天准备把真实 LLM 接入 Journal。未配置时继续 Mock，配置成功后用真实模型生成结构化 JSON。</p>
+              </section>
+
+              <section class="doc-section">
+                <h2>昨日回顾</h2>
+                <ul>
+                  <li>完成 JMF 块编辑、源码编辑和校验边界。</li>
+                  <li>确认 Markdown 仍是长期源，AI 不能直接写 entry。</li>
+                </ul>
+              </section>
+
+              <section class="doc-section">
+                <h2>今日重点</h2>
+                <ul>
+                  <li>接入 OpenAI-compatible runtime。</li>
+                  <li>设计 LLM 配置面板和健康检查。</li>
+                  <li>确保真实模型失败时进入 attention，而不是静默回退 Mock。</li>
+                </ul>
+              </section>
+
+              <section class="doc-section">
+                <h2>生成信息</h2>
+                <div class="tags">
+                  <span>provider: deepseek</span>
+                  <span>model: deepseek-v4-flash</span>
+                  <span>prompt: journal-entry-json-v1</span>
+                  <span>style: faithful</span>
+                </div>
+              </section>
+            </div>
+          </article>
+        </section>
+
+        <aside class="dock">
+          <section class="panel">
+            <span class="label">Current LLM</span>
+            <h2>DeepSeek · 环境变量</h2>
+            <div class="config-source">
+              <div class="row"><span>环境变量</span><strong>JOURNAL_AI_PROVIDER</strong></div>
+              <div class="row"><span>Model</span><strong>deepseek-v4-flash</strong></div>
+              <div class="row"><span>API Key</span><strong>已加载，不显示</strong></div>
+            </div>
+          </section>
+
+          <section class="test-result">
+            <span class="label">Last test</span>
+            <h2>连接测试成功</h2>
+            <div class="result-row"><strong>JSON output</strong><span>{ "ok": true }</span></div>
+            <div class="result-row"><strong>Response time</strong><span>846 ms</span></div>
+            <div class="result-row"><strong>Token cost</strong><span>最小请求</span></div>
+          </section>
+
+          <section class="draft-warning">
+            <strong>重新整理草稿会覆盖当前 draft</strong>
+            <p>不会影响正式日记。若草稿已经人工编辑，执行前需要确认。</p>
+          </section>
+        </aside>
+      </main>
+    </section>
+
+    <section class="settings-overlay" id="settingsOverlay" aria-label="LLM 配置面板">
+      <header class="settings-head">
+        <div>
+          <strong>LLM 配置</strong>
+          <span class="pill">OpenAI-compatible runtime · Agent Framework 1.5.0</span>
+        </div>
+        <div class="top-actions">
+          <button class="ghost" type="button">恢复默认预设</button>
+          <button class="ghost" type="button" id="closeSettings">关闭</button>
+        </div>
+      </header>
+
+      <div class="settings-grid">
+        <nav class="provider-list" aria-label="LLM 列表">
+          <button class="provider-card" type="button" data-provider="mock">
+            <div class="provider-top">
+              <strong>Mock</strong>
+              <span class="provider-state">default</span>
+            </div>
+            <div class="provider-meta">
+              <span class="chip">local</span>
+              <span class="chip">no key</span>
+            </div>
+          </button>
+
+          <button class="provider-card warn" type="button" data-provider="openai">
+            <div class="provider-top">
+              <strong>OpenAI</strong>
+              <span class="provider-state">not configured</span>
+            </div>
+            <div class="provider-meta">
+              <span class="chip">preset</span>
+              <span class="chip">gpt-5.4</span>
+            </div>
+          </button>
+
+          <button class="provider-card active" type="button" data-provider="deepseek">
+            <div class="provider-top">
+              <strong>DeepSeek</strong>
+              <span class="provider-state">active</span>
+            </div>
+            <div class="provider-meta">
+              <span class="chip">env</span>
+              <span class="chip">v4 flash</span>
+            </div>
+          </button>
+
+          <button class="provider-card warn" type="button" data-provider="zhipu">
+            <div class="provider-top">
+              <strong>智谱 GLM</strong>
+              <span class="provider-state">file</span>
+            </div>
+            <div class="provider-meta">
+              <span class="chip">preset</span>
+              <span class="chip">glm-5.1</span>
+            </div>
+          </button>
+
+          <button class="provider-card error" type="button" data-provider="custom">
+            <div class="provider-top">
+              <strong>Custom</strong>
+              <span class="provider-state">model error</span>
+            </div>
+            <div class="provider-meta">
+              <span class="chip">baseUrl</span>
+              <span class="chip">OpenAI-compatible</span>
+            </div>
+          </button>
+        </nav>
+
+        <section class="settings-main">
+          <section class="settings-card">
+            <div class="provider-summary">
+              <div>
+                <span class="label">当前 LLM</span>
+                <h2 id="providerTitle">DeepSeek</h2>
+                <p id="providerDescription">当前配置来自环境变量。API Key 已加载但不会显示，也不会回写配置文件。</p>
+              </div>
+              <span class="chip" id="providerSource">env</span>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <span class="label">基础配置</span>
+            <h2>普通配置</h2>
+            <div class="form-grid">
+              <div class="field">
+                <label for="displayName">显示名称</label>
+                <input id="displayName" value="DeepSeek">
+              </div>
+              <div class="field">
+                <label for="model">模型</label>
+                <input id="model" value="deepseek-v4-flash">
+                <small>预设默认值可以直接手填覆盖。</small>
+              </div>
+              <div class="field full">
+                <label for="apiKey">API Key</label>
+                <div class="readonly-input" id="apiKey">已从 DEEPSEEK_API_KEY 加载，值不显示</div>
+                <small>如果来自环境变量，保存配置不会把 Key 写入文件。</small>
+              </div>
+              <div class="field full">
+                <label for="baseUrl">Base URL</label>
+                <input id="baseUrl" value="https://api.deepseek.com">
+              </div>
+            </div>
+            <div class="config-actions">
+              <button class="ghost" type="button" id="testButton">测试连接</button>
+              <button class="primary" type="button">启用当前 LLM</button>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <span class="label">Regenerate</span>
+            <h2>重新整理今日草稿</h2>
+            <p>使用当前 LLM 读取当天全部 raw inputs，重新生成 reviewing draft。不会写正式日记。</p>
+            <div class="config-actions">
+              <button class="danger-lite" type="button">用 Mock 生成一次</button>
+              <button class="primary" type="button">重新整理草稿</button>
+            </div>
+          </section>
+        </section>
+
+        <aside class="settings-side">
+          <section class="settings-card">
+            <span class="label">高级设置</span>
+            <h2>高级配置</h2>
+            <div class="form-grid">
+              <div class="field">
+                <label>JSON 模式</label>
+                <div class="readonly-input">json_object</div>
+                <small>首版统一兼容模式。</small>
+              </div>
+              <div class="field">
+                <label for="timeout">超时</label>
+                <input id="timeout" value="45s">
+              </div>
+              <div class="field">
+                <label for="temperature">Temperature</label>
+                <input id="temperature" value="0.2">
+              </div>
+              <div class="field">
+                <label for="maxTokens">Max tokens</label>
+                <input id="maxTokens" value="1200">
+              </div>
+              <div class="field full">
+                <label>Style preset</label>
+                <div class="segmented">
+                  <button class="active" type="button">faithful</button>
+                  <button type="button">future</button>
+                </div>
+                <small>首版固定保留原话优先，后续再开放风格编辑。</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="test-result" id="testResult">
+            <span class="label">连接测试</span>
+            <h2>最小 JSON 请求</h2>
+            <p class="config-note">测试会向当前 LLM 发送一次最小请求，可能产生少量 token 消耗。</p>
+            <div class="result-row"><strong>Status</strong><span id="testStatus">success</span></div>
+            <div class="result-row"><strong>Response</strong><span>{ "ok": true }</span></div>
+            <div class="result-row"><strong>Latency</strong><span>846 ms</span></div>
+            <details class="details-box">
+              <summary>安全技术详情</summary>
+              <pre>httpStatus: 200
+providerRequestId: req_9d4c...
+localCorrelationId: journal-ai-20260510-0812
+safeResponseSnippet: {"ok":true}
+authorization: [redacted]</pre>
+            </details>
+          </section>
+
+          <section class="test-result error">
+            <span class="label">Attention example</span>
+            <h2>失败不会回退 Mock</h2>
+            <div class="result-row"><strong>Stage</strong><span>provider-call</span></div>
+            <div class="result-row"><strong>Reason</strong><span>model_not_found</span></div>
+            <details class="details-box">
+              <summary>安全技术详情</summary>
+              <pre>httpStatus: 404
+providerErrorCode: model_not_found
+safeResponseSnippet: model does not exist
+apiKey: [redacted]</pre>
+            </details>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const overlay = document.querySelector("#settingsOverlay");
+    const openSettings = document.querySelector("#openSettings");
+    const closeSettings = document.querySelector("#closeSettings");
+    const providerCards = document.querySelectorAll(".provider-card");
+    const providerTitle = document.querySelector("#providerTitle");
+    const providerDescription = document.querySelector("#providerDescription");
+    const providerSource = document.querySelector("#providerSource");
+    const llmLabel = document.querySelector("#llmLabel");
+    const displayName = document.querySelector("#displayName");
+    const model = document.querySelector("#model");
+    const baseUrl = document.querySelector("#baseUrl");
+    const apiKey = document.querySelector("#apiKey");
+    const testButton = document.querySelector("#testButton");
+    const testStatus = document.querySelector("#testStatus");
+    const testResult = document.querySelector("#testResult");
+
+    const providers = {
+      mock: {
+        title: "Mock",
+        source: "default",
+        description: "未配置真实 Provider 时默认使用。无需 API Key，适合演示和测试。",
+        model: "mock-journal",
+        baseUrl: "local",
+        apiKey: "无需 API Key"
+      },
+      openai: {
+        title: "OpenAI",
+        source: "not configured",
+        description: "OpenAI 官方 endpoint。首版支持手填模型名和 API Key。",
+        model: "gpt-5.4",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "未配置"
+      },
+      deepseek: {
+        title: "DeepSeek",
+        source: "env",
+        description: "当前配置来自环境变量。API Key 已加载但不会显示，也不会回写配置文件。",
+        model: "deepseek-v4-flash",
+        baseUrl: "https://api.deepseek.com",
+        apiKey: "已从 DEEPSEEK_API_KEY 加载，值不显示"
+      },
+      zhipu: {
+        title: "智谱 GLM",
+        source: "file",
+        description: "预设来自 ai-providers.json。保存后需要测试连接。",
+        model: "glm-5.1",
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+        apiKey: "配置文件中已有 Key，值不显示"
+      },
+      custom: {
+        title: "Custom",
+        source: "model error",
+        description: "自定义 OpenAI-compatible endpoint。适合代理、本地服务和第三方兼容平台。",
+        model: "custom-model",
+        baseUrl: "http://localhost:11434/v1",
+        apiKey: "配置文件中已有 Key，值不显示"
+      }
+    };
+
+    function selectProvider(id) {
+      const next = providers[id];
+      providerCards.forEach(card => card.classList.toggle("active", card.dataset.provider === id));
+      providerTitle.textContent = next.title;
+      providerDescription.textContent = next.description;
+      providerSource.textContent = next.source;
+      llmLabel.textContent = next.title;
+      displayName.value = next.title;
+      model.value = next.model;
+      baseUrl.value = next.baseUrl;
+      apiKey.textContent = next.apiKey;
+      testStatus.textContent = id === "custom" ? "model_not_found" : id === "openai" ? "not tested" : "success";
+      testResult.classList.toggle("error", id === "custom");
+    }
+
+    openSettings.addEventListener("click", () => overlay.classList.remove("hidden"));
+    closeSettings.addEventListener("click", () => overlay.classList.add("hidden"));
+    providerCards.forEach(card => card.addEventListener("click", () => selectProvider(card.dataset.provider)));
+    testButton.addEventListener("click", () => {
+      testStatus.textContent = "success";
+      testResult.classList.remove("error");
+    });
+  </script>
+</body>
+</html>

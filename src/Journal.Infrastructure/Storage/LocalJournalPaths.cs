@@ -23,6 +23,9 @@ public sealed class LocalJournalPaths
     public string DraftMetaPath(JournalDate date) =>
         Path.Combine(_rootDirectory, ".journal", "drafts", date.Year, date.Month, $"{date.IsoDate}.meta.json");
 
+    public string AiSettingsPath() =>
+        Path.Combine(_rootDirectory, ".journal", "settings", "ai-providers.json");
+
     public static void EnsureParentDirectory(string filePath)
     {
         var directory = Path.GetDirectoryName(filePath);

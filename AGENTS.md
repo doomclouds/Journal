@@ -4,13 +4,13 @@
 
 Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
 
-Current delivered scope is Phase 3:
+Current delivered scope is Phase 5:
 
 ```text
-Natural language input -> Mock AI JSON -> JMF Markdown draft -> block/source edit with JMF validation -> user confirmation -> formal Markdown file
+Natural language input -> Mock or real LLM JSON -> JMF Markdown draft -> block/source edit with JMF validation -> user confirmation -> formal Markdown file
 ```
 
-Phase 3 includes the Phase 2 generation/confirmation workflow plus a safe JMF editing layer:
+Phase 5 includes the Phase 3 generation/confirmation/editor workflow plus real OpenAI-compatible LLM integration:
 
 - Backend parses draft/entry Markdown into a JMF document.
 - Block mode edits known editable sections while preserving protected/system sections.
@@ -18,8 +18,10 @@ Phase 3 includes the Phase 2 generation/confirmation workflow plus a safe JMF ed
 - Valid editor saves write a `reviewing` draft only.
 - Invalid editor saves write an `attention` draft and must not overwrite the formal entry.
 - The formal Markdown entry is updated only after the user confirms the current draft.
+- Real LLM providers are configured through `GET/PUT /settings/ai`, tested through `POST /settings/ai/test`, and can be used to regenerate the current draft through `POST /journal/today/draft/regenerate`.
+- Real LLM output must not overwrite `raw-inputs`; server-side raw input text remains the source of truth in draft and formal JMF.
 
-Do not assume these are implemented yet unless the code or docs say so: real AI providers, SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows.
+Do not assume these are implemented yet unless the code or docs say so: SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows.
 
 ## Tech Stack
 
@@ -34,7 +36,7 @@ Do not assume these are implemented yet unless the code or docs say so: real AI 
 
 - API composition and endpoints: `src/Journal.Api/Program.cs`.
 - Today's main workflow: `src/Journal.Infrastructure/Today/TodayJournalService.cs`.
-- AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementation is `MockAiProvider`.
+- AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementations are `MockAiProvider` and `OpenAiCompatibleJournalAiProvider`.
 - AI JSON validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
 - JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, and editor request/state records.
 - JMF parse/validate/compose layer: `src/Journal.Infrastructure/Jmf/JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, and `JmfMarkdownComposer.cs`.
@@ -95,7 +97,7 @@ entries/yyyy/MM/yyyy-MM-dd.md
 .journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
 ```
 
-Phase 3 continues to use the same locations. There is still no `.journal/versions/` or SQLite/index directory in delivered scope. Be careful with changes that alter these paths or formats; update docs and tests together.
+Phase 5 continues to use the same locations, and adds `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for persisted LLM settings. There is still no `.journal/versions/` or SQLite/index directory in delivered scope. Be careful with changes that alter these paths or formats; update docs and tests together.
 
 ## Working Rules
 

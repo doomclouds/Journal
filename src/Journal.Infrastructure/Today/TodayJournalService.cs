@@ -12,20 +12,20 @@ public sealed class TodayJournalService
     private readonly RawInputStore _rawInputStore;
     private readonly DraftStore _draftStore;
     private readonly EntryStore _entryStore;
-    private readonly IJournalAiProvider _aiProvider;
+    private readonly JournalAiGenerationService _aiGenerationService;
     private readonly IJournalClock _clock;
 
     public TodayJournalService(
         RawInputStore rawInputStore,
         DraftStore draftStore,
         EntryStore entryStore,
-        IJournalAiProvider aiProvider,
+        JournalAiGenerationService aiGenerationService,
         IJournalClock clock)
     {
         _rawInputStore = rawInputStore;
         _draftStore = draftStore;
         _entryStore = entryStore;
-        _aiProvider = aiProvider;
+        _aiGenerationService = aiGenerationService;
         _clock = clock;
     }
 
@@ -74,25 +74,55 @@ public sealed class TodayJournalService
 
         await _rawInputStore.AppendAsync(input, cancellationToken);
         var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
+        return await GenerateDraftAsync(date, inputs, now, providerIdOverride: null, cancellationToken);
+    }
+
+    public async Task<TodayJournalState> RegenerateDraftAsync(
+        string? providerIdOverride,
+        CancellationToken cancellationToken)
+    {
+        var date = JournalDate.From(_clock.Today);
+        var now = _clock.Now;
+        var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
+        if (inputs.Count == 0)
+        {
+            return await BuildStateAsync(date, statusOverride: null, cancellationToken);
+        }
+
+        return await GenerateDraftAsync(date, inputs, now, providerIdOverride, cancellationToken);
+    }
+
+    private async Task<TodayJournalState> GenerateDraftAsync(
+        JournalDate date,
+        IReadOnlyList<RawInput> inputs,
+        DateTimeOffset now,
+        string? providerIdOverride,
+        CancellationToken cancellationToken)
+    {
         var sourceRawInputIds = inputs.Select(rawInput => rawInput.Id).ToArray();
 
-        var aiJson = _aiProvider.Generate(date, inputs, now);
-        var validation = JournalAiJsonValidator.Validate(aiJson);
-        if (!validation.IsValid)
+        var generation = await _aiGenerationService.GenerateAsync(
+            date,
+            inputs,
+            now,
+            providerIdOverride,
+            cancellationToken);
+        if (!generation.IsSuccess || generation.AiJson is null)
         {
+            var errors = ToAiErrorMessages(generation.Error);
             var attentionDraft = new JournalDraft(
                 date,
                 JournalStatus.Attention,
-                RenderAttentionMarkdown(validation.Errors),
+                RenderAttentionMarkdown("LLM generation failed", errors),
                 sourceRawInputIds,
-                validation.Errors,
+                errors,
                 now);
 
             await _draftStore.WriteAsync(attentionDraft, cancellationToken);
             return await BuildStateAsync(date, JournalStatus.Attention, cancellationToken);
         }
 
-        var markdown = JmfMarkdownRenderer.Render(aiJson, now);
+        var markdown = JmfMarkdownRenderer.Render(generation.AiJson, now, generation.Metadata);
         var draft = new JournalDraft(
             date,
             JournalStatus.Reviewing,
@@ -335,10 +365,36 @@ public sealed class TodayJournalService
         }
     }
 
-    private static string RenderAttentionMarkdown(IReadOnlyList<string> errors)
+    private static IReadOnlyList<string> ToAiErrorMessages(JournalAiSafeError? error)
+    {
+        if (error is null)
+        {
+            return ["LLM generation failed."];
+        }
+
+        var messages = new List<string>();
+        if (!string.IsNullOrWhiteSpace(error.Message))
+        {
+            messages.Add(error.Message);
+        }
+
+        if (!string.IsNullOrWhiteSpace(error.Code))
+        {
+            messages.Add($"Code: {error.Code}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(error.TechnicalDetails))
+        {
+            messages.Add($"Technical details: {error.TechnicalDetails}");
+        }
+
+        return messages.Count > 0 ? messages : ["LLM generation failed."];
+    }
+
+    private static string RenderAttentionMarkdown(string title, IReadOnlyList<string> errors)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("# AI JSON validation failed");
+        builder.Append("# ").AppendLine(title);
         builder.AppendLine();
         builder.AppendLine("## Errors");
         builder.AppendLine();
