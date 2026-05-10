@@ -830,7 +830,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.change(await screen.findByRole("textbox", { name: "编辑 今天想推进" }), {
       target: { value: "还没保存但不能丢" }
     });
 
