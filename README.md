@@ -141,10 +141,37 @@ PUT http://localhost:5057/journal/today/editor/source
 - Node.js 24 或兼容版本
 - npm 11 或兼容版本
 
-## 启动 .NET API
+## 一键启动开发环境
+
+```powershell
+.\scripts\start-journal-dev.ps1
+```
+
+脚本会复用已在线的 API/Vite；缺哪个启动哪个，然后打开 Electron 客户端。常用参数：
+
+```powershell
+.\scripts\start-journal-dev.ps1 -RestartApi -RestartVite
+.\scripts\start-journal-dev.ps1 -NoElectron -OpenBrowser
+.\scripts\start-journal-dev.ps1 -ShowLogs
+```
+
+停止后台开发进程：
+
+```powershell
+.\scripts\stop-journal-dev.ps1
+.\scripts\stop-journal-dev.ps1 -Api
+.\scripts\stop-journal-dev.ps1 -Vite
+.\scripts\stop-journal-dev.ps1 -Electron
+```
+
+## 手动启动
+
+开发期仍然是双进程模式；需要手动排查时可以分别启动：
 
 ```powershell
 dotnet run --project src/Journal.Api
+npm install --prefix apps/desktop
+npm run desktop --prefix apps/desktop
 ```
 
 API 默认提供：
@@ -152,15 +179,6 @@ API 默认提供：
 ```text
 GET http://localhost:5057/health
 ```
-
-## 启动桌面前端
-
-```powershell
-npm install --prefix apps/desktop
-npm run desktop --prefix apps/desktop
-```
-
-开发期采用双进程模式：先启动 .NET API，再启动 Electron/Vite 桌面前端。
 
 ## 验证
 
