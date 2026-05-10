@@ -65,6 +65,10 @@ Approved references:
 
 ### Frontend Modifies
 
+- `apps/desktop/package.json`
+  - Add `lucide-react` for polished, accessible icon buttons.
+- `apps/desktop/package-lock.json`
+  - Lock `lucide-react`.
 - `apps/desktop/src/api.ts`
   - Add activation and key reveal DTOs/client functions.
   - Extend test client to accept candidate settings.
@@ -1096,10 +1100,22 @@ git commit -m "feat: move llm draft regeneration to today page"
 ## Task 4: LLM Settings Panel Productized UX
 
 **Files:**
+- Modify: `apps/desktop/package.json`
+- Modify: `apps/desktop/package-lock.json`
 - Modify: `apps/desktop/src/LlmSettingsPanel.tsx`
 - Modify: `apps/desktop/src/App.test.tsx`
 
-- [ ] **Step 1: Update panel prop types**
+- [ ] **Step 1: Add lucide-react**
+
+Run:
+
+```powershell
+npm install lucide-react --prefix apps/desktop
+```
+
+Expected: `apps/desktop/package.json` includes `lucide-react` under `dependencies`, and `apps/desktop/package-lock.json` is updated.
+
+- [ ] **Step 2: Update panel prop types**
 
 In `apps/desktop/src/LlmSettingsPanel.tsx`, replace props with:
 
@@ -1127,7 +1143,13 @@ import {
 } from "./api";
 ```
 
-- [ ] **Step 2: Replace old panel tests with productized UX tests**
+Add icon imports:
+
+```ts
+import { Eye, EyeOff, LockKeyhole } from "lucide-react";
+```
+
+- [ ] **Step 3: Replace old panel tests with productized UX tests**
 
 In `apps/desktop/src/App.test.tsx`, replace the current `describe("LlmSettingsPanel", ...)` block with tests that cover these exact expectations:
 
@@ -1191,6 +1213,7 @@ test("shows file-backed key as masked preview and reveals on eye click", async (
   fireEvent.click(screen.getByRole("button", { name: "查看 API Key" }));
 
   expect(await screen.findByDisplayValue("sk-file-backed-secret-4A7C")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "隐藏 API Key" })).toBeInTheDocument();
   expect(onRevealApiKey).toHaveBeenCalledWith("deepseek");
 });
 
@@ -1225,6 +1248,7 @@ test("shows environment key as loaded and not revealable", () => {
 
   expect(screen.getByText("已从环境变量加载，不在界面显示")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "查看 API Key" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("environment-key-lock")).toBeInTheDocument();
 });
 
 test("tests current form with candidate settings and marks old result stale after edits", async () => {
@@ -1339,7 +1363,7 @@ test("save and activate success shows today-page next step", async () => {
 });
 ```
 
-- [ ] **Step 3: Run panel tests and verify failure**
+- [ ] **Step 4: Run panel tests and verify failure**
 
 Run:
 
@@ -1349,7 +1373,7 @@ npm test --prefix apps/desktop -- App.test.tsx -t "productized provider state|fi
 
 Expected: fail because the panel still uses old labels, props, and regenerate controls.
 
-- [ ] **Step 4: Implement local panel state**
+- [ ] **Step 5: Implement local panel state**
 
 In `LlmSettingsPanel.tsx`, use these state values:
 
@@ -1431,13 +1455,14 @@ function providerStatusLabel(provider: AiProviderView, selectedTestResult: AiPro
 }
 ```
 
-- [ ] **Step 5: Implement key field behavior**
+- [ ] **Step 6: Implement key field behavior**
 
 Render API key state with these rules:
 
 ```tsx
 {selectedView?.source === "environment" ? (
   <div className="llm-key-display" aria-label="API Key 已从环境变量加载">
+    <LockKeyhole size={16} strokeWidth={1.8} aria-hidden="true" data-testid="environment-key-lock" />
     已从环境变量加载，不在界面显示
   </div>
 ) : selectedView?.id === "mock" ? (
@@ -1457,19 +1482,34 @@ Render API key state with these rules:
       onChange={event => updateSelected({ apiKey: event.target.value })}
     />
     {selectedView?.canRevealApiKey && !selected.apiKey ? (
-      <button type="button" className="icon-action" aria-label="查看 API Key" onClick={handleRevealApiKey}>
-        ◉
+      <button
+        type="button"
+        className="icon-action"
+        aria-label={revealedKeyProviderId === selected.id ? "隐藏 API Key" : "查看 API Key"}
+        onClick={handleToggleApiKeyReveal}
+      >
+        {revealedKeyProviderId === selected.id ? (
+          <EyeOff size={17} strokeWidth={1.8} aria-hidden="true" />
+        ) : (
+          <Eye size={17} strokeWidth={1.8} aria-hidden="true" />
+        )}
       </button>
     ) : null}
   </div>
 )}
 ```
 
-Add reveal handler:
+Add toggle handler:
 
 ```ts
-async function handleRevealApiKey() {
+async function handleToggleApiKeyReveal() {
   if (!selected) {
+    return;
+  }
+
+  if (revealedKeyProviderId === selected.id) {
+    setRevealedKeyProviderId(null);
+    setRevealedKey("");
     return;
   }
 
@@ -1483,7 +1523,7 @@ async function handleRevealApiKey() {
 
 In provider switching and `onClose`, reset `revealedKeyProviderId` and `revealedKey`.
 
-- [ ] **Step 6: Implement current-form test and protected activation**
+- [ ] **Step 7: Implement current-form test and protected activation**
 
 Add:
 
@@ -1571,7 +1611,7 @@ setTestResultIsStale(Boolean(testResult));
 setActivationResult(null);
 ```
 
-- [ ] **Step 7: Render advanced summary and diagnostics**
+- [ ] **Step 8: Render advanced summary and diagnostics**
 
 Render advanced summary:
 
@@ -1626,7 +1666,7 @@ Render diagnostics with these required texts:
 </section>
 ```
 
-- [ ] **Step 8: Remove regenerate UI from panel**
+- [ ] **Step 9: Remove regenerate UI from panel**
 
 Delete:
 
@@ -1635,7 +1675,7 @@ Delete:
 - The entire `Regenerate` settings card.
 - `onRegenerate` prop usage.
 
-- [ ] **Step 9: Run panel tests**
+- [ ] **Step 10: Run panel tests**
 
 Run:
 
@@ -1645,10 +1685,10 @@ npm test --prefix apps/desktop -- App.test.tsx -t "LlmSettingsPanel"
 
 Expected: pass.
 
-- [ ] **Step 10: Commit Task 4**
+- [ ] **Step 11: Commit Task 4**
 
 ```powershell
-git add apps/desktop/src/LlmSettingsPanel.tsx apps/desktop/src/App.test.tsx
+git add apps/desktop/package.json apps/desktop/package-lock.json apps/desktop/src/LlmSettingsPanel.tsx apps/desktop/src/App.test.tsx
 git commit -m "feat: polish llm settings panel ux"
 ```
 
@@ -1736,11 +1776,36 @@ In `apps/desktop/src/styles.css`, replace the existing `.llm-settings-*` block w
   padding: 9px 10px;
 }
 
+.llm-key-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .icon-action {
+  width: 38px;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
   border: 1px solid #c9c5bb;
   border-radius: 6px;
   background: #faf7f0;
   color: #655d53;
+}
+
+.icon-action:hover {
+  border-color: #9fc9be;
+  color: #2d746a;
+}
+
+.icon-action:focus-visible {
+  outline: 2px solid rgba(45, 116, 106, 0.35);
+  outline-offset: 2px;
+}
+
+.icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .llm-advanced-summary {

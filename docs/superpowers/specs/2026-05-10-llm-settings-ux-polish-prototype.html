@@ -269,16 +269,25 @@
     }
 
     .eye {
-      width: 26px;
-      height: 26px;
+      width: 32px;
+      height: 32px;
       display: grid;
       place-items: center;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #faf7f0;
       color: var(--muted);
-      font-size: 12px;
-      font-family: "Segoe UI", sans-serif;
+      padding: 0;
+    }
+
+    .eye svg {
+      width: 17px;
+      height: 17px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .helper {
@@ -421,18 +430,18 @@
       <div class="bar">
         <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
         <span>Journal / LLM 设置</span>
-        <span>已启用 ChatGPT · gpt-5.4</span>
+        <span>已启用 DeepSeek · deepseek-v4-flash</span>
       </div>
 
       <div class="body">
         <aside class="side">
           <h3 class="section-title">供应商</h3>
-          <div class="provider active">
-            <div class="provider-top"><span class="provider-name">ChatGPT</span><span class="status on">已启用</span></div>
+          <div class="provider">
+            <div class="provider-top"><span class="provider-name">ChatGPT</span><span class="status ready">已配置</span></div>
             <div class="provider-meta">环境变量 · gpt-5.4 · Key 不可查看</div>
           </div>
-          <div class="provider">
-            <div class="provider-top"><span class="provider-name">DeepSeek</span><span class="status ready">已配置</span></div>
+          <div class="provider active">
+            <div class="provider-top"><span class="provider-name">DeepSeek</span><span class="status on">已启用</span></div>
             <div class="provider-meta">本机配置文件 · 可替换 Key</div>
           </div>
           <div class="provider">
@@ -449,7 +458,7 @@
           <div class="notice">
             <div>
               <strong>当前配置可用</strong>
-              <span>刚才测试通过后已保存并启用。今天的 AI 整理会使用 ChatGPT。</span>
+              <span>刚才测试通过后已保存并启用。今天的 AI 整理会使用 DeepSeek。</span>
             </div>
             <button class="btn">测试已保存配置</button>
           </div>
@@ -458,19 +467,24 @@
           <div class="form">
             <div class="field">
               <label><span>Base URL</span><span>来自默认预设，可覆盖</span></label>
-              <div class="input">https://api.openai.com/v1</div>
+              <div class="input">https://api.deepseek.com</div>
             </div>
             <div class="field">
-              <label><span>API Key</span><span>环境变量 OPENAI_API_KEY</span></label>
+              <label><span>API Key</span><span>本机配置文件</span></label>
               <div class="input masked">
-                <span>已从环境变量加载，不在界面显示</span>
-                <span class="eye">锁</span>
+                <span>sk-••••••••••••••••4A7C</span>
+                <button class="eye" type="button" aria-label="查看 API Key">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                    <circle cx="12" cy="12" r="2.8"></circle>
+                  </svg>
+                </button>
               </div>
-              <div class="helper">环境变量来源不提供查看按钮；配置文件来源显示为 sk-••••••4A7C，并允许点击眼睛临时查看。</div>
+              <div class="helper">配置文件来源默认隐藏，点击右侧眼睛可临时查看；环境变量来源会显示为已加载，但不会提供查看按钮。</div>
             </div>
             <div class="field">
               <label><span>Model</span><span>默认模型</span></label>
-              <div class="input">gpt-5.4</div>
+              <div class="input">deepseek-v4-flash</div>
             </div>
             <div class="advanced">
               <span>高级参数：temperature 0.2 · max tokens 1800 · timeout 60s · JSON 模式开启</span>
