@@ -97,6 +97,13 @@ button:focus-visible {
   letter-spacing: 0;
 }
 
+.productized-title-block p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: #655d53;
+  line-height: 1.5;
+}
+
 .status-strip {
   display: flex;
   flex-wrap: wrap;
@@ -143,6 +150,26 @@ button:focus-visible {
   color: #8c332b;
 }
 
+.product-status-neutral {
+  background: #f6ead3;
+  color: #765622;
+}
+
+.product-status-good {
+  background: #dcebe4;
+  color: #1f6f64;
+}
+
+.product-status-warning {
+  background: #fff0c9;
+  color: #795600;
+}
+
+.product-status-danger {
+  background: #f3ddd9;
+  color: #8c332b;
+}
+
 .llm-status-pill {
   min-height: 32px;
   display: inline-flex;
@@ -184,6 +211,11 @@ button:focus-visible {
   gap: 14px;
 }
 
+.productized-workspace {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-areas: "paper assistant";
+}
+
 .context-rail {
   grid-area: rail;
   min-width: 0;
@@ -199,6 +231,29 @@ button:focus-visible {
   border: 1px solid #d8d4ca;
   border-radius: 8px;
   background: #fffdf8;
+}
+
+.assistant-panel {
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 14px;
+}
+
+.assistant-panel > strong {
+  display: block;
+  color: #2d2823;
+  line-height: 1.35;
+}
+
+.assistant-panel > p,
+.today-status-list dd {
+  color: #655d53;
+  line-height: 1.55;
+}
+
+.assistant-panel > p {
+  margin: 8px 0 0;
 }
 
 .rail-block,
@@ -271,6 +326,10 @@ button:focus-visible {
   gap: 10px;
 }
 
+.productized-journal-stage {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
 .compact-actions {
   display: none;
   justify-content: flex-end;
@@ -283,6 +342,10 @@ button:focus-visible {
   border: 1px solid #d8d4ca;
   border-radius: 8px;
   background: #fbfaf6;
+}
+
+.productized-journal-paper {
+  min-height: 0;
 }
 
 .markdown-preview,
@@ -331,6 +394,115 @@ button:focus-visible {
   min-height: 360px;
   color: #7a7065;
   font-size: 18px;
+}
+
+.productized-empty-paper {
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.productized-empty-paper h2 {
+  margin: 0;
+  color: #2d2823;
+  font-size: 24px;
+}
+
+.productized-empty-paper p {
+  max-width: 560px;
+  margin: 0;
+  color: #655d53;
+  line-height: 1.65;
+}
+
+.compose-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 12px;
+}
+
+.compose-bar form {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.compose-bar label {
+  grid-column: 1 / -1;
+  color: #2d2823;
+  font-weight: 800;
+}
+
+.compose-bar textarea {
+  min-height: 86px;
+}
+
+.compose-secondary-actions {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.compose-hint {
+  max-width: 280px;
+  margin: 0;
+  color: #655d53;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.today-assistant {
+  grid-area: assistant;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+}
+
+.assistant-panel-good {
+  background: #f2f8f4;
+}
+
+.assistant-panel-warning {
+  background: #fff8e5;
+}
+
+.assistant-panel-danger,
+.productized-attention-panel {
+  border-color: rgba(168, 66, 53, 0.25);
+  background: rgba(255, 246, 241, 0.76);
+}
+
+.today-status-list {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.today-status-list div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.today-status-list dt {
+  color: #655d53;
+  font-weight: 800;
+}
+
+.today-status-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .input-dock {
@@ -809,5 +981,33 @@ button:focus-visible {
 
   .llm-provider-list {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .productized-workspace {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "paper"
+      "assistant";
+    grid-template-rows: minmax(360px, 1fr) auto;
+  }
+
+  .today-assistant {
+    overflow: visible;
+  }
+
+  .compose-bar,
+  .compose-bar form {
+    grid-template-columns: 1fr;
+  }
+
+  .compose-secondary-actions {
+    justify-items: stretch;
+  }
+
+  .compose-hint {
+    max-width: none;
+    text-align: left;
   }
 }

@@ -335,11 +335,13 @@ describe("App", () => {
     postInputDeferred.resolve(mockJsonResponse(emptyToday));
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    expect(await screen.findByText("reviewing")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
     expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
   });
 
-  test("loads health and today editor state on initial render", async () => {
+  test("shows friendly empty productized state on initial render", async () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       {
@@ -360,13 +362,36 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "2026-05-08 晨间日记" })
     ).toBeInTheDocument();
-    expect(screen.getByText("empty")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("今日状态")).getByText("待开始")).toBeInTheDocument();
+    expect(screen.getByText("今天先写一句")).toBeInTheDocument();
+    expect(screen.getByText("不用先想结构。写一段自然语言，Journal 会保留原话，再帮你整理成可确认的日记草稿。")).toBeInTheDocument();
     expect(screen.getByLabelText("补充今天的自然语言输入")).toBeInTheDocument();
-    expect(screen.getByText("还没有可编辑的 JMF 草稿")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成草稿" })).toBeInTheDocument();
+    expect(screen.queryByText("还没有可编辑的 JMF 草稿")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:5057/health", undefined);
     expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today/editor", undefined);
     expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/settings/ai", undefined);
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today", undefined);
+  });
+
+  test("shows productized draft language without backend status leaks", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
+    expect(screen.getByText("今日材料")).toBeInTheDocument();
+    expect(screen.getByText("整理状态")).toBeInTheDocument();
+    expect(screen.getByText("下一步")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LLM Mock" })).toHaveTextContent("Mock 可用");
+    expect(screen.queryByText("reviewing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Raw inputs")).not.toBeInTheDocument();
   });
 
   test("shows current LLM provider in top status strip", async () => {
@@ -378,7 +403,19 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "LLM Mock" })).toHaveTextContent("Mock 可用");
+  });
+
+  test("shows DeepSeek LLM provider as available in top status strip", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: deepSeekAiSettings }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "LLM DeepSeek" })).toHaveTextContent("DeepSeek 可用");
   });
 
   test("shows unknown active LLM id instead of falling back to Mock", async () => {
@@ -390,7 +427,7 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "LLM missing-provider" })).toHaveTextContent("missing-provider 可用");
     expect(screen.queryByRole("button", { name: "LLM Mock" })).not.toBeInTheDocument();
   });
 
@@ -571,9 +608,9 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重新整理" }));
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
@@ -611,8 +648,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "重新整理今日草稿" }));
-    fireEvent.click(screen.getByRole("button", { name: "重新整理今日草稿" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重新整理" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
 
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("重新生成后的重点")
@@ -627,7 +664,7 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "重新整理今日草稿" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "重新整理" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /LLM/ }));
 
     expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
@@ -646,7 +683,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const button = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const button = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(button);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
@@ -667,7 +704,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
@@ -675,7 +712,7 @@ describe("App", () => {
       target: { value: "补充一点新上下文" }
     });
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -689,14 +726,14 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "LLM Mock" }));
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -710,7 +747,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
@@ -718,7 +755,7 @@ describe("App", () => {
       target: { value: "补充新的今日重点" }
     });
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -732,13 +769,13 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "插入 情绪感受" }));
 
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -752,14 +789,14 @@ describe("App", () => {
 
     render(<App />);
 
-    const regenerateButton = await screen.findByRole("button", { name: "重新整理今日草稿" });
+    const regenerateButton = await screen.findByRole("button", { name: "重新整理" });
     fireEvent.click(regenerateButton);
     expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("请输入一段今天的自然语言内容。");
-    expect(screen.getByText("使用当前 LLM 重新整理 reviewing draft。")).toBeInTheDocument();
+    expect(screen.getByText("使用当前 LLM 重新整理当前草稿。")).toBeInTheDocument();
 
     fireEvent.click(regenerateButton);
 
@@ -791,8 +828,10 @@ describe("App", () => {
     fireEvent.change(input, { target: { value: "今天完成 Phase 2 API 连接" } });
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
-    expect(await screen.findByText("reviewing")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认写入正式日记" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/inputs", {
       method: "POST",
@@ -840,7 +879,9 @@ describe("App", () => {
 
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
-    expect(await screen.findByText("reviewing")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("可保存")).toBeInTheDocument()
+    );
     expect(submitButton).toBeEnabled();
   });
 
@@ -896,7 +937,7 @@ describe("App", () => {
     expect(screen.getByText("请输入一段今天的自然语言内容。")).toBeInTheDocument();
   });
 
-  test("shows attention errors without confirm action", async () => {
+  test("shows needs-attention productized state without confirm action", async () => {
     mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState({
@@ -919,9 +960,11 @@ describe("App", () => {
 
     render(<App />);
 
-    expect((await screen.findAllByText("attention")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("需要处理")).length).toBeGreaterThan(0);
+    expect(screen.getByText("正式日记没有被覆盖，原始表达仍然保留。")).toBeInTheDocument();
     expect(screen.getAllByText("title is required").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "确认写入正式日记" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
   });
 
   test("confirms draft and refreshes from today editor state", async () => {
@@ -942,9 +985,11 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "确认写入正式日记" }));
+    fireEvent.click(await screen.findByRole("button", { name: "保存日记" }));
 
-    await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("已保存")).toBeInTheDocument()
+    );
     expect(screen.getByText(entryPath)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
@@ -968,7 +1013,7 @@ describe("App", () => {
 
     render(<App />);
 
-    const confirmButton = await screen.findByRole("button", { name: "确认写入正式日记" });
+    const confirmButton = await screen.findByRole("button", { name: "保存日记" });
     expect(confirmButton).toBeEnabled();
 
     fireEvent.click(confirmButton);
@@ -986,7 +1031,9 @@ describe("App", () => {
       today: processedToday(entryPath)
     })));
 
-    await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(screen.getByLabelText("今日状态")).getByText("已保存")).toBeInTheDocument()
+    );
     expect(screen.getByText(entryPath)).toBeInTheDocument();
   });
 
@@ -1081,7 +1128,7 @@ describe("App", () => {
     render(<App />);
 
     const saveButton = await screen.findByRole("button", { name: "保存块编辑草稿" });
-    const confirmButton = screen.getByRole("button", { name: "确认写入正式日记" });
+    const confirmButton = screen.getByRole("button", { name: "保存日记" });
 
     fireEvent.click(saveButton);
 
