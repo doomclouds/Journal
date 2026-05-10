@@ -145,19 +145,30 @@ public sealed class TodayJournalServiceTests
 
     private sealed class InvalidAiProvider : IJournalAiProvider
     {
-        public JournalAiJson Generate(JournalDate date, IReadOnlyList<RawInput> rawInputs, DateTimeOffset generatedAt) =>
-            new(
-                "invalid-schema",
-                date.IsoDate,
-                date.MonthDay,
-                "draft",
-                [],
-                [],
-                "未标注",
-                [],
-                [],
-                [],
-                []);
+        public string ProviderId => "invalid";
+
+        public Task<JournalAiProviderResult> GenerateAsync(
+            JournalAiGenerationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(JournalAiProviderResult.Success(
+                new JournalAiJson(
+                    "invalid-schema",
+                    request.Date.IsoDate,
+                    request.Date.MonthDay,
+                    "draft",
+                    [],
+                    [],
+                    "未标注",
+                    [],
+                    [],
+                    [],
+                    []),
+                new JournalAiMetadata("invalid", "invalid-model", "invalid-prompt")));
+
+        public Task<JournalAiProviderHealthResult> CheckAsync(
+            JournalAiProviderSettings settings,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(JournalAiProviderHealthResult.Success("{\"ok\":false}", TimeSpan.Zero));
     }
 
     private sealed class TempWorkspace : IDisposable

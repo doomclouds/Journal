@@ -8,7 +8,7 @@ namespace Journal.Tests;
 public sealed class MockAiAndJmfTests
 {
     [Fact]
-    public void MockAiProvider_GeneratesDeterministicJsonFromAllRawInputs()
+    public async Task MockAiProvider_GeneratesDeterministicJsonFromAllRawInputs()
     {
         var date = JournalDate.From(new DateOnly(2026, 5, 8));
         var generatedAt = DateTimeOffset.Parse("2026-05-08T09:30:00+08:00");
@@ -19,8 +19,13 @@ public sealed class MockAiAndJmfTests
             new RawInput("raw-3", date, DateTimeOffset.Parse("2026-05-08T08:20:00+08:00"), "text", "想到一个原则：Markdown 必须稳定可读，有推进感")
         };
 
-        var aiJson = new MockAiProvider().Generate(date, inputs, generatedAt);
+        var result = await new MockAiProvider().GenerateAsync(
+            new JournalAiGenerationRequest(date, inputs, generatedAt, new JournalAiProviderSettings()),
+            CancellationToken.None);
+        var aiJson = Assert.IsType<JournalAiJson>(result.AiJson);
 
+        Assert.True(result.IsSuccess);
+        Assert.Equal(JournalAiMetadata.Mock, result.Metadata);
         Assert.Equal("journal-entry/v1", aiJson.Schema);
         Assert.Equal("2026-05-08", aiJson.Date);
         Assert.Equal("05-08", aiJson.MonthDay);
@@ -67,6 +72,23 @@ public sealed class MockAiAndJmfTests
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void JournalAiSafeError_CreateRedactsAuthorizationBearerAndApiKeyValues()
+    {
+        var error = JournalAiSafeError.Create(
+            "generation",
+            "provider-error",
+            "Provider request failed.",
+            "Authorization: Bearer secret-key status=401 api_key=abc");
+
+        Assert.DoesNotContain("secret-key", error.TechnicalDetails, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("abc", error.TechnicalDetails, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Bearer", error.TechnicalDetails, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[redacted-header]", error.TechnicalDetails, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[redacted-key-name]", error.TechnicalDetails, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[redacted-value]", error.TechnicalDetails, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -120,6 +142,37 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("- 完成了 Task 1/2 依赖。", markdown);
         Assert.Contains("- 实现 JMF renderer。", markdown);
         Assert.Contains("- 可以让 Markdown 稳定可读。", markdown);
+    }
+
+    [Fact]
+    public void JmfMarkdownRenderer_WritesProviderMetadataFromGenerationResult()
+    {
+        var markdown = JmfMarkdownRenderer.Render(
+            CreateAiJson(),
+            DateTimeOffset.Parse("2026-05-10T08:30:00+08:00"),
+            new JournalAiMetadata(
+                Provider: "deepseek",
+                Model: "deepseek-v4-flash",
+                PromptVersion: "journal-entry-json-v1"));
+
+        Assert.Contains("provider: deepseek", markdown);
+        Assert.Contains("model: deepseek-v4-flash", markdown);
+        Assert.Contains("prompt_version: journal-entry-json-v1", markdown);
+        Assert.Contains("generated_at: \"2026-05-10T08:30:00.0000000+08:00\"", markdown);
+    }
+
+    [Fact]
+    public void JmfMarkdownRenderer_DoesNotWriteProviderSecrets()
+    {
+        var markdown = JmfMarkdownRenderer.Render(
+            CreateAiJson(),
+            DateTimeOffset.Parse("2026-05-10T08:30:00+08:00"),
+            new JournalAiMetadata("custom", "local-model", "journal-entry-json-v1"));
+
+        Assert.DoesNotContain("api_key", markdown, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("base_url", markdown, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("request_id", markdown, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("raw_response", markdown, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

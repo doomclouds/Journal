@@ -1,8 +1,14 @@
-using Journal.Domain.Entries;
-
 namespace Journal.Infrastructure.Ai;
 
 public interface IJournalAiProvider
 {
-    JournalAiJson Generate(JournalDate date, IReadOnlyList<RawInput> rawInputs, DateTimeOffset generatedAt);
+    string ProviderId { get; }
+
+    Task<JournalAiProviderResult> GenerateAsync(
+        JournalAiGenerationRequest request,
+        CancellationToken cancellationToken);
+
+    Task<JournalAiProviderHealthResult> CheckAsync(
+        JournalAiProviderSettings settings,
+        CancellationToken cancellationToken);
 }

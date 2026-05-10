@@ -76,7 +76,25 @@ public sealed class TodayJournalService
         var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
         var sourceRawInputIds = inputs.Select(rawInput => rawInput.Id).ToArray();
 
-        var aiJson = _aiProvider.Generate(date, inputs, now);
+        var aiResult = await _aiProvider.GenerateAsync(
+            new JournalAiGenerationRequest(date, inputs, now, new JournalAiProviderSettings()),
+            cancellationToken);
+        if (!aiResult.IsSuccess || aiResult.AiJson is null)
+        {
+            var errors = new[] { aiResult.Error?.Message ?? "AI provider generation failed." };
+            var attentionDraft = new JournalDraft(
+                date,
+                JournalStatus.Attention,
+                RenderAttentionMarkdown(errors),
+                sourceRawInputIds,
+                errors,
+                now);
+
+            await _draftStore.WriteAsync(attentionDraft, cancellationToken);
+            return await BuildStateAsync(date, JournalStatus.Attention, cancellationToken);
+        }
+
+        var aiJson = aiResult.AiJson;
         var validation = JournalAiJsonValidator.Validate(aiJson);
         if (!validation.IsValid)
         {
@@ -92,7 +110,7 @@ public sealed class TodayJournalService
             return await BuildStateAsync(date, JournalStatus.Attention, cancellationToken);
         }
 
-        var markdown = JmfMarkdownRenderer.Render(aiJson, now);
+        var markdown = JmfMarkdownRenderer.Render(aiJson, now, aiResult.Metadata);
         var draft = new JournalDraft(
             date,
             JournalStatus.Reviewing,

@@ -6,16 +6,16 @@ namespace Journal.Infrastructure.Jmf;
 public static class JmfMarkdownRenderer
 {
     private const string DocumentSchema = "journal-entry/v1";
-    private const string Provider = "mock";
-    private const string Model = "mock-journal";
-    private const string PromptVersion = "mock-journal-entry-v1";
     private const string YamlFlowIndicatorCharacters = "[]{},";
     private const string YamlLeadingIndicatorCharacters = "-?:,[]{}#&*!|>'\"%@`";
 
     public static string Render(
         JournalAiJson aiJson,
-        DateTimeOffset generatedAt)
+        DateTimeOffset generatedAt,
+        JournalAiMetadata? metadata = null)
     {
+        metadata ??= JournalAiMetadata.Mock;
+
         var builder = new StringBuilder();
 
         builder.AppendLine("---");
@@ -27,9 +27,9 @@ public static class JmfMarkdownRenderer
         AppendList(builder, "topics", aiJson.Topics);
         AppendScalar(builder, "mood", aiJson.Mood);
         builder.AppendLine("version: 1");
-        AppendScalar(builder, "provider", Provider);
-        AppendScalar(builder, "model", Model);
-        AppendScalar(builder, "prompt_version", PromptVersion);
+        AppendScalar(builder, "provider", metadata.Provider);
+        AppendScalar(builder, "model", metadata.Model);
+        AppendScalar(builder, "prompt_version", metadata.PromptVersion);
         AppendScalar(builder, "generated_at", generatedAt.ToString("O"));
         builder.AppendLine("---");
         builder.AppendLine();
