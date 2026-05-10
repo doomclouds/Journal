@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM 设置体验原型</title>
+  <style>
+    :root {
+      --bg: #f1eee7;
+      --paper: #fffdf8;
+      --panel: #ffffff;
+      --ink: #24211d;
+      --muted: #706a60;
+      --line: #d8d0c4;
+      --soft: #f7f3eb;
+      --teal: #2d746a;
+      --teal-soft: #e5f1ee;
+      --blue: #315f95;
+      --blue-soft: #e7eff9;
+      --amber: #93651f;
+      --amber-soft: #fbefd8;
+      --red: #963c33;
+      --red-soft: #f8e3df;
+      --shadow: 0 26px 70px rgba(35, 31, 25, .14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #faf5eb 0%, var(--bg) 45%, #e9e2d7 100%);
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.42;
+    }
+
+    .stage {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 26px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 430px;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 29px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .summary, .mock, .flow-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 12px 30px rgba(35, 31, 25, .06);
+    }
+
+    .summary {
+      padding: 14px;
+    }
+
+    .summary b {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .tag {
+      border: 1px solid #b9d4cc;
+      border-radius: 999px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      padding: 5px 9px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .mock {
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+
+    .bar {
+      height: 42px;
+      border-bottom: 1px solid var(--line);
+      background: #faf6ee;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dots {
+      display: flex;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #d6cec1;
+    }
+
+    .body {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr) 390px;
+      min-height: 640px;
+      background: var(--paper);
+    }
+
+    .side, .main, .right {
+      padding: 18px;
+    }
+
+    .side {
+      border-right: 1px solid var(--line);
+      background: #fbf7f0;
+    }
+
+    .main {
+      border-right: 1px solid var(--line);
+      background: #fffdf8;
+    }
+
+    .right {
+      background: #fffaf3;
+    }
+
+    .section-title {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .provider {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: #fffdf8;
+    }
+
+    .provider.active {
+      border-color: #9ec8bd;
+      background: var(--teal-soft);
+    }
+
+    .provider-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .provider-name {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .status {
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .status.on {
+      background: var(--teal);
+      color: #fff;
+    }
+
+    .status.ready {
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .status.need {
+      background: #eee7dd;
+      color: var(--muted);
+    }
+
+    .status.warn {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .provider-meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .notice {
+      border: 1px solid #b9d4cc;
+      border-radius: 8px;
+      background: var(--teal-soft);
+      padding: 12px 13px;
+      margin-bottom: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .notice strong {
+      display: block;
+      color: var(--teal);
+      font-size: 13px;
+      margin-bottom: 3px;
+    }
+
+    .notice span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .input {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 9px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .input.masked {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      letter-spacing: 0;
+    }
+
+    .eye {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #faf7f0;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    .helper {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .advanced {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+      padding: 11px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 9px;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 9px 12px;
+      font-size: 12px;
+      color: var(--ink);
+    }
+
+    .btn.primary {
+      border-color: var(--teal);
+      background: var(--teal);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .result {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .result.good {
+      border-color: #b9d4cc;
+      background: var(--teal-soft);
+    }
+
+    .result h3 {
+      margin: 0 0 7px;
+      font-size: 14px;
+    }
+
+    .check {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 7px;
+      padding: 5px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .check strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .next {
+      border: 1px solid #c7d6e8;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .next b {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .next p {
+      color: var(--blue);
+      font-size: 12px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .flow-card {
+      padding: 13px;
+      min-height: 112px;
+    }
+
+    .flow-card b {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 13px;
+    }
+
+    .flow-card p {
+      font-size: 12px;
+    }
+
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="hero">
+      <div>
+        <h1>LLM 参数配置体验原型</h1>
+        <p>目标不是把表单做漂亮一点，而是让用户明确知道：现在用的是谁、Key 从哪来、改了什么、测试了什么、什么时候才会真正启用。</p>
+      </div>
+      <aside class="summary">
+        <b>设计要点</b>
+        <div class="tags">
+          <span class="tag">供应商状态产品化</span>
+          <span class="tag">API Key 密码式显示</span>
+          <span class="tag">高级参数摘要折叠</span>
+          <span class="tag">保存启用前自动测试</span>
+          <span class="tag">技术诊断优先</span>
+          <span class="tag">重生成回今日页执行</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="mock">
+      <div class="bar">
+        <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <span>Journal / LLM 设置</span>
+        <span>已启用 ChatGPT · gpt-5.4</span>
+      </div>
+
+      <div class="body">
+        <aside class="side">
+          <h3 class="section-title">供应商</h3>
+          <div class="provider active">
+            <div class="provider-top"><span class="provider-name">ChatGPT</span><span class="status on">已启用</span></div>
+            <div class="provider-meta">环境变量 · gpt-5.4 · Key 不可查看</div>
+          </div>
+          <div class="provider">
+            <div class="provider-top"><span class="provider-name">DeepSeek</span><span class="status ready">已配置</span></div>
+            <div class="provider-meta">本机配置文件 · 可替换 Key</div>
+          </div>
+          <div class="provider">
+            <div class="provider-top"><span class="provider-name">GLM</span><span class="status need">需要配置</span></div>
+            <div class="provider-meta">默认预设 · 未填写 API Key</div>
+          </div>
+          <div class="provider">
+            <div class="provider-top"><span class="provider-name">Mock</span><span class="status warn">备用</span></div>
+            <div class="provider-meta">无网络时自动回退</div>
+          </div>
+        </aside>
+
+        <section class="main">
+          <div class="notice">
+            <div>
+              <strong>当前配置可用</strong>
+              <span>刚才测试通过后已保存并启用。今天的 AI 整理会使用 ChatGPT。</span>
+            </div>
+            <button class="btn">测试已保存配置</button>
+          </div>
+
+          <h3 class="section-title">连接配置</h3>
+          <div class="form">
+            <div class="field">
+              <label><span>Base URL</span><span>来自默认预设，可覆盖</span></label>
+              <div class="input">https://api.openai.com/v1</div>
+            </div>
+            <div class="field">
+              <label><span>API Key</span><span>环境变量 OPENAI_API_KEY</span></label>
+              <div class="input masked">
+                <span>已从环境变量加载，不在界面显示</span>
+                <span class="eye">锁</span>
+              </div>
+              <div class="helper">环境变量来源不提供查看按钮；配置文件来源显示为 sk-••••••4A7C，并允许点击眼睛临时查看。</div>
+            </div>
+            <div class="field">
+              <label><span>Model</span><span>默认模型</span></label>
+              <div class="input">gpt-5.4</div>
+            </div>
+            <div class="advanced">
+              <span>高级参数：temperature 0.2 · max tokens 1800 · timeout 60s · JSON 模式开启</span>
+              <button class="btn">展开</button>
+            </div>
+            <div class="buttons">
+              <button class="btn primary">保存并启用</button>
+              <button class="btn">测试当前表单</button>
+              <button class="btn">恢复默认</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="right">
+          <h3 class="section-title">诊断与下一步</h3>
+          <div class="result good">
+            <h3>连接测试通过</h3>
+            <div class="check"><span>✓</span><strong>Base URL 可访问</strong></div>
+            <div class="check"><span>✓</span><strong>API Key 授权成功</strong></div>
+            <div class="check"><span>✓</span><strong>模型支持 JSON 输出</strong></div>
+            <div class="check"><span>✓</span><strong>响应耗时 1.4s</strong></div>
+          </div>
+          <div class="next">
+            <b>可以回到今日页重新整理</b>
+            <p>设置页只提供入口提示；真正改写草稿前，在今日页展示差异并要求确认。</p>
+          </div>
+          <div class="result">
+            <h3>失败时怎么显示</h3>
+            <div class="check"><span>1</span><span>第一层展示 HTTP 状态、Provider、Model、Base URL。</span></div>
+            <div class="check"><span>2</span><span>第二层展示检查项和修复建议。</span></div>
+            <div class="check"><span>3</span><span>原始 JSON、request id、provider error code 可展开复制。</span></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="flow">
+      <div class="flow-card"><b>1. 选择供应商</b><p>左侧直接看“已启用、已配置、需要配置、测试失败、备用”。</p></div>
+      <div class="flow-card"><b>2. 编辑连接</b><p>Key 用密码式显示，来源清楚区分环境变量和配置文件。</p></div>
+      <div class="flow-card"><b>3. 测试当前表单</b><p>编辑后旧测试结果过期，只测试当前输入，不偷换成已保存配置。</p></div>
+      <div class="flow-card"><b>4. 保存并启用</b><p>自动测试成功才保存启用；失败保留输入，不污染当前可用配置。</p></div>
+      <div class="flow-card"><b>5. 今日页重整理</b><p>内容变更回到今日页确认，设置页不直接改日记草稿。</p></div>
+    </section>
+  </main>
+</body>
+</html>

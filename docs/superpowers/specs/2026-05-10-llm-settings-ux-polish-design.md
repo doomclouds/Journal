@@ -3,6 +3,7 @@
 > 日期：2026-05-10
 > 状态：待实施计划
 > 关联设计：[2026-05-10-ai-provider-integration-design.md](./2026-05-10-ai-provider-integration-design.md)
+> 视觉原型：[2026-05-10-llm-settings-ux-polish-prototype.html](./2026-05-10-llm-settings-ux-polish-prototype.html)
 > 修订范围：替换原 AI Provider 设计中第 8-10 节的配置界面、连接测试、重新整理草稿交互合同。
 
 ## 1. 背景
