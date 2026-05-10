@@ -62,7 +62,7 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - Block mode must not edit `raw-inputs`, `keywords`, or `metadata-note`; `raw-inputs` is preserved from the baseline draft/entry.
 - Source mode can edit full Markdown, including markers and front matter, but save must pass through parser/validator before it can become confirmable.
 - `GET /settings/ai` must only expose safe API key previews. Do not add full key values to settings views, Markdown, logs, generated metadata, screenshots, or archives.
-- Environment variables override file settings for the active/effective LLM provider. File settings are the fallback and the only source whose API key can be revealed through the UI.
+- Environment variables override file settings for the active/effective LLM provider. On Windows, read environment values from Process first, then User, then Machine, so user-level API keys configured outside the current terminal are still picked up. File settings are the fallback and the only source whose API key can be revealed through the UI.
 - Provider activation should remain protected: failed health checks should not switch the active provider or persist a broken candidate.
 - Regenerating a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
 - The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.

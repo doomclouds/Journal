@@ -468,7 +468,7 @@ public interface IJournalAiProvider
 }
 ```
 
-配置读取顺序是环境变量优先、配置文件兜底。`GET /settings/ai` 只返回掩码和来源，不返回完整 key；只有文件配置的 key 可以在用户点击查看时通过 `GET /settings/ai/{providerId}/api-key` 返回，环境变量来源的 key 不可 reveal。API Key 不写入 Markdown、draft metadata、版本快照、普通日志或错误报告。
+配置读取顺序是环境变量优先、配置文件兜底。Windows 下环境变量按 Process -> User -> Machine 读取，避免用户把 key 配在系统“用户环境变量”后，已启动的终端进程没有继承而导致应用看不到。`GET /settings/ai` 只返回掩码和来源，不返回完整 key；只有文件配置的 key 可以在用户点击查看时通过 `GET /settings/ai/{providerId}/api-key` 返回，环境变量来源的 key 不可 reveal。API Key 不写入 Markdown、draft metadata、版本快照、普通日志或错误报告。
 
 ## 7. Markdown 存储与版本模型
 
@@ -839,7 +839,7 @@ Journal/
 
 ### 13.6 Provider 配置安全
 
-API Key 不能进入 Markdown、draft metadata、普通日志、错误报告或未来版本快照。当前策略是环境变量优先、配置文件兜底；配置文件不做加密，安全边界靠本机用户目录权限和 UI 的默认隐藏/显式查看。后续如果引入多用户、同步或备份，再单独评估 Windows Credential Manager、DPAPI 或主密码方案。
+API Key 不能进入 Markdown、draft metadata、普通日志、错误报告或未来版本快照。当前策略是环境变量优先、配置文件兜底；Windows 下主动读取 Process/User/Machine 三层环境变量，配置文件不做加密，安全边界靠本机用户目录权限和 UI 的默认隐藏/显式查看。后续如果引入多用户、同步或备份，再单独评估 Windows Credential Manager、DPAPI 或主密码方案。
 
 ## 14. 当前默认假设
 

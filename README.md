@@ -122,7 +122,7 @@ PUT http://localhost:5057/journal/today/editor/source
 
 阶段 5 已交付：
 
-- 后端支持 `Mock` 与真实 OpenAI-compatible LLM，当前通过环境变量和 `%LocalAppData%/Journal/.journal/settings/ai-providers.json` 共同决定 active LLM；环境变量优先，配置文件兜底。
+- 后端支持 `Mock` 与真实 OpenAI-compatible LLM，当前通过环境变量和 `%LocalAppData%/Journal/.journal/settings/ai-providers.json` 共同决定 active LLM；环境变量优先，配置文件兜底。Windows 下环境变量读取顺序为 Process -> User -> Machine。
 - 默认预设：OpenAI `gpt-5.4`、DeepSeek `deepseek-v4-flash`、智谱 GLM `glm-5.1`，未配置 key 时默认使用 Mock。
 - `GET /settings/ai` 返回安全视图，不返回完整 API Key；文件配置的 key 只显示掩码和可查看状态，环境变量 key 不可 reveal。
 - `GET /settings/ai/{providerId}/api-key` 只用于用户点击“小眼睛”时查看文件配置的 key，不暴露环境变量来源的 key。

@@ -552,6 +552,56 @@ public sealed class JournalAiSettingsTests
         Assert.DoesNotContain(view.Providers, provider => provider.IsActive);
     }
 
+    [Fact]
+    public void SystemJournalAiEnvironment_ReadsUserScopeWhenProcessValueIsMissing()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var name = $"JOURNAL_TEST_USER_ENV_{Guid.NewGuid():N}";
+        try
+        {
+            Environment.SetEnvironmentVariable(name, null, EnvironmentVariableTarget.Process);
+            Environment.SetEnvironmentVariable(name, "user-value", EnvironmentVariableTarget.User);
+
+            var environment = new SystemJournalAiEnvironment();
+
+            Assert.Equal("user-value", environment.Get(name));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, null, EnvironmentVariableTarget.Process);
+            Environment.SetEnvironmentVariable(name, null, EnvironmentVariableTarget.User);
+        }
+    }
+
+    [Fact]
+    public void SystemJournalAiEnvironment_PrefersProcessScopeOverUserScope()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var name = $"JOURNAL_TEST_PROCESS_ENV_{Guid.NewGuid():N}";
+        try
+        {
+            Environment.SetEnvironmentVariable(name, "process-value", EnvironmentVariableTarget.Process);
+            Environment.SetEnvironmentVariable(name, "user-value", EnvironmentVariableTarget.User);
+
+            var environment = new SystemJournalAiEnvironment();
+
+            Assert.Equal("process-value", environment.Get(name));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, null, EnvironmentVariableTarget.Process);
+            Environment.SetEnvironmentVariable(name, null, EnvironmentVariableTarget.User);
+        }
+    }
+
     private static JournalAiSettingsService CreateService(string root, IReadOnlyDictionary<string, string?> env) =>
         new(
             new JournalAiSettingsStore(new LocalJournalPaths(new JournalStorageOptions(root))),
