@@ -139,6 +139,19 @@ button:focus-visible {
   color: #8c332b;
 }
 
+.llm-status-pill {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d3cfc5;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #fff8ed;
+  color: #2b6860;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .api-error,
 .validation-error {
   margin: 0;

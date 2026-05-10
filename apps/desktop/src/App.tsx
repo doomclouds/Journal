@@ -2,15 +2,22 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   addTodayInput,
   confirmTodayDraft,
+  getAiSettings,
   getHealth,
   getTodayEditor,
+  regenerateTodayDraft,
+  saveAiSettings,
   saveBlockDraft,
   saveSourceDraft,
+  testAiProvider,
+  type AiProviderHealthResult,
+  type AiSettingsView,
   type JournalBlockEditSection,
   type HealthResponse,
   type TodayEditorState
 } from "./api";
 import { JournalEditor } from "./JournalEditor";
+import { LlmSettingsPanel } from "./LlmSettingsPanel";
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
@@ -26,13 +33,17 @@ function formatRawInputTime(value: string) {
 
 export default function App() {
   const requestIdRef = useRef(0);
+  const settingsRequestIdRef = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
+  const [aiSettings, setAiSettings] = useState<AiSettingsView | null>(null);
+  const [isLlmPanelOpen, setIsLlmPanelOpen] = useState(false);
   const [input, setInput] = useState("");
   const [apiError, setApiError] = useState("");
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,10 +52,15 @@ export default function App() {
 
     async function load() {
       try {
-        const [healthResult, editorResult] = await Promise.all([getHealth(), getTodayEditor()]);
+        const [healthResult, editorResult, aiSettingsResult] = await Promise.all([
+          getHealth(),
+          getTodayEditor(),
+          getAiSettings()
+        ]);
         if (!cancelled && requestId === requestIdRef.current) {
           setHealth(healthResult);
           setEditor(editorResult);
+          setAiSettings(aiSettingsResult);
           setLoadState("ready");
           setApiError("");
         }
@@ -71,6 +87,7 @@ export default function App() {
 
   const canConfirm = Boolean(editor?.canConfirm && today?.draft && today.status !== "attention");
   const statusLabel = today?.status ?? loadState;
+  const activeProviderName = aiSettings?.providers.find(provider => provider.isActive)?.displayName ?? "Mock";
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
@@ -185,6 +202,70 @@ export default function App() {
     }
   }
 
+  async function handleSaveAiSettings(request: Parameters<typeof saveAiSettings>[0]) {
+    const settingsRequestId = settingsRequestIdRef.current + 1;
+    settingsRequestIdRef.current = settingsRequestId;
+    setIsSettingsSubmitting(true);
+    try {
+      const next = await saveAiSettings(request);
+      if (settingsRequestId === settingsRequestIdRef.current) {
+        setAiSettings(next);
+        setApiError("");
+      }
+    } catch (caught) {
+      if (settingsRequestId === settingsRequestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
+    } finally {
+      if (settingsRequestId === settingsRequestIdRef.current) {
+        setIsSettingsSubmitting(false);
+      }
+    }
+  }
+
+  async function handleTestAiProvider(providerId: string): Promise<AiProviderHealthResult> {
+    return await testAiProvider(providerId);
+  }
+
+  async function handleRegenerateDraft(providerId?: string) {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setValidationError("");
+    setIsSubmitting(true);
+    try {
+      await regenerateTodayDraft(providerId);
+      if (requestId === requestIdRef.current) {
+        const nextEditor = await getTodayEditor();
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setEditor(nextEditor);
+        setApiError("");
+        setLoadState("ready");
+
+        try {
+          const nextAiSettings = await getAiSettings();
+          if (requestId === requestIdRef.current) {
+            setAiSettings(nextAiSettings);
+          }
+        } catch (caught) {
+          if (requestId === requestIdRef.current) {
+            setApiError(getErrorMessage(caught));
+          }
+        }
+      }
+    } catch (caught) {
+      if (requestId === requestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsSubmitting(false);
+      }
+    }
+  }
+
   function focusInput() {
     document.getElementById("today-input")?.focus();
   }
@@ -199,6 +280,9 @@ export default function App() {
         <div className="status-strip" aria-label="运行状态">
           <span className={`status-pill status-${statusLabel}`}>{statusLabel}</span>
           <span className="api-pill">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
+          <button type="button" className="llm-status-pill" onClick={() => setIsLlmPanelOpen(true)}>
+            LLM {activeProviderName}
+          </button>
         </div>
       </header>
 
@@ -328,6 +412,16 @@ export default function App() {
           ) : null}
         </aside>
       </section>
+      {isLlmPanelOpen && aiSettings ? (
+        <LlmSettingsPanel
+          settings={aiSettings}
+          isBusy={isBusy || isSettingsSubmitting}
+          onClose={() => setIsLlmPanelOpen(false)}
+          onSave={handleSaveAiSettings}
+          onTest={handleTestAiProvider}
+          onRegenerate={handleRegenerateDraft}
+        />
+      ) : null}
     </main>
   );
 }

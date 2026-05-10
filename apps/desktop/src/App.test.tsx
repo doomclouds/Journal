@@ -77,6 +77,16 @@ const aiSettings = {
   ]
 };
 
+const deepSeekAiSettings = {
+  ...aiSettings,
+  activeProviderId: "deepseek",
+  providers: aiSettings.providers.map(provider => ({
+    ...provider,
+    isActive: provider.id === "deepseek",
+    isEnabled: provider.id === "deepseek" ? true : provider.isEnabled
+  }))
+};
+
 const journalDate = {
   value: "2026-05-08",
   year: "2026",
@@ -248,12 +258,14 @@ describe("App", () => {
   test("prevents stale initial load race by disabling submit until editor state resolves", async () => {
     const healthDeferred = createDeferred<Response>();
     const editorDeferred = createDeferred<Response>();
+    const aiSettingsDeferred = createDeferred<Response>();
     const postInputDeferred = createDeferred<Response>();
     const refreshedEditorDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
       .mockReturnValueOnce(healthDeferred.promise)
       .mockReturnValueOnce(editorDeferred.promise)
+      .mockReturnValueOnce(aiSettingsDeferred.promise)
       .mockReturnValueOnce(postInputDeferred.promise)
       .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
@@ -267,7 +279,7 @@ describe("App", () => {
     fireEvent.click(submitButton);
 
     expect(submitButton).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
     healthDeferred.resolve({
       ok: true,
@@ -286,6 +298,7 @@ describe("App", () => {
         today: emptyToday
       })
     } as Response);
+    aiSettingsDeferred.resolve(mockJsonResponse(aiSettings));
 
     await waitFor(() => expect(submitButton).toBeEnabled());
 
@@ -293,7 +306,7 @@ describe("App", () => {
     fireEvent.click(submitButton);
 
     expect(submitButton).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
     postInputDeferred.resolve(mockJsonResponse(emptyToday));
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
@@ -314,7 +327,8 @@ describe("App", () => {
           canConfirm: false,
           today: emptyToday
         })
-      }
+      },
+      { body: aiSettings }
     ]);
 
     render(<App />);
@@ -327,7 +341,196 @@ describe("App", () => {
     expect(screen.getByText("还没有可编辑的 JMF 草稿")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:5057/health", undefined);
     expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:5057/journal/today/editor", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/settings/ai", undefined);
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today", undefined);
+  });
+
+  test("shows current LLM provider in top status strip", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
+  });
+
+  test("opens LLM settings panel from top status strip", async () => {
+    mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
+
+    expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /DeepSeek/ })).toBeInTheDocument();
+    expect(screen.getByText("最小 JSON 请求")).toBeInTheDocument();
+  });
+
+  test("tests provider and shows safe technical details", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      {
+        body: {
+          isSuccess: false,
+          status: "unauthorized",
+          safeResponseSnippet: "",
+          httpStatus: 401,
+          latency: "00:00:00.1200000",
+          error: {
+            stage: "provider-call",
+            code: "unauthorized",
+            message: "AI provider rejected the API key.",
+            technicalDetails: "httpStatus: 401 authorization: [redacted]"
+          }
+        }
+      }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "测试已保存配置" }));
+
+    expect(await screen.findByText("unauthorized")).toBeInTheDocument();
+    expect(screen.getByText("安全技术详情")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ providerId: "deepseek" })
+    });
+  });
+
+  test("shows api error when saving LLM settings fails", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { ok: false, status: 500, body: { error: "settings save failed" } }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "启用 Provider" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("settings save failed");
+    expect(screen.getByRole("button", { name: "启用 Provider" })).toBeEnabled();
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/settings/ai", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: expect.stringContaining('"activeProviderId":"deepseek"')
+    });
+  });
+
+  test("ignores stale LLM settings save response when a later save wins", async () => {
+    const firstSaveDeferred = createDeferred<Response>();
+    const secondSaveDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockReturnValueOnce(firstSaveDeferred.promise)
+      .mockReturnValueOnce(secondSaveDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
+    const providerList = within(screen.getByRole("navigation", { name: "Provider 列表" }));
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "启用 Provider" }));
+
+    fireEvent.click(providerList.getByRole("button", { name: /Mock/ }));
+    fireEvent.submit(screen.getByRole("button", { name: "启用 Provider" }).closest("form")!);
+
+    secondSaveDeferred.resolve(mockJsonResponse(aiSettings));
+    await waitFor(() => expect(screen.getByRole("button", { name: "LLM Mock" })).toBeInTheDocument());
+
+    firstSaveDeferred.resolve(mockJsonResponse(deepSeekAiSettings));
+    await Promise.resolve();
+
+    expect(screen.getByRole("button", { name: "LLM Mock" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "LLM DeepSeek" })).not.toBeInTheDocument();
+  });
+
+  test("regenerates draft after confirmation prompt", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { body: reviewingToday },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    expect(screen.getByText("这会覆盖当前草稿内容，但不会影响正式日记。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ providerId: null })
+      })
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined));
+  });
+
+  test("keeps regenerated editor refresh when LLM settings refresh fails", async () => {
+    const refreshedEditor = createEditorState({
+      markdown: editorMarkdown.replace("推进 Phase 3", "重新生成后的重点"),
+      sections: [
+        {
+          id: "today-focus",
+          title: "今日重点",
+          content: "重新生成后的重点",
+          kind: "required",
+          isEditableInBlockMode: true
+        }
+      ]
+    });
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings },
+      { body: reviewingToday },
+      { body: refreshedEditor },
+      { ok: false, status: 500, body: { error: "settings refresh failed" } }
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "LLM Mock" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新整理草稿" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("重新生成后的重点")
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("settings refresh failed");
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
   });
 
   test("submits raw input and refreshes from today editor state", async () => {
@@ -343,6 +546,7 @@ describe("App", () => {
           today: emptyToday
         })
       },
+      { body: aiSettings },
       { body: emptyToday },
       { body: createEditorState() }
     ]);
@@ -356,14 +560,14 @@ describe("App", () => {
     expect(await screen.findByText("reviewing")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认写入正式日记" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("推进 Phase 3");
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/journal/today/inputs", {
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/inputs", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ text: "今天完成 Phase 2 API 连接", source: "text" })
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "http://localhost:5057/journal/today/editor", undefined);
   });
 
   test("disables input action while draft generation and editor refresh are pending", async () => {
@@ -380,6 +584,7 @@ describe("App", () => {
         canConfirm: false,
         today: emptyToday
       })))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockReturnValueOnce(postInputDeferred.promise)
       .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
@@ -415,7 +620,8 @@ describe("App", () => {
         availableOptionalSections: [],
         canConfirm: false,
         today: emptyToday
-      }) }
+      }) },
+      { body: aiSettings }
     ]);
 
     render(<App />);
@@ -437,6 +643,7 @@ describe("App", () => {
         canConfirm: false,
         today: emptyToday
       }) },
+      { body: aiSettings },
       { ok: false, status: 500, body: { error: "submit failed" } }
     ]);
 
@@ -472,7 +679,8 @@ describe("App", () => {
         },
         canConfirm: false,
         today: attentionToday
-      }) }
+      }) },
+      { body: aiSettings }
     ]);
 
     render(<App />);
@@ -487,6 +695,7 @@ describe("App", () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
+      { body: aiSettings },
       { body: processedToday(entryPath) },
       {
         body: createEditorState({
@@ -504,11 +713,11 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("processed")).toBeInTheDocument());
     expect(screen.getByText(entryPath)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       "http://localhost:5057/journal/today/draft/confirm",
       { method: "POST" }
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "http://localhost:5057/journal/today/editor", undefined);
   });
 
   test("disables confirm while draft confirmation and editor refresh are pending", async () => {
@@ -518,6 +727,7 @@ describe("App", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockReturnValueOnce(confirmDeferred.promise)
       .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
@@ -562,6 +772,7 @@ describe("App", () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
+      { body: aiSettings },
       { body: updatedEditor }
     ]);
 
@@ -574,7 +785,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("保存后的区块内容")
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/journal/today/editor/blocks", {
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/blocks", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -588,6 +799,7 @@ describe("App", () => {
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
+      { body: aiSettings },
       { body: createEditorState({
         markdown: updatedMarkdown,
         sections: [
@@ -613,7 +825,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: "编辑完整 JMF Markdown" })).toHaveValue(updatedMarkdown)
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:5057/journal/today/editor/source", {
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/editor/source", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -628,6 +840,7 @@ describe("App", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockReturnValueOnce(blockSaveDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -655,6 +868,7 @@ describe("App", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockReturnValueOnce(sourceSaveDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -707,6 +921,7 @@ describe("App", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockReturnValueOnce(blockSaveDeferred.promise)
       .mockReturnValueOnce(postInputDeferred.promise)
       .mockReturnValueOnce(inputRefreshDeferred.promise);
