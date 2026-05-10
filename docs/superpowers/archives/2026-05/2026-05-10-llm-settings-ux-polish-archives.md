@@ -31,6 +31,7 @@
 - `npm run build --prefix apps/desktop`：TypeScript + Vite build passed。
 - Final review 修复：补上环境变量只覆盖非 Key 字段时 file-backed Key 仍可 reveal 的边界；补上遮罩 API Key 不进入 editable value、reveal 后编辑显示值与 candidate 同步的回归。
 - Visual smoke：临时启动 API `http://127.0.0.1:5058` 和 Vite `http://localhost:5173`，Playwright 打开 LLM 设置面板并截图检查高级摘要换行、Key 行、测试与保存按钮可见。
+- Responsive follow-up：小窗口单列布局改为只保留 settings grid 一个滚动容器，避免 provider 列表、主表单、侧栏和页面本体同时出现滚动条；补充 CSS 合同测试和 Playwright 960×620 运行态检查。
 
 ## Source Documents
 

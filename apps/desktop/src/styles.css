@@ -17,6 +17,10 @@ body {
   background: #f3f1eb;
 }
 
+body:has(.llm-settings-overlay) {
+  overflow: hidden;
+}
+
 button,
 textarea {
   font: inherit;
@@ -516,7 +520,7 @@ button:focus-visible {
   grid-template-rows: 54px minmax(0, 1fr);
   border: 1px solid #bdb7aa;
   border-radius: 8px;
-  background: rgba(243, 241, 235, 0.97);
+  background: #f3f1eb;
   box-shadow: 0 28px 80px rgba(42, 36, 28, 0.24);
 }
 
@@ -527,7 +531,7 @@ button:focus-visible {
   gap: 12px;
   border-bottom: 1px solid #d8d4ca;
   padding: 0 16px;
-  background: rgba(255, 253, 248, 0.88);
+  background: #fffdf8;
 }
 
 .llm-settings-head div {
@@ -791,6 +795,19 @@ button:focus-visible {
 
   .llm-settings-grid {
     grid-template-columns: 1fr;
+    align-content: start;
+    grid-auto-rows: max-content;
     overflow: auto;
+  }
+
+  .llm-provider-list,
+  .llm-settings-main,
+  .llm-settings-side {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .llm-provider-list {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 }
