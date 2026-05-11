@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Journal Today Workbench Huashu UX Prototype</title>
+  <style>
+    /*
+      Huashu-design prototype pass
+      Assumptions:
+      - This prototype represents only the real Electron content surface.
+      - Native menu is not drawn here; LLM settings entry lives in File -> LLM settings.
+      - The daily paper is the visual protagonist. Left/right rails must stay quieter.
+      - Right assistant should explain the draft, not look like a debug dashboard.
+    */
+    :root {
+      --ink: #27231e;
+      --ink-soft: #4f473d;
+      --muted: #82796d;
+      --faint: #b1a89b;
+      --paper: #fffdf8;
+      --paper-warm: #f7f1e5;
+      --canvas: #efebe1;
+      --rail: #e9dfcf;
+      --line: rgba(55, 47, 37, 0.13);
+      --line-strong: rgba(55, 47, 37, 0.22);
+      --sage: #2f6f5f;
+      --sage-soft: #e4f1e9;
+      --gold: #b57f30;
+      --gold-soft: #f2e5c8;
+      --danger: #a84e42;
+      --shadow-paper: 0 28px 60px rgba(54, 45, 32, 0.13), 0 2px 0 rgba(255, 255, 255, 0.88) inset;
+      --shadow-soft: 0 16px 36px rgba(55, 45, 31, 0.08);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 1180px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 16% 0%, rgba(255, 253, 247, 0.86), transparent 34%),
+        linear-gradient(135deg, #ede7dc 0%, #f7f3ea 44%, #e7eddf 100%);
+      color: var(--ink);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .prototype-shell {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: rgba(247, 244, 236, 0.62);
+    }
+
+    .top-context {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.9);
+      padding: 14px 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand strong {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .brand span,
+    .today-line {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .today-line {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .today-line strong {
+      color: var(--ink);
+    }
+
+    .health-dot,
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--sage);
+      box-shadow: 0 0 0 4px rgba(47, 111, 95, 0.12);
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 250px minmax(640px, 1fr) 300px;
+      grid-template-areas: "rail paper assistant";
+      overflow: hidden;
+    }
+
+    .context-rail,
+    .journal-stage,
+    .assistant-panel {
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .context-rail {
+      grid-area: rail;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(247, 244, 236, 0.86), rgba(238, 232, 219, 0.82)),
+        #f2efe7;
+    }
+
+    .date-card {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .month {
+      margin: 0 0 9px;
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .date-card h1 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .date-card h1 span {
+      display: block;
+      margin-top: 11px;
+      color: var(--ink-soft);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .state-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 17px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(55, 47, 37, 0.12);
+      color: var(--sage);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .rail-section {
+      padding: 17px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      color: #302b25;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .rail-count {
+      color: rgba(112, 103, 93, 0.48);
+      font-size: 10px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .source-stack {
+      display: grid;
+      gap: 9px;
+    }
+
+    .source-item {
+      border: 1px solid rgba(181, 127, 48, 0.13);
+      border-radius: 10px;
+      background: rgba(255, 250, 240, 0.62);
+      padding: 11px;
+    }
+
+    .source-item.is-active {
+      border-color: rgba(181, 127, 48, 0.26);
+      background: rgba(255, 250, 239, 0.86);
+    }
+
+    .source-meta {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 7px;
+      color: var(--faint);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .source-meta span:first-child {
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .source-item p {
+      margin: 0;
+      color: #4d463e;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .source-map {
+      margin-top: 9px;
+      color: rgba(85, 76, 65, 0.56);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .next-panel {
+      border: 1px solid rgba(181, 127, 48, 0.13);
+      border-radius: 10px;
+      background: rgba(255, 250, 240, 0.62);
+      padding: 11px;
+    }
+
+    .next-panel strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .next-panel p {
+      margin: 0;
+      color: #4d463e;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .journal-stage {
+      grid-area: paper;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.42), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.28)),
+        rgba(248, 246, 239, 0.78);
+    }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 16px 30px 10px;
+    }
+
+    .stage-title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .view-switch {
+      display: inline-flex;
+      gap: 4px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(231, 225, 214, 0.9);
+      padding: 4px;
+    }
+
+    .view-switch button {
+      min-width: 82px;
+      min-height: 30px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .view-switch button[aria-pressed="true"] {
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 8px 20px rgba(43, 38, 30, 0.08);
+    }
+
+    .document-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px 38px 34px;
+    }
+
+    .document {
+      width: min(860px, 100%);
+      min-height: 900px;
+      margin: 0 auto;
+      border: 1px solid rgba(52, 45, 36, 0.1);
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.45), transparent 7%, transparent 93%, rgba(236, 226, 205, 0.26)),
+        var(--paper);
+      box-shadow: var(--shadow-paper);
+      padding: 56px 70px 62px;
+    }
+
+    .document-header {
+      margin-bottom: 34px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid rgba(52, 45, 36, 0.13);
+    }
+
+    .kicker {
+      margin: 0 0 12px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .document h1 {
+      margin: 0;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+      font-size: 38px;
+      line-height: 1.22;
+    }
+
+    .subtitle {
+      margin: 14px 0 0;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .doc-section {
+      position: relative;
+      margin-top: 26px;
+      padding-top: 2px;
+    }
+
+    .doc-section h2 {
+      margin: 0 0 10px;
+      color: var(--sage);
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .doc-section p,
+    .doc-section li {
+      color: #38362f;
+      font-size: 16px;
+      line-height: 1.95;
+    }
+
+    .doc-section p {
+      margin: 0;
+    }
+
+    .doc-section ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .edit-chip {
+      position: absolute;
+      top: 0;
+      right: 0;
+      min-height: 28px;
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 999px;
+      background: rgba(255, 253, 247, 0.9);
+      color: var(--sage);
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .quoted-edit {
+      border-left: 4px solid var(--sage);
+      border-radius: 10px;
+      background:
+        linear-gradient(90deg, rgba(47, 111, 95, 0.08), rgba(255, 253, 247, 0.92));
+      padding: 14px 15px 15px;
+    }
+
+    .quoted-edit textarea {
+      width: 100%;
+      min-height: 118px;
+      resize: vertical;
+      border: 1px solid rgba(47, 111, 95, 0.22);
+      border-radius: 8px;
+      background: #fffdf8;
+      color: var(--ink);
+      padding: 12px;
+      line-height: 1.75;
+      outline: none;
+    }
+
+    .inline-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 11px;
+    }
+
+    .secondary,
+    .primary,
+    .icon-button {
+      border-radius: 8px;
+      font-weight: 900;
+    }
+
+    .secondary,
+    .primary {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      padding: 0 14px;
+      font-size: 13px;
+    }
+
+    .secondary {
+      background: #ebe5d9;
+      color: var(--ink);
+    }
+
+    .primary {
+      border-color: var(--sage);
+      background: var(--sage);
+      color: #fffdf8;
+    }
+
+    .compose-bar {
+      border-top: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.86);
+      padding: 11px 24px;
+    }
+
+    .compose-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 10px;
+      border: 1px solid rgba(52, 45, 36, 0.16);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 254, 250, 0.98), rgba(250, 248, 241, 0.98));
+      box-shadow: 0 12px 30px rgba(52, 43, 31, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+      padding: 10px 10px 10px 14px;
+    }
+
+    .compose-card textarea {
+      min-height: 46px;
+      max-height: 120px;
+      resize: vertical;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      outline: none;
+      line-height: 1.6;
+    }
+
+    .compose-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .icon-button {
+      width: 34px;
+      height: 34px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      background: rgba(255, 253, 247, 0.86);
+      color: var(--ink-soft);
+      font-size: 16px;
+    }
+
+    .icon-button.primary-send {
+      border-color: var(--sage);
+      background: var(--sage);
+      color: #fffdf8;
+    }
+
+    .assistant-panel {
+      grid-area: assistant;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      border-left: 1px solid rgba(52, 45, 36, 0.13);
+      background:
+        linear-gradient(180deg, rgba(255, 253, 247, 0.86), rgba(239, 234, 222, 0.92)),
+        #efeadd;
+    }
+
+    .assistant-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid rgba(52, 45, 36, 0.12);
+      padding: 17px 18px 15px;
+    }
+
+    .assistant-eyebrow {
+      margin: 0;
+      color: var(--sage);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .assistant-head h2 {
+      margin: 5px 0 0;
+      color: #26231f;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+
+    .assistant-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 9px;
+    }
+
+    .assistant-meta span {
+      border: 1px solid rgba(70, 66, 59, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 253, 247, 0.68);
+      color: #5d564d;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .assistant-meta .provider {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .assistant-meta .provider::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--sage);
+      box-shadow: 0 0 0 3px rgba(47, 111, 95, 0.1);
+    }
+
+    .assistant-time {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .assistant-body {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .assistant-card {
+      border: 1px solid rgba(52, 45, 36, 0.11);
+      border-radius: 12px;
+      background: rgba(255, 253, 247, 0.8);
+      box-shadow: var(--shadow-soft);
+      padding: 13px;
+    }
+
+    .assistant-card h3 {
+      margin: 0;
+      color: #2d2823;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .assistant-card p {
+      margin: 8px 0 0;
+      color: #645b51;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .assistant-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .assistant-card-head span {
+      border-radius: 999px;
+      background: rgba(47, 111, 95, 0.1);
+      color: var(--sage);
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .evidence-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .evidence-item {
+      position: relative;
+      overflow: hidden;
+      border-radius: 9px;
+      background: rgba(248, 246, 239, 0.78);
+      color: #413b33;
+      padding: 11px 12px 11px 25px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .evidence-item::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(181, 127, 48, 0.42), rgba(181, 127, 48, 0.2));
+    }
+
+    .evidence-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+      color: #7c7166;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .quiet-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      border-top: 1px solid rgba(52, 45, 36, 0.12);
+      padding-top: 9px;
+    }
+
+    .metric strong,
+    .metric span {
+      display: block;
+    }
+
+    .metric strong {
+      color: var(--sage);
+      font-size: 19px;
+      line-height: 1;
+    }
+
+    .metric span {
+      margin-top: 5px;
+      color: #746a5e;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .confirm-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      border-color: rgba(47, 111, 95, 0.22);
+    }
+
+    .confirm-card .status-dot {
+      margin-top: 5px;
+    }
+
+    .confirm-card strong {
+      display: block;
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 1280px) {
+      body {
+        min-width: 1040px;
+      }
+
+      .workspace {
+        grid-template-columns: 230px minmax(560px, 1fr) 300px;
+      }
+
+      .document {
+        padding-inline: 50px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype-shell" aria-label="Journal 今日工作台优化原型">
+    <header class="top-context">
+      <div class="brand">
+        <strong>Journal</strong>
+        <span>本地优先晨间日记</span>
+      </div>
+      <div class="today-line">
+        <span class="health-dot" aria-label="API 连接正常"></span>
+        <span><strong>2026 年 5 月 11 日</strong> · 星期一 · 3 条原始表达已保留</span>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="context-rail" aria-label="今日上下文">
+        <section class="date-card">
+          <p class="month">May</p>
+          <h1>11<span>星期一 · 晨间日记</span></h1>
+          <div class="state-line">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>草稿可保存</span>
+          </div>
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>今日材料</h2>
+            <span class="rail-count">3 条</span>
+          </div>
+          <div class="source-stack">
+            <article class="source-item is-active">
+              <div class="source-meta"><span>08:12</span><span>#产品体验</span></div>
+              <p>我觉得 Journal 主界面还是像调试面板，日记本身不够像主角。</p>
+              <div class="source-map">写入：今天想推进 / 产品体验</div>
+            </article>
+            <article class="source-item">
+              <div class="source-meta"><span>08:24</span><span>#LLM配置</span></div>
+              <p>低频设置放到系统菜单里就好，页面顶部不要重复按钮。</p>
+              <div class="source-map">写入：未来提醒 / 界面边界</div>
+            </article>
+            <article class="source-item">
+              <div class="source-meta"><span>08:36</span><span>#写作体验</span></div>
+              <p>右侧助手应该解释今天被怎样整理，而不是堆一堆状态数字。</p>
+              <div class="source-map">写入：值得庆祝 / 下一步</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>下一步</h2>
+            <span class="rail-count">推荐</span>
+          </div>
+          <div class="next-panel">
+            <strong>确认今天的整理稿</strong>
+            <p>草稿已经通过结构校验。先扫一遍正文，确认没有偏离原意后保存正式日记。</p>
+          </div>
+        </section>
+      </aside>
+
+      <section class="journal-stage" aria-label="日记纸面">
+        <div class="stage-toolbar">
+          <div class="stage-title">
+            <p>日记纸面</p>
+          </div>
+          <div class="view-switch" aria-label="视图切换">
+            <button type="button">只看日记</button>
+            <button type="button" aria-pressed="true">日记 + 助手</button>
+          </div>
+        </div>
+
+        <div class="document-scroll">
+          <article class="document">
+            <header class="document-header">
+              <p class="kicker">Morning Journal</p>
+              <h1>把 Journal 做回日记软件</h1>
+              <p class="subtitle">今天不再继续堆入口，而是让日记纸面成为主角，让材料和 AI 解释安静地围绕它工作。</p>
+            </header>
+
+            <section class="doc-section">
+              <h2>昨天回顾</h2>
+              <button class="edit-chip" type="button">编辑</button>
+              <p>昨天已经把低频设置入口收敛到系统菜单，也把顶部重复状态收掉了。这个方向是对的：配置类能力不应该一直占据日记页面的视觉空间。</p>
+            </section>
+
+            <section class="doc-section">
+              <h2>今天想推进</h2>
+              <div class="quoted-edit">
+                <textarea>把主界面继续往“日记纸面 + 材料流 + 整理证据”的方向推进。纸面要更像每天愿意打开的日记，左侧只保留材料来源，右侧只保留必要统计和材料证据。</textarea>
+                <div class="inline-actions">
+                  <button class="secondary" type="button">取消</button>
+                  <button class="primary" type="button">保存修改</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="doc-section">
+              <h2>值得庆祝</h2>
+              <button class="edit-chip" type="button">编辑</button>
+              <ul>
+                <li>主流程已经跑通，真实 LLM、日记块编辑、确认保存都能支撑日常使用。</li>
+                <li>现在的问题从“能不能用”转向“愿不愿意每天用”，这是产品进入下一阶段的信号。</li>
+                <li>菜单按钮失效被沉淀成问题资产，以后 Electron 命令桥接会更稳。</li>
+              </ul>
+            </section>
+
+            <section class="doc-section">
+              <h2>未来提醒</h2>
+              <button class="edit-chip" type="button">编辑</button>
+              <p>不要把每个技术状态都塞回主界面。用户每天最需要的是：我写了什么、AI 怎么理解、下一步怎么保存。</p>
+            </section>
+          </article>
+        </div>
+
+        <section class="compose-bar" aria-label="底部输入和主操作">
+          <div class="compose-card">
+            <textarea aria-label="继续写一句今天的事" placeholder="继续写一句今天的事，Journal 会保留原话，再更新整理稿..."></textarea>
+            <div class="compose-actions" aria-label="输入工具栏">
+              <button class="icon-button" type="button" title="重新整理">↻</button>
+              <button class="icon-button" type="button" title="保存日记">□</button>
+              <button class="icon-button primary-send" type="button" title="写入今天的材料">➜</button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="assistant-panel" aria-label="今日助手">
+        <div class="assistant-head">
+          <div>
+            <p class="assistant-eyebrow">Today Assistant</p>
+            <h2>今天被这样整理</h2>
+            <div class="assistant-meta">
+              <span class="provider">DeepSeek</span>
+              <span>#产品体验</span>
+              <span>#写作体验</span>
+            </div>
+          </div>
+          <span class="assistant-time">08:42</span>
+        </div>
+
+        <div class="assistant-body">
+          <section class="assistant-card confirm-card">
+            <span class="status-dot" aria-hidden="true"></span>
+            <div>
+              <strong>下一步：保存正式日记</strong>
+              <p>当前草稿已通过结构校验。建议只检查正文语气，不需要再处理技术配置。</p>
+            </div>
+          </section>
+
+          <section class="assistant-card">
+            <div class="assistant-card-head">
+              <h3>统计</h3>
+            </div>
+            <div class="quiet-metrics">
+              <div class="metric">
+                <strong>3</strong>
+                <span>材料</span>
+              </div>
+              <div class="metric">
+                <strong>4</strong>
+                <span>段落</span>
+              </div>
+              <div class="metric">
+                <strong>1</strong>
+                <span>编辑中</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="assistant-card">
+            <div class="assistant-card-head">
+              <h3>整理证据</h3>
+            </div>
+            <div class="evidence-list">
+              <div class="evidence-item">
+                <div class="evidence-meta"><span>08:12</span><span>写入 今天想推进</span></div>
+                主界面还是像调试面板，日记本身不够像主角。
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-meta"><span>08:24</span><span>写入 未来提醒</span></div>
+                低频设置放到系统菜单里就好，页面顶部不要重复按钮。
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-meta"><span>08:36</span><span>写入 今天想推进</span></div>
+                右侧助手应该解释今天被怎样整理，而不是堆状态数字。
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>

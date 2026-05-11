@@ -1321,7 +1321,7 @@ button:focus-visible {
   grid-row: 3;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(520px, 1fr) minmax(360px, 0.72fr);
+  grid-template-columns: 250px minmax(640px, 1fr) minmax(300px, 0.46fr);
   grid-template-areas: "rail paper assistant";
   gap: 0;
   background:
@@ -1330,7 +1330,7 @@ button:focus-visible {
 }
 
 .command-workspace.journal-only {
-  grid-template-columns: 260px minmax(620px, 1fr);
+  grid-template-columns: 250px minmax(760px, 1fr);
   grid-template-areas: "rail paper";
 }
 
@@ -1346,7 +1346,9 @@ button:focus-visible {
   display: block;
   overflow: auto;
   border-right: 1px solid var(--line);
-  background: rgba(238, 232, 219, 0.78);
+  background:
+    linear-gradient(180deg, rgba(247, 244, 236, 0.86), rgba(238, 232, 219, 0.82)),
+    #f2efe7;
 }
 
 .date-card {
@@ -1432,61 +1434,68 @@ button:focus-visible {
   color: rgba(125, 118, 107, 0.36);
 }
 
-.raw-stack {
+.source-stack {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
-.raw-fold {
+.source-item {
   overflow: hidden;
-  border: 1px solid rgba(52, 45, 36, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.72);
+  border: 1px solid rgba(181, 127, 48, 0.13);
+  border-radius: 10px;
+  background: rgba(255, 250, 240, 0.62);
+  padding: 11px;
 }
 
-.raw-fold summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.source-item.is-active {
+  border-color: rgba(181, 127, 48, 0.26);
+  background: rgba(255, 250, 239, 0.86);
+}
+
+.source-meta {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
-  color: #2e2a25;
-  cursor: pointer;
-  list-style: none;
+  gap: 7px;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
 }
 
-.raw-fold summary::-webkit-details-marker {
-  display: none;
-}
-
-.raw-fold summary::before {
-  content: "›";
+.source-meta span:first-child {
   color: var(--gold);
-  font-size: 18px;
-  line-height: 1;
-  transition: transform 150ms ease;
+  font-variant-numeric: tabular-nums;
 }
 
-.raw-fold[open] summary::before {
-  transform: rotate(90deg);
+.source-item p {
+  margin: 0;
+  color: #4d463e;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.source-map {
+  margin-top: 9px;
+  color: rgba(85, 76, 65, 0.56);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.source-meta span:not(:first-child) {
+  border-radius: 999px;
+  background: rgba(181, 127, 48, 0.12);
+  color: #8a621f;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .raw-time {
-  display: block;
-  margin-bottom: 4px;
   color: var(--gold);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.raw-title {
-  display: block;
-  overflow: hidden;
-  color: var(--ink);
   font-size: 13px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 900;
 }
 
 .raw-tags,
@@ -1539,23 +1548,24 @@ button:focus-visible {
 }
 
 .next-panel {
-  border: 1px solid rgba(47, 111, 95, 0.18);
-  border-radius: 8px;
-  background: #fffdf7;
-  padding: 13px;
+  border: 1px solid rgba(181, 127, 48, 0.13);
+  border-radius: 10px;
+  background: rgba(255, 250, 240, 0.62);
+  padding: 11px;
 }
 
 .next-panel strong {
   display: block;
-  margin-bottom: 6px;
-  color: var(--sage);
-  font-size: 14px;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .next-panel p {
   margin: 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: #4d463e;
+  font-size: 12px;
   line-height: 1.65;
 }
 
@@ -1624,7 +1634,7 @@ button:focus-visible {
 
 .command-workspace .journal-paper,
 .document {
-  width: min(760px, 100%);
+  width: min(860px, 100%);
   min-height: 880px;
   margin: 0 auto;
   overflow: visible;
@@ -2125,6 +2135,85 @@ button:focus-visible {
   background: rgba(255, 246, 241, 0.88);
 }
 
+.evidence-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.evidence-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(248, 246, 239, 0.78);
+  color: #413b33;
+  padding: 11px 12px 11px 26px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.evidence-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(181, 127, 48, 0.42), rgba(181, 127, 48, 0.2));
+}
+
+.evidence-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #7c7166;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.evidence-meta span {
+  border-radius: 999px;
+  background: rgba(181, 127, 48, 0.12);
+  color: #8a621f;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.quiet-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.metric {
+  border-top: 1px solid rgba(52, 45, 36, 0.12);
+  padding-top: 9px;
+}
+
+.metric strong,
+.metric span {
+  display: block;
+}
+
+.metric strong {
+  color: var(--sage);
+  font-size: 19px;
+  line-height: 1;
+}
+
+.metric span {
+  margin-top: 5px;
+  color: #6a6258;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .assistant-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2217,7 +2306,7 @@ button:focus-visible {
 
 @media (max-width: 1280px) {
   .command-workspace {
-    grid-template-columns: 240px minmax(480px, 1fr) 330px;
+    grid-template-columns: 230px minmax(560px, 1fr) 300px;
   }
 
   .document-scroll {
@@ -2247,7 +2336,7 @@ button:focus-visible {
   }
 
   .command-workspace {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 250px minmax(0, 1fr);
     grid-template-areas:
       "rail paper"
       "assistant assistant";

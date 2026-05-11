@@ -446,33 +446,21 @@ export default function App() {
 
           <section className="rail-section">
             <div className="section-head">
-              <h2>原始对话</h2>
-              <span className="rail-count" aria-label="原始对话数量" title={`${inputCount} 条原始对话`}>{inputCount} 条</span>
+              <h2>今日材料</h2>
+              <span className="rail-count" aria-label="今日材料数量" title={`${inputCount} 条今日材料`}>{inputCount} 条</span>
             </div>
-            <div className="raw-stack">
+            <div className="source-stack">
               {rawInputViews.length > 0 ? rawInputViews.map(({ raw, tags, target }, index) => (
-                <details className="raw-fold" key={raw.id} open={index === 0}>
-                  <summary title="展开或收起原始对话">
-                    <span>
-                      <span className="raw-time">{formatRawInputTime(raw.createdAt)}</span>
-                      <span className="raw-title">{getRawInputPreview(raw.text, 28)}</span>
-                      {tags.length > 0 ? (
-                        <span className="raw-tags">
-                          {tags.map(tag => <span key={`${raw.id}-${tag}`}>{tag}</span>)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </summary>
-                  <div className="raw-body">
-                    {raw.text}
-                    <div className="raw-map">
-                      <span>已用于：{target}</span>
-                      {tags[0] ? <span>已提取：{tags[0].replace(/^#/, "")}</span> : null}
-                    </div>
+                <article className={`source-item ${index === rawInputViews.length - 1 ? "is-active" : ""}`} key={raw.id}>
+                  <div className="source-meta">
+                    <span>{formatRawInputTime(raw.createdAt)}</span>
+                    {tags[0] ? <span>{tags[0]}</span> : null}
                   </div>
-                </details>
+                  <p>{getRawInputPreview(raw.text, 56)}</p>
+                  <div className="source-map">写入：{target}</div>
+                </article>
               )) : (
-                <p className="muted">还没有原始对话。先在下方写一句今天的事。</p>
+                <p className="muted">还没有今日材料。先在下方写一句今天的事。</p>
               )}
             </div>
           </section>
@@ -633,7 +621,7 @@ export default function App() {
           <div className="assistant-head">
             <div>
               <p className="assistant-eyebrow">Today Assistant</p>
-              <h2>把今天收好</h2>
+              <h2>今天被这样整理</h2>
               <div className="assistant-meta">
                 {visibleTodayTags.slice(0, 2).map(tag => (
                   <span className="assistant-meta-chip assistant-meta-tag" key={`assistant-meta-${tag}`}>{tag}</span>
@@ -660,22 +648,20 @@ export default function App() {
 
             <section className="assistant-card">
               <div className="assistant-card-head">
-                <h3>AI 整理</h3>
-                <span>{loadState === "loading" ? "读取中" : "刚刚更新"}</span>
+                <h3>统计</h3>
               </div>
-              <p>从 {assistantSummary.rawInputCount} 条原始输入中整理出 {assistantSummary.sectionCount} 个日记段落，保留原话优先，轻度整理成可编辑的日记内容。</p>
-              <div className="assistant-stat-grid" aria-label="AI 整理统计">
-                <div className="assistant-stat">
+              <div className="quiet-metrics" aria-label="统计">
+                <div className="metric">
                   <strong>{assistantSummary.rawInputCount}</strong>
-                  <span>原始输入</span>
+                  <span>材料</span>
                 </div>
-                <div className="assistant-stat">
+                <div className="metric">
                   <strong>{assistantSummary.sectionCount}</strong>
-                  <span>日记段落</span>
+                  <span>段落</span>
                 </div>
-                <div className="assistant-stat">
+                <div className="metric">
                   <strong>{assistantSummary.editedCount}</strong>
-                  <span>手动编辑</span>
+                  <span>编辑中</span>
                 </div>
               </div>
               <div className="tag-row" aria-label="今日标签">
@@ -689,24 +675,23 @@ export default function App() {
 
             <section className="assistant-card">
               <div className="assistant-card-head">
-                <h3>今日材料</h3>
-                <span>{inputCount > 0 ? "可追溯" : "待输入"}</span>
+                <h3>整理证据</h3>
               </div>
               {rawInputViews.length > 0 ? (
-                <div className="material-list">
+                <div className="evidence-list">
                   {rawInputViews.map(({ raw, tags, target }) => (
-                    <div className="material-item" key={raw.id}>
-                      <div className="material-meta">
-                        <span>来源 {formatRawInputTime(raw.createdAt)}</span>
+                    <div className="evidence-item" key={raw.id}>
+                      <div className="evidence-meta">
+                        <span>{formatRawInputTime(raw.createdAt)}</span>
                         {tags[0] ? <span>{tags[0]}</span> : null}
                         <span>写入 {target}</span>
                       </div>
-                      {getRawInputPreview(raw.text, 48)}
+                      {getRawInputPreview(raw.text, 54)}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="muted">还没有输入。这里之后会显示原始表达摘要。</p>
+                <p className="muted">还没有输入。这里之后会显示原始表达如何进入日记段落。</p>
               )}
             </section>
 

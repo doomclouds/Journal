@@ -65,9 +65,9 @@ describe("Today workbench productized CSS contract", () => {
   });
 
   test("uses the accepted three-column command surface layout", () => {
-    expect(css).toContain("grid-template-columns: 260px minmax(520px, 1fr) minmax(360px, 0.72fr);");
+    expect(css).toContain("grid-template-columns: 250px minmax(640px, 1fr) minmax(300px, 0.46fr);");
     expect(css).toContain('grid-template-areas: "rail paper assistant";');
-    expect(css).toMatch(/\.command-workspace\.journal-only\s*\{[^}]*grid-template-columns:\s*260px\s+minmax\(620px,\s*1fr\);/s);
+    expect(css).toMatch(/\.command-workspace\.journal-only\s*\{[^}]*grid-template-columns:\s*250px\s+minmax\(760px,\s*1fr\);/s);
     expect(css).toMatch(/\.command-workspace\.journal-only\s*\{[^}]*grid-template-areas:\s*"rail paper";/s);
     expect(css).toMatch(/@media\s*\(max-width:\s*1040px\)/);
     expect(css).toMatch(/@media\s*\(max-width:\s*820px\)/);
@@ -108,10 +108,15 @@ describe("Today workbench productized CSS contract", () => {
   test("keeps left rail metadata quiet instead of rendering it like a button", () => {
     expect(css).toMatch(/\.context-rail\s+\.section-head\s+span\s*\{[^}]*min-height:\s*0;[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*background:\s*transparent;[^}]*padding:\s*0;/s);
     expect(css).toMatch(/\.rail-count\s*\{[^}]*font-variant-numeric:\s*tabular-nums;[^}]*font-size:\s*10px;[^}]*font-weight:\s*500;[^}]*color:\s*rgba\(125,\s*118,\s*107,\s*0\.36\);/s);
+    expect(css).toMatch(/\.command-workspace\s+\.context-rail\s*\{[^}]*background:[^}]*#f2efe7;/s);
+    expect(css).toMatch(/\.source-stack\s*\{[^}]*display:\s*grid;[^}]*gap:\s*9px;/s);
+    expect(css).toMatch(/\.source-item\.is-active\s*\{[^}]*border-color:\s*rgba\(181,\s*127,\s*48,\s*0\.26\);/s);
+    expect(css).toMatch(/\.source-meta\s+span:first-child\s*\{[^}]*color:\s*var\(--gold\);/s);
   });
 
   test("keeps next step as a passive status card without action-like controls", () => {
     expect(css).not.toMatch(/\.next-actions\s*\{/);
+    expect(css).toMatch(/\.next-panel\s*\{[^}]*border:\s*1px\s+solid\s+rgba\(181,\s*127,\s*48,\s*0\.13\);[^}]*border-radius:\s*10px;[^}]*background:\s*rgba\(255,\s*250,\s*240,\s*0\.62\);/s);
     expect(css).toMatch(/\.next-step-card\s*\{[^}]*box-shadow:\s*none;/s);
     expect(css).toMatch(/\.next-step-title\s*\{[^}]*align-items:\s*flex-start;/s);
     expect(css).toMatch(/\.next-step-title\s+\.status-dot\s*\{[^}]*margin-top:\s*5px;/s);
@@ -131,6 +136,7 @@ describe("Today workbench productized CSS contract", () => {
   });
 
   test("uses rounded quote accents instead of plain straight borders", () => {
+    expect(css).toMatch(/\.evidence-item::before\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*left:\s*0;[^}]*width:\s*4px;[^}]*border-radius:\s*999px;/s);
     expect(css).toMatch(/\.material-item::before\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*left:\s*0;[^}]*width:\s*4px;[^}]*border-radius:\s*999px;/s);
     expect(css).not.toMatch(/\.raw-fold::before/);
     expect(css).not.toMatch(/\.raw-body::before/);
