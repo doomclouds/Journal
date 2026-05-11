@@ -81,6 +81,10 @@ function providerInitial(displayName: string) {
   return displayName.trim().slice(0, 1).toUpperCase() || "?";
 }
 
+function providerToneClass(providerId: string) {
+  return `provider-tone-${providerId.replace(/[^a-z0-9-]/gi, "-").toLowerCase()}`;
+}
+
 function createClientFailure(caught: unknown, technicalDetails: string): AiProviderHealthResult {
   return {
     isSuccess: false,
@@ -301,7 +305,7 @@ export function LlmSettingsPanel({
                 onClick={() => handleSelectProvider(provider.id)}
               >
                 <div className="llm-provider-title">
-                  <span className="llm-provider-avatar" aria-label={`${provider.displayName} 标识`}>
+                  <span className={`llm-provider-avatar ${providerToneClass(provider.id)}`} aria-label={`${provider.displayName} 标识`}>
                     {providerInitial(provider.displayName)}
                   </span>
                   <div>
@@ -328,7 +332,7 @@ export function LlmSettingsPanel({
             <section className="llm-settings-card">
               <span className="rail-label">当前 LLM</span>
               <div className="llm-current-orbit">
-                <span className="llm-current-avatar" aria-label={`当前 LLM 标识 ${selected.displayName}`}>
+                <span className={`llm-current-avatar ${providerToneClass(selected.id)}`} aria-label={`当前 LLM 标识 ${selected.displayName}`}>
                   {providerInitial(selected.displayName)}
                 </span>
                 <div>

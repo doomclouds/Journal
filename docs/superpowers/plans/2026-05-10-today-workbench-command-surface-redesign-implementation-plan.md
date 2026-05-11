@@ -6,10 +6,10 @@
 
 把 Journal 主界面从调试面板式页面重构为接近已认可 HTML 原型的真实产品工作台：
 
-- 顶部是轻量今日上下文和状态。
+- 顶部是轻量今日上下文和 API 健康点。
 - 左侧是日期、原始对话和下一步。
 - 中间是日记纸面、段落阅读/编辑和底部输入。
-- 右侧是 Today Assistant、AI 整理摘要、今日材料、整理状态和快捷动作。
+- 右侧是 Today Assistant、当前 LLM 供应商元信息、AI 整理摘要和今日材料。
 - 原生菜单中文化；React 内容区不再绘制菜单栏或假窗口。
 
 ## Explicit Non-Goals
@@ -33,16 +33,17 @@ Files:
 
 Steps:
 
-- Add Electron native Chinese menu: `文件`、`编辑`、`视图`、`窗口`、`帮助`.
+- Add Electron native Chinese menu: `文件`、`编辑`、`帮助`.
 - Add `文件 -> LLM 配置` command and send it to renderer through preload bridge.
 - Remove React-rendered app menu, fake titlebar, fake window controls, and nested window shell.
-- Keep LLM settings opening from the top LLM status pill and native menu.
+- Keep LLM settings opening from the native menu only; remove the duplicate top LLM status/config entry from the React content area.
 - Add tests that assert runtime content has no `.app-window` / `.titlebar` / `.window-controls` / `.menubar` / `.menu-panel`.
 
 Acceptance:
 
 - Native menu template exposes Chinese labels.
 - Renderer can open LLM settings from native menu bridge.
+- Top context does not expose a duplicate LLM settings button; current provider may remain as non-clickable Today Assistant metadata.
 - The app content root is `main.desktop-shell`.
 
 ## Task 2: Match The Approved Command Surface Content

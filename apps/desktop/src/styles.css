@@ -216,19 +216,6 @@ button:focus-visible {
   color: #8c332b;
 }
 
-.llm-status-pill {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid #d3cfc5;
-  border-radius: 6px;
-  padding: 6px 10px;
-  background: #fff8ed;
-  color: #2b6860;
-  font-size: 13px;
-  font-weight: 800;
-}
-
 .api-error,
 .validation-error {
   margin: 0;
@@ -512,14 +499,8 @@ button:focus-visible {
   gap: 8px;
 }
 
-.compose-bar label {
-  grid-column: 1 / -1;
-  color: #2d2823;
-  font-weight: 800;
-}
-
 .compose-bar textarea {
-  min-height: 86px;
+  min-height: 58px;
   max-height: 180px;
   background: #fffefa;
 }
@@ -527,16 +508,6 @@ button:focus-visible {
 .compose-secondary-actions {
   display: grid;
   justify-items: end;
-  gap: 6px;
-}
-
-.compose-hint {
-  max-width: 280px;
-  margin: 0;
-  color: #655d53;
-  font-size: 12px;
-  line-height: 1.45;
-  text-align: right;
 }
 
 .today-assistant {
@@ -918,6 +889,32 @@ button:focus-visible {
   font-size: 15px;
 }
 
+.provider-tone-mock {
+  background: #2f6f5f;
+  box-shadow: 0 0 0 6px rgba(47, 111, 95, 0.10);
+}
+
+.provider-tone-openai {
+  background: #b57f30;
+  box-shadow: 0 0 0 6px rgba(181, 127, 48, 0.12);
+}
+
+.provider-tone-deepseek {
+  background: #3c766a;
+  box-shadow: 0 0 0 6px rgba(60, 118, 106, 0.12);
+}
+
+.provider-tone-zhipu,
+.provider-tone-glm {
+  background: #52756a;
+  box-shadow: 0 0 0 6px rgba(82, 117, 106, 0.12);
+}
+
+.provider-tone-custom {
+  background: #a65349;
+  box-shadow: 0 0 0 6px rgba(166, 83, 73, 0.12);
+}
+
 .llm-provider-title strong {
   display: block;
   overflow: hidden;
@@ -1197,11 +1194,6 @@ button:focus-visible {
     justify-items: stretch;
   }
 
-  .compose-hint {
-    max-width: none;
-    text-align: left;
-  }
-
   .journal-block-inline-actions {
     display: grid;
     grid-template-columns: 1fr;
@@ -1274,15 +1266,27 @@ button:focus-visible {
   box-shadow: 0 0 0 4px rgba(47, 111, 95, 0.12);
 }
 
-.status-pills {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+.api-health-dot {
+  width: 10px;
+  height: 10px;
 }
 
-.pill,
-.status-pills .llm-status-pill {
+.api-health-ok {
+  background: var(--sage);
+  box-shadow: 0 0 0 4px rgba(47, 111, 95, 0.12);
+}
+
+.api-health-checking {
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(181, 127, 48, 0.12);
+}
+
+.api-health-error {
+  background: #a84e42;
+  box-shadow: 0 0 0 4px rgba(168, 78, 66, 0.12);
+}
+
+.pill {
   min-height: 30px;
   display: inline-flex;
   align-items: center;
@@ -1296,15 +1300,10 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.pill.neutral,
-.status-pills .llm-status-pill {
+.pill.neutral {
   border-color: rgba(70, 66, 59, 0.18);
   color: #5d564d;
   background: rgba(255, 253, 247, 0.78);
-}
-
-.status-pills .llm-status-pill {
-  cursor: pointer;
 }
 
 .feedback-row {
@@ -1418,6 +1417,21 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.context-rail .section-head span {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.rail-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(125, 118, 107, 0.36);
+}
+
 .raw-stack {
   display: grid;
   gap: 10px;
@@ -1502,24 +1516,12 @@ button:focus-visible {
 }
 
 .raw-body {
-  position: relative;
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
-  padding: 12px 12px 12px 34px;
+  padding: 12px 12px 12px 24px;
   font-size: 13px;
   line-height: 1.75;
   overflow-wrap: anywhere;
-}
-
-.raw-body::before {
-  content: "";
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 17px;
-  width: 4px;
-  border-radius: 999px;
-  background: rgba(181, 127, 48, 0.42);
 }
 
 .raw-map {
@@ -1803,61 +1805,155 @@ button:focus-visible {
 }
 
 .compose-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: end;
-  gap: 10px;
+  display: block;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
   background: rgba(255, 253, 247, 0.82);
   box-shadow: none;
-  padding: 14px 22px;
+  padding: 10px 22px;
 }
 
 .compose-bar form {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
 }
 
-.compose-bar label {
-  grid-column: 1 / -1;
-  display: block;
-  margin-bottom: 6px;
-  color: #2d2823;
-  font-weight: 900;
+.compose-input-card {
+  border: 1px solid rgba(52, 45, 36, 0.16);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 254, 250, 0.98), rgba(250, 248, 241, 0.98));
+  box-shadow:
+    0 12px 30px rgba(52, 43, 31, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  overflow: hidden;
 }
 
 .compose-bar textarea {
   width: 100%;
-  min-height: 70px;
+  min-height: 52px;
   max-height: 140px;
   resize: vertical;
-  border: 1px solid rgba(52, 45, 36, 0.18);
-  border-radius: 8px;
-  background: #fffefa;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
-  padding: 12px;
+  padding: 13px 14px 8px;
   line-height: 1.65;
   outline: none;
 }
 
-.compose-secondary-actions {
-  display: grid;
-  justify-items: end;
+.compose-toolbar {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid rgba(52, 45, 36, 0.08);
+  padding: 5px 7px 7px;
+}
+
+.compose-tool-group,
+.compose-action-group {
+  display: flex;
+  align-items: center;
   gap: 6px;
 }
 
-.compose-hint {
-  max-width: 260px;
-  margin: 0;
-  color: var(--muted);
+.compose-action-group {
+  margin-left: auto;
+}
+
+.compose-icon-button {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(71, 67, 59, 0.68);
+  padding: 0;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.compose-icon-button:hover:not(:disabled) {
+  border-color: rgba(47, 111, 95, 0.16);
+  background: rgba(230, 243, 235, 0.62);
+  color: var(--sage);
+}
+
+.compose-icon-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.compose-save-action {
+  color: rgba(47, 111, 95, 0.78);
+}
+
+.compose-send-action {
+  border-radius: 999px;
+  background: var(--sage);
+  color: #fffdf8;
+  box-shadow: 0 8px 18px rgba(47, 111, 95, 0.18);
+}
+
+.compose-send-action:hover:not(:disabled) {
+  border-color: var(--sage);
+  background: #285f53;
+  color: #fffdf8;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(36, 33, 29, 0.22);
+  padding: 24px;
+}
+
+.confirm-dialog {
+  width: min(420px, 100%);
+  border: 1px solid rgba(52, 45, 36, 0.14);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(248, 246, 239, 0.98));
+  box-shadow: 0 24px 60px rgba(52, 43, 31, 0.2);
+  color: var(--ink);
+  padding: 22px;
+}
+
+.confirm-eyebrow {
+  margin: 0 0 8px;
+  color: var(--sage);
   font-size: 12px;
-  line-height: 1.45;
-  text-align: right;
+  font-weight: 900;
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.confirm-dialog p {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
 }
 
 .command-workspace .assistant-panel.today-assistant {
@@ -1919,7 +2015,7 @@ button:focus-visible {
   margin-top: 8px;
 }
 
-.assistant-meta span {
+.assistant-meta-chip {
   border: 1px solid rgba(70, 66, 59, 0.14);
   border-radius: 999px;
   background: rgba(255, 253, 247, 0.7);
@@ -1927,6 +2023,20 @@ button:focus-visible {
   padding: 5px 9px;
   font-size: 11px;
   font-weight: 900;
+}
+
+.assistant-meta-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-meta-provider .assistant-meta-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(47, 111, 95, 0.1);
 }
 
 .assistant-body {
@@ -1984,6 +2094,10 @@ button:focus-visible {
   align-items: flex-start;
 }
 
+.next-step-title .status-dot {
+  margin-top: 5px;
+}
+
 .next-step-title strong {
   display: block;
   color: var(--ink);
@@ -1991,17 +2105,14 @@ button:focus-visible {
   line-height: 1.35;
 }
 
-.next-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
 .assistant-card-good,
 .next-step-card {
   border-color: rgba(47, 111, 95, 0.22);
   background: linear-gradient(135deg, rgba(230, 243, 235, 0.92), rgba(255, 253, 247, 0.92));
+}
+
+.next-step-card {
+  box-shadow: none;
 }
 
 .assistant-card-warning {
@@ -2057,7 +2168,6 @@ button:focus-visible {
 }
 
 .insight-tags,
-.quick-actions,
 .material-list {
   display: grid;
   gap: 8px;
@@ -2081,10 +2191,11 @@ button:focus-visible {
 .material-item {
   position: relative;
   border-left: 0;
-  border-radius: 0 8px 8px 0;
-  background: rgba(248, 246, 239, 0.7);
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(248, 246, 239, 0.78);
   color: #413b33;
-  padding: 9px 10px 9px 20px;
+  padding: 11px 12px 11px 26px;
   font-size: 12px;
   line-height: 1.55;
 }
@@ -2092,30 +2203,16 @@ button:focus-visible {
 .material-item::before {
   content: "";
   position: absolute;
-  top: 11px;
-  bottom: 11px;
-  left: 8px;
+  top: 0;
+  bottom: 0;
+  left: 0;
   width: 4px;
   border-radius: 999px;
-  background: rgba(181, 127, 48, 0.48);
+  background: linear-gradient(180deg, rgba(181, 127, 48, 0.42), rgba(181, 127, 48, 0.2));
 }
 
 .material-meta {
   margin-bottom: 6px;
-}
-
-.quick-actions {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.quick-actions button {
-  min-height: 34px;
-  border: 1px solid rgba(52, 45, 36, 0.13);
-  border-radius: 8px;
-  background: rgba(248, 246, 239, 0.86);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 900;
 }
 
 @media (max-width: 1280px) {
@@ -2146,10 +2243,6 @@ button:focus-visible {
   }
 
   .today-line {
-    justify-content: flex-start;
-  }
-
-  .status-pills {
     justify-content: flex-start;
   }
 
@@ -2205,7 +2298,6 @@ button:focus-visible {
   }
 
   .view-switch,
-  .quick-actions,
   .assistant-stat-grid {
     width: 100%;
     grid-template-columns: 1fr;

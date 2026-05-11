@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   activateAiSettings,
   addTodayInput,
@@ -25,13 +26,13 @@ import {
   getProductJournalStatus,
   getRawInputPreview,
   getSectionDisplayTitle,
-  getStaticAiStyleLabel,
   type ProductJournalStatusView
 } from "./todayWorkbenchView";
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
 type NativeMenuCommand = "open-llm-settings";
+const nativeMenuDomEventName = "journal:native-menu-command";
 
 declare global {
   interface Window {
@@ -71,7 +72,7 @@ export default function App() {
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
-  const [pendingRegenerateDraft, setPendingRegenerateDraft] = useState(false);
+  const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
   const [workbenchView, setWorkbenchView] = useState<"journal" | "assistant">("assistant");
 
@@ -120,12 +121,24 @@ export default function App() {
   }, [hasLocalUnsavedChanges, validationError]);
 
   useEffect(() => {
-    return window.journalDesktop?.onNativeMenuCommand?.(command => {
+    function handleNativeMenuCommand(command: NativeMenuCommand) {
       if (command === "open-llm-settings") {
         resetPendingRegenerateDraft();
         setIsLlmPanelOpen(true);
       }
-    });
+    }
+
+    const unsubscribe = window.journalDesktop?.onNativeMenuCommand?.(handleNativeMenuCommand);
+    const domListener = (event: Event) => {
+      const command = (event as CustomEvent<NativeMenuCommand>).detail;
+      handleNativeMenuCommand(command);
+    };
+    window.addEventListener(nativeMenuDomEventName, domListener);
+
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener(nativeMenuDomEventName, domListener);
+    };
   }, []);
 
   const today = editor?.today ?? null;
@@ -139,11 +152,16 @@ export default function App() {
   const activeProvider = aiSettings?.providers.find(provider => provider.isActive);
   const activeProviderName = activeProvider?.displayName
     ?? (aiSettings?.activeProviderId ? aiSettings.activeProviderId : "Mock");
-  const activeProviderStatus = activeProvider
-    ? `${activeProvider.displayName} 可用`
-    : aiSettings?.activeProviderId
-      ? `${aiSettings.activeProviderId} 需要配置`
-      : "Mock 可用";
+  const apiHealthState = health?.status === "ok"
+    ? "ok"
+    : loadState === "loading"
+      ? "checking"
+      : "error";
+  const apiHealthLabel = apiHealthState === "ok"
+    ? "API 连接正常"
+    : apiHealthState === "checking"
+      ? "正在检查 API"
+      : "API 连接异常";
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
@@ -169,19 +187,6 @@ export default function App() {
         nextStepTitle: loadState === "error" ? "检查连接状态" : "正在读取今天的状态",
         nextStepText: loadState === "error" ? "读取今日状态失败，请查看上方错误后重试。" : "正在加载今天的日记、草稿和整理配置。"
       };
-  const composeHint = hasLocalUnsavedChanges
-    ? localUnsavedChangeMessage
-    : pendingRegenerateDraft
-      ? "这会覆盖当前草稿内容，但不会影响正式日记。"
-      : "使用当前 LLM 重新整理当前草稿。";
-  const structureStatusText = loadState === "loading"
-    ? "正在读取今天的整理状态。"
-    : editor?.validation.isValid
-      ? "内容结构完整，可以保存。"
-      : "草稿结构需要处理。";
-  const saveTargetText = today?.entry
-    ? "正式 Markdown 已更新。"
-    : "保存后写入本地正式 Markdown。";
   const monthLabel = today
     ? new Date(`${today.date.isoDate}T00:00:00`).toLocaleString("en-US", { month: "short" })
     : "Today";
@@ -214,13 +219,7 @@ export default function App() {
     : productStatus.label;
 
   function resetPendingRegenerateDraft() {
-    setPendingRegenerateDraft(false);
-  }
-
-  function focusWorkbenchTarget(selector: string) {
-    requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(selector)?.focus();
-    });
+    setIsRegenerateConfirmOpen(false);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -400,13 +399,8 @@ export default function App() {
       return;
     }
 
-    if (!pendingRegenerateDraft) {
-      setPendingRegenerateDraft(true);
-      return;
-    }
-
-    setPendingRegenerateDraft(false);
-    await handleRegenerateDraft();
+    setValidationError("");
+    setIsRegenerateConfirmOpen(true);
   }
 
   return (
@@ -417,23 +411,12 @@ export default function App() {
           <span>本地优先晨间日记</span>
         </div>
         <div className="today-line">
-          <span className="status-dot" aria-hidden="true"></span>
+          <span
+            className={`status-dot api-health-dot api-health-${apiHealthState}`}
+            aria-label={apiHealthLabel}
+            title={apiHealthLabel}
+          ></span>
           <span><strong>{zhDateLabel}</strong> · {weekdayLabel} · {inputCount > 0 ? "原始表达已保留" : "等待第一句原始表达"}</span>
-        </div>
-        <div className="status-pills" aria-label="今日状态">
-          <span className={`pill product-status-${productStatus.tone}`}>{productStatus.label}</span>
-          <span className="pill neutral">API {health?.status ?? (loadState === "error" ? "error" : "checking")}</span>
-          <button
-            type="button"
-            className="pill neutral llm-status-pill"
-            aria-label={`LLM ${activeProviderName}`}
-            onClick={() => {
-              resetPendingRegenerateDraft();
-              setIsLlmPanelOpen(true);
-            }}
-          >
-            {activeProviderStatus}
-          </button>
         </div>
       </header>
 
@@ -464,12 +447,12 @@ export default function App() {
           <section className="rail-section">
             <div className="section-head">
               <h2>原始对话</h2>
-              <span>{inputCount} 条</span>
+              <span className="rail-count" aria-label="原始对话数量" title={`${inputCount} 条原始对话`}>{inputCount} 条</span>
             </div>
             <div className="raw-stack">
               {rawInputViews.length > 0 ? rawInputViews.map(({ raw, tags, target }, index) => (
                 <details className="raw-fold" key={raw.id} open={index === 0}>
-                  <summary>
+                  <summary title="展开或收起原始对话">
                     <span>
                       <span className="raw-time">{formatRawInputTime(raw.createdAt)}</span>
                       <span className="raw-title">{getRawInputPreview(raw.text, 28)}</span>
@@ -510,7 +493,6 @@ export default function App() {
           <div className="stage-toolbar">
             <div className="stage-title">
               <p>日记纸面</p>
-              <h2>默认阅读，点击段落才编辑</h2>
             </div>
             <div className="view-switch" aria-label="视图切换">
               <button
@@ -565,36 +547,85 @@ export default function App() {
 
           <section className="compose-bar" aria-label="底部输入和主操作">
             <form onSubmit={handleSubmit}>
-              <label htmlFor="today-input">补充今天的自然语言输入</label>
-              <textarea
-                id="today-input"
-                value={input}
-                onChange={event => {
-                  resetPendingRegenerateDraft();
-                  setInput(event.target.value);
-                }}
-                placeholder={hasEditableJournal ? "继续写一句今天的事，Journal 会保留原话，再更新草稿..." : "今天发生了什么？直接写原话..."}
-                rows={3}
-                disabled={isBusy}
-              />
-              <button type="submit" className="primary-action primary" disabled={isBusy || hasLocalUnsavedChanges}>
-                生成草稿
-              </button>
-            </form>
-            {hasEditableJournal ? (
-              <div className="compose-secondary-actions">
-                <p className="compose-hint">{composeHint}</p>
-                <button type="button" className="secondary-action secondary" onClick={handleRegenerateCurrentDraft} disabled={isBusy || hasLocalUnsavedChanges}>
-                  重新整理
-                </button>
+              <div className="compose-input-card">
+                <textarea
+                  id="today-input"
+                  aria-label="补充今天的自然语言输入"
+                  value={input}
+                  onChange={event => {
+                    resetPendingRegenerateDraft();
+                    setInput(event.target.value);
+                  }}
+                  placeholder={hasEditableJournal ? "继续写一句今天的事..." : "今天发生了什么？"}
+                  rows={2}
+                  disabled={isBusy}
+                />
+                <div className="compose-toolbar" aria-label="输入工具栏">
+                  <div className="compose-tool-group">
+                    {hasEditableJournal ? (
+                      <button
+                        type="button"
+                        className="compose-icon-button compose-tool-action"
+                        aria-label="重新整理"
+                        title="重新整理草稿"
+                        onClick={handleRegenerateCurrentDraft}
+                        disabled={isBusy || hasLocalUnsavedChanges}
+                      >
+                        <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="compose-action-group">
+                    {canConfirm ? (
+                      <button
+                        type="button"
+                        className="compose-icon-button compose-save-action"
+                        aria-label="保存日记"
+                        title="保存日记"
+                        onClick={handleConfirm}
+                        disabled={isBusy}
+                      >
+                        <Save size={16} strokeWidth={2.2} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="submit"
+                      className="compose-icon-button compose-send-action"
+                      aria-label="生成草稿"
+                      title="写入今天的材料"
+                      disabled={isBusy || hasLocalUnsavedChanges}
+                    >
+                      <SendHorizontal size={17} strokeWidth={2.4} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            ) : null}
-            {canConfirm ? (
-              <button type="button" className="primary-action primary" onClick={handleConfirm} disabled={isBusy}>
-                保存日记
-              </button>
-            ) : null}
+            </form>
           </section>
+          {isRegenerateConfirmOpen ? (
+            <div className="confirm-overlay">
+              <section
+                className="confirm-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="regenerate-dialog-title"
+              >
+                <div>
+                  <p className="confirm-eyebrow">重新整理</p>
+                  <h2 id="regenerate-dialog-title">重新整理草稿</h2>
+                  <p>这会覆盖当前草稿内容，但不会影响正式日记。</p>
+                </div>
+                <div className="confirm-actions">
+                  <button type="button" className="secondary-action secondary" onClick={resetPendingRegenerateDraft}>
+                    取消
+                  </button>
+                  <button type="button" className="primary-action primary" onClick={() => handleRegenerateDraft()} disabled={isBusy}>
+                    确认重新整理
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
         </section>
 
         {workbenchView === "assistant" ? (
@@ -604,9 +635,13 @@ export default function App() {
               <p className="assistant-eyebrow">Today Assistant</p>
               <h2>把今天收好</h2>
               <div className="assistant-meta">
-                <span>{productStatus.label}</span>
-                {visibleTodayTags.slice(0, 2).map(tag => <span key={`assistant-meta-${tag}`}>{tag}</span>)}
-                <span>{activeProviderName}</span>
+                {visibleTodayTags.slice(0, 2).map(tag => (
+                  <span className="assistant-meta-chip assistant-meta-tag" key={`assistant-meta-${tag}`}>{tag}</span>
+                ))}
+                <span className="assistant-meta-chip assistant-meta-provider" aria-label={`LLM：${activeProviderName}`}>
+                  <span className="assistant-meta-dot" aria-hidden="true"></span>
+                  {activeProviderName}
+                </span>
               </div>
             </div>
             <span className="assistant-time">{latestRawInputTime}</span>
@@ -620,11 +655,6 @@ export default function App() {
                   <strong>下一步：{productStatus.nextStepTitle}</strong>
                   <p>{productStatus.nextStepText}</p>
                 </div>
-              </div>
-              <div className="next-actions">
-                <button className="secondary" type="button" onClick={() => focusWorkbenchTarget(".journal-stage")} disabled={isBusy}>
-                  回到日记
-                </button>
               </div>
             </section>
 
@@ -678,40 +708,6 @@ export default function App() {
               ) : (
                 <p className="muted">还没有输入。这里之后会显示原始表达摘要。</p>
               )}
-            </section>
-
-            <section className="assistant-card">
-              <div className="assistant-card-head">
-                <h3>整理状态</h3>
-                <span>{activeProviderName}</span>
-              </div>
-              <dl className="today-status-list">
-                <div>
-                  <dt>结构</dt>
-                  <dd>{structureStatusText}</dd>
-                </div>
-                <div>
-                  <dt>整理方式</dt>
-                  <dd>{activeProviderStatus} · {getStaticAiStyleLabel()}。</dd>
-                </div>
-                <div>
-                  <dt>保存目标</dt>
-                  <dd>{saveTargetText}</dd>
-                </div>
-              </dl>
-            </section>
-
-            <section className="assistant-card">
-              <div className="assistant-card-head">
-                <h3>快捷动作</h3>
-                <span>命令层</span>
-              </div>
-              <div className="quick-actions">
-                <button type="button" aria-label="快捷动作 插入段落" onClick={() => focusWorkbenchTarget(".insert-block-menu button")}>插入段落</button>
-                <button type="button" aria-label="快捷动作 重新整理" onClick={handleRegenerateCurrentDraft} disabled={!hasEditableJournal || isBusy || hasLocalUnsavedChanges}>重新整理</button>
-                <button type="button" aria-label="快捷动作 LLM 配置" onClick={() => setIsLlmPanelOpen(true)}>LLM 配置</button>
-                <button type="button" aria-label="快捷动作 查看材料" onClick={() => focusWorkbenchTarget(".raw-fold summary")}>查看材料</button>
-              </div>
             </section>
 
             {uniqueAttentionErrors.length > 0 ? (

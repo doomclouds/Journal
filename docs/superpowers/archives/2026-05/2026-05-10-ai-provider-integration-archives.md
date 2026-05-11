@@ -15,7 +15,7 @@
 - 新增异步 AI Provider 合同、动态 provider/model/prompt metadata、settings store、环境变量覆盖、默认 LLM 预设，以及 OpenAI-compatible Agent Framework runtime。
 - `TodayJournalService` 改为通过 generation service 选择 active LLM，AI 输出仍只生成 `JournalAiJson`，并经过 validator、服务端 `raw-inputs` 覆盖保护和 JMF renderer 后进入 reviewing/attention draft。
 - API 新增 `GET/PUT /settings/ai`、`POST /settings/ai/test`、`POST /journal/today/draft/regenerate`，并补齐 malformed body、unknown active provider、safe view 和 regenerate 不写 entry 的回归。
-- 桌面端新增 `LlmSettingsPanel`、顶部 `LLM <provider>` 状态入口、保存/测试已保存配置/重新整理草稿流程，并处理 settings save 竞态、连接测试竞态、masked API Key 保留和 settings refresh 失败不阻断 editor 更新。
+- 桌面端新增 `LlmSettingsPanel`、当时的顶部 `LLM <provider>` 状态入口、保存/测试已保存配置/重新整理草稿流程，并处理 settings save 竞态、连接测试竞态、masked API Key 保留和 settings refresh 失败不阻断 editor 更新。后续 command-surface 优化已将配置入口收敛到 Electron 原生菜单，顶部重复入口不再保留。
 - Prompt 固定 faithful 风格，只整理 `yesterdayReview`、`todayFocus`、`inspiration` 三项；九宫格等 JMF 可选块暂不纳入本轮模型输出合同。
 
 ## Out of Scope

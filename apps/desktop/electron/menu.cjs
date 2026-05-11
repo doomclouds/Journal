@@ -6,6 +6,9 @@ function sendCommand(mainWindow, command) {
   }
 
   mainWindow.webContents.send(nativeMenuChannel, command);
+  mainWindow.webContents.executeJavaScript?.(
+    `window.dispatchEvent(new CustomEvent("journal:native-menu-command", { detail: ${JSON.stringify(command)} }));`
+  )?.catch?.(() => undefined);
 }
 
 function createApplicationMenuTemplate(options = {}) {
@@ -37,26 +40,6 @@ function createApplicationMenuTemplate(options = {}) {
         { label: "复制", role: "copy" },
         { label: "粘贴", role: "paste" },
         { label: "全选", role: "selectAll" }
-      ]
-    },
-    {
-      label: "视图",
-      submenu: [
-        { label: "重新加载", role: "reload" },
-        { label: "切换开发者工具", role: "toggleDevTools" },
-        { type: "separator" },
-        { label: "放大", role: "zoomIn" },
-        { label: "缩小", role: "zoomOut" },
-        { label: "重置缩放", role: "resetZoom" },
-        { type: "separator" },
-        { label: "全屏", role: "togglefullscreen" }
-      ]
-    },
-    {
-      label: "窗口",
-      submenu: [
-        { label: "最小化", role: "minimize" },
-        { label: "关闭窗口", role: "close" }
       ]
     },
     {
