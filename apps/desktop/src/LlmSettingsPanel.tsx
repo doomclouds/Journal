@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LockKeyhole } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Eye, EyeOff, LockKeyhole, PlugZap, X } from "lucide-react";
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import {
   type AiProviderApiKeyView,
@@ -79,6 +79,18 @@ function providerStatusLabel(provider: AiProviderView, selectedTestResult: AiPro
 
 function providerInitial(displayName: string) {
   return displayName.trim().slice(0, 1).toUpperCase() || "?";
+}
+
+function temperatureLabel(temperature: number) {
+  return `temperature ${temperature}`;
+}
+
+function outputLengthLabel(maxTokens: number) {
+  return `max tokens ${maxTokens}`;
+}
+
+function timeoutLabel(timeoutSeconds: number) {
+  return `timeout ${timeoutSeconds}s`;
 }
 
 function providerToneClass(providerId: string) {
@@ -276,21 +288,27 @@ export function LlmSettingsPanel({
   }
 
   return (
+    <>
+    <div className="llm-settings-backdrop" data-testid="llm-settings-backdrop" aria-hidden="true"></div>
     <section className="llm-settings-overlay" aria-label="LLM 配置面板">
       <header className="llm-settings-head">
         <div>
           <strong>LLM 配置</strong>
           <span>{settings.runtime}</span>
         </div>
-        <button type="button" className="secondary-action" onClick={handleClose}>关闭</button>
+        <button
+          type="button"
+          className="icon-action llm-close-action"
+          aria-label="关闭"
+          title="关闭"
+          onClick={handleClose}
+        >
+          <X size={18} strokeWidth={1.9} aria-hidden="true" />
+        </button>
       </header>
 
       <div className="llm-settings-grid">
         <nav className="llm-provider-list" aria-label="LLM 列表">
-          <div className="llm-provider-list-head">
-            <span className="rail-label">模型来源</span>
-            <p>选择今天用于整理日记的模型。</p>
-          </div>
           {providers.map(provider => {
             const providerView = viewProvidersById.get(provider.id);
             const isSelected = provider.id === selectedId;
@@ -412,11 +430,24 @@ export function LlmSettingsPanel({
                 )}
               </label>
               <div className="llm-settings-actions">
-                <button type="button" className="secondary-action" onClick={handleTestCurrentForm} disabled={isBusy}>
-                  测试当前表单
+                <button
+                  type="button"
+                  className="icon-action llm-test-icon"
+                  aria-label="测试连接"
+                  title="测试连接"
+                  onClick={handleTestCurrentForm}
+                  disabled={isBusy}
+                >
+                  <PlugZap size={17} strokeWidth={1.9} aria-hidden="true" />
                 </button>
-                <button type="submit" className="primary-action" disabled={isBusy}>
-                  保存并启用
+                <button
+                  type="submit"
+                  className="icon-action llm-primary-icon"
+                  aria-label="保存并启用"
+                  title="保存并启用"
+                  disabled={isBusy}
+                >
+                  <CheckCircle2 size={17} strokeWidth={1.9} aria-hidden="true" />
                 </button>
               </div>
               {dirtyProviderIds.has(selected.id) ? (
@@ -454,38 +485,39 @@ export function LlmSettingsPanel({
               <p>保留原话优先，轻度整理成日记块。</p>
             </section>
 
-            <section className="llm-settings-card">
-              <span className="rail-label">高级参数</span>
+            <section className="llm-settings-card llm-runtime-card">
               <button
                 type="button"
-                className="llm-advanced-summary"
+                className="llm-advanced-summary llm-runtime-summary"
+                aria-label={isAdvancedOpen ? "收起高级参数" : "展开高级参数"}
+                title={isAdvancedOpen ? "收起高级参数" : "展开高级参数"}
                 onClick={() => setIsAdvancedOpen(current => !current)}
               >
-                <span>
-                  高级参数：temperature {selected.temperature} · max tokens {selected.maxTokens} · timeout {selected.timeoutSeconds}s · JSON 模式开启
+                <span className="llm-runtime-copy">
+                  <span className="rail-label">高级参数</span>
+                  <span className="llm-runtime-chips">
+                    <span className="llm-runtime-chip" title="控制输出随机性；越低越稳定，越高越发散。">{temperatureLabel(selected.temperature)}</span>
+                    <span className="llm-runtime-chip" title="限制单次整理输出长度，避免内容过长。">{outputLengthLabel(selected.maxTokens)}</span>
+                    <span className="llm-runtime-chip" title="请求等待时间，超过后停止本次调用。">{timeoutLabel(selected.timeoutSeconds)}</span>
+                    <span className="llm-runtime-chip" title="固定开启，确保模型返回结构化 JSON。">JSON mode on</span>
+                  </span>
                 </span>
-                <strong>{isAdvancedOpen ? "收起" : "展开"}</strong>
+                <strong className="llm-advanced-chevron" aria-hidden="true">
+                  {isAdvancedOpen ? (
+                    <ChevronUp size={17} strokeWidth={1.9} />
+                  ) : (
+                    <ChevronDown size={17} strokeWidth={1.9} />
+                  )}
+                </strong>
               </button>
               {isAdvancedOpen ? (
                 <div className="llm-advanced-fields">
                   <label>
-                    JSON 模式
-                    <input value="json_object" readOnly />
-                  </label>
-                  <label>
-                    超时
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={selected.timeoutSeconds}
-                      onChange={event => updateSelectedNumber("timeoutSeconds", event.target.value, selected.timeoutSeconds)}
-                    />
-                  </label>
-                  <label>
                     Temperature
                     <input
                       type="number"
+                      aria-label="Temperature"
+                      title="控制输出随机性；越低越稳定，越高越发散。"
                       min={0}
                       step={0.1}
                       value={selected.temperature}
@@ -496,11 +528,31 @@ export function LlmSettingsPanel({
                     Max tokens
                     <input
                       type="number"
+                      aria-label="Max tokens"
+                      title="限制单次整理输出长度，避免内容过长。"
                       min={0}
                       step={1}
                       value={selected.maxTokens}
                       onChange={event => updateSelectedNumber("maxTokens", event.target.value, selected.maxTokens)}
                     />
+                  </label>
+                  <label>
+                    Timeout
+                    <input
+                      type="number"
+                      aria-label="Timeout"
+                      title="请求等待时间，超过后停止本次调用。"
+                      min={1}
+                      step={1}
+                      value={selected.timeoutSeconds}
+                      onChange={event => updateSelectedNumber("timeoutSeconds", event.target.value, selected.timeoutSeconds)}
+                    />
+                  </label>
+                  <label>
+                    JSON mode
+                    <div className="llm-json-mode-status" aria-label="JSON mode" title="固定开启，确保模型返回结构化 JSON。">
+                      on
+                    </div>
                   </label>
                 </div>
               ) : null}
@@ -547,5 +599,6 @@ export function LlmSettingsPanel({
         )}
       </div>
     </section>
+    </>
   );
 }

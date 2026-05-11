@@ -1124,17 +1124,6 @@
       padding-right: 2px;
     }
 
-    .provider-rail-header {
-      padding: 4px 2px 0;
-    }
-
-    .provider-rail-header p {
-      margin: 6px 0 0;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.55;
-    }
-
     .provider-card {
       display: grid;
       gap: 9px;
@@ -1850,7 +1839,7 @@
           <div>
             <p class="llm-kicker">LLM Settings</p>
             <h1>配置大模型供应商与参数</h1>
-            <p>配置页只处理模型来源、连接信息、API Key、整理风格和诊断结果。</p>
+            <p>配置页只处理供应商、连接信息、API Key、整理风格和诊断结果。</p>
           </div>
           <div class="llm-status-orbit">
             <span class="llm-avatar">D</span>
@@ -1863,11 +1852,6 @@
 
         <div class="llm-layout">
           <aside class="provider-rail" aria-label="LLM 列表">
-            <div class="provider-rail-header">
-              <h2>模型来源</h2>
-              <p>选择要配置的供应商，查看连接状态，并编辑对应的模型参数。</p>
-            </div>
-
             <button class="provider-card" type="button">
               <div class="provider-card-head">
                 <div class="provider-title">

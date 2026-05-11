@@ -776,25 +776,38 @@ button:focus-visible {
   padding: 14px;
 }
 
+.llm-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  background: rgba(36, 33, 29, 0.24);
+}
+
 .llm-settings-overlay {
   position: fixed;
-  inset: 10px;
+  top: 50%;
+  left: 50%;
+  width: min(1040px, calc(100vw - 96px));
+  height: min(720px, calc(100vh - 72px));
+  transform: translate(-50%, -50%);
   z-index: 10;
   display: grid;
-  grid-template-rows: 54px minmax(0, 1fr);
+  grid-template-rows: 48px minmax(0, 1fr);
   border: 1px solid #bdb7aa;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #f3f1eb;
   box-shadow: 0 28px 80px rgba(42, 36, 28, 0.24);
+  overflow: hidden;
 }
 
 .llm-settings-head {
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid #d8d4ca;
-  padding: 0 16px;
+  padding: 0 12px 0 16px;
   background: #fffdf8;
 }
 
@@ -814,9 +827,9 @@ button:focus-visible {
 .llm-settings-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: 250px minmax(380px, 1fr) 390px;
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: 220px minmax(340px, 1fr) 310px;
+  gap: 10px;
+  padding: 10px;
   overflow: hidden;
 }
 
@@ -838,8 +851,8 @@ button:focus-visible {
 }
 
 .llm-provider-card {
-  min-height: 86px;
-  padding: 12px;
+  min-height: 76px;
+  padding: 10px;
   display: grid;
   gap: 7px;
   text-align: left;
@@ -955,7 +968,7 @@ button:focus-visible {
 }
 
 .llm-settings-card {
-  padding: 14px;
+  padding: 12px;
 }
 
 .llm-settings-card h2 {
@@ -972,7 +985,7 @@ button:focus-visible {
 }
 
 .llm-settings-card input {
-  min-height: 38px;
+  min-height: 34px;
   border: 1px solid #c9c5bb;
   border-radius: 6px;
   background: #fffdf8;
@@ -982,7 +995,7 @@ button:focus-visible {
 
 .llm-key-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
+  grid-template-columns: minmax(0, 1fr) 36px;
   gap: 8px;
 }
 
@@ -992,7 +1005,7 @@ button:focus-visible {
 
 .llm-key-display,
 .llm-advanced-summary {
-  min-height: 38px;
+  min-height: 36px;
   border: 1px solid #c9c5bb;
   border-radius: 6px;
   background: #fffdf8;
@@ -1007,14 +1020,32 @@ button:focus-visible {
 }
 
 .icon-action {
-  width: 38px;
-  min-height: 38px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
   display: grid;
   place-items: center;
   border: 1px solid #c9c5bb;
-  border-radius: 6px;
+  border-radius: 999px;
   background: #faf7f0;
   color: #655d53;
+  padding: 0;
+}
+
+.llm-close-action {
+  background: transparent;
+}
+
+.llm-primary-icon {
+  border-color: #2b6860;
+  background: #2b6860;
+  color: #fffdf8;
+}
+
+.llm-primary-icon:hover {
+  border-color: #285f53;
+  background: #285f53;
+  color: #fffdf8;
 }
 
 .icon-action:hover {
@@ -1051,6 +1082,60 @@ button:focus-visible {
   flex: 0 0 auto;
 }
 
+.llm-runtime-card {
+  display: grid;
+  gap: 10px;
+}
+
+.llm-runtime-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.llm-runtime-copy {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.llm-runtime-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.llm-runtime-chip {
+  border-radius: 999px;
+  background: rgba(230, 243, 235, 0.72);
+  color: #2d746a;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.llm-advanced-chevron {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #655d53;
+}
+
+.llm-json-mode-status {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  border: 1px solid #c9c5bb;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: #2d746a;
+  padding: 0 10px;
+  font-weight: 800;
+}
+
 .llm-diagnostics-list {
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr);
@@ -1072,8 +1157,8 @@ button:focus-visible {
 .llm-settings-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 7px;
+  margin-top: 10px;
 }
 
 .danger-action {
@@ -1134,6 +1219,11 @@ button:focus-visible {
   .markdown-preview,
   .empty-paper {
     padding: 28px 34px;
+  }
+
+  .llm-settings-overlay {
+    width: min(760px, calc(100vw - 32px));
+    height: min(760px, calc(100vh - 32px));
   }
 
   .llm-settings-grid {

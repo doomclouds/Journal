@@ -8,6 +8,28 @@ import { describe, expect, test } from "vitest";
 describe("LLM settings responsive styles", () => {
   const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "styles.css"), "utf8");
 
+  test("renders settings as a compact centered modal instead of a full-screen sheet", () => {
+    expect(css).toMatch(/\.llm-settings-backdrop\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*z-index:\s*9;[^}]*background:\s*rgba\(36,\s*33,\s*29,\s*0\.24\);/s);
+    expect(css).toMatch(/\.llm-settings-overlay\s*\{[^}]*top:\s*50%;[^}]*left:\s*50%;[^}]*width:\s*min\(1040px,\s*calc\(100vw\s*-\s*96px\)\);[^}]*height:\s*min\(720px,\s*calc\(100vh\s*-\s*72px\)\);[^}]*transform:\s*translate\(-50%,\s*-50%\);/s);
+    expect(css).not.toMatch(/\.llm-settings-overlay\s*\{[^}]*inset:\s*10px;/s);
+    expect(css).toMatch(/\.llm-settings-head\s*\{[^}]*min-height:\s*48px;[^}]*padding:\s*0\s+12px\s+0\s+16px;/s);
+  });
+
+  test("uses compact icon controls for modal actions and advanced disclosure", () => {
+    expect(css).toMatch(/\.llm-settings-actions\s*\{[^}]*justify-content:\s*flex-end;[^}]*gap:\s*7px;/s);
+    expect(css).toMatch(/\.icon-action\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px;[^}]*border-radius:\s*999px;/s);
+    expect(css).toMatch(/\.llm-primary-icon\s*\{[^}]*background:\s*#2b6860;[^}]*color:\s*#fffdf8;/s);
+    expect(css).toMatch(/\.llm-advanced-chevron\s*\{[^}]*display:\s*inline-grid;[^}]*place-items:\s*center;/s);
+  });
+
+  test("presents advanced LLM parameters as productized runtime chips", () => {
+    expect(css).toMatch(/\.llm-runtime-card\s*\{[^}]*display:\s*grid;[^}]*gap:\s*10px;/s);
+    expect(css).toMatch(/\.llm-runtime-summary\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*space-between;/s);
+    expect(css).toMatch(/\.llm-runtime-chips\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/s);
+    expect(css).toMatch(/\.llm-runtime-chip\s*\{[^}]*border-radius:\s*999px;[^}]*background:\s*rgba\(230,\s*243,\s*235,\s*0\.72\);/s);
+    expect(css).toMatch(/\.llm-json-mode-status\s*\{[^}]*min-height:\s*34px;[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
+  });
+
   test("uses a single scroll container in narrow layouts", () => {
     expect(css).toMatch(/body:has\(\.llm-settings-overlay\)\s*\{[^}]*overflow:\s*hidden;/s);
     expect(css).toMatch(/@media\s*\(max-width:\s*1180px\)/);

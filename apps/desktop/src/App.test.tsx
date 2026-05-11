@@ -657,7 +657,8 @@ describe("App", () => {
     await openLlmSettingsFromNativeMenu();
 
     const panel = screen.getByRole("region", { name: "LLM 配置面板" });
-    expect(within(panel).getByText("模型来源")).toBeInTheDocument();
+    expect(within(panel).queryByText("模型来源")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("选择今天用于整理日记的模型。")).not.toBeInTheDocument();
     expect(within(panel).getByText("连接信息")).toBeInTheDocument();
     expect(within(panel).getByText("配置来源")).toBeInTheDocument();
     expect(within(panel).getByText("最近诊断")).toBeInTheDocument();
@@ -665,8 +666,50 @@ describe("App", () => {
     expect(within(panel).getByLabelText("当前 LLM 标识 Mock")).toHaveTextContent("M");
     expect(within(panel).getByLabelText("Mock 标识")).toHaveTextContent("M");
     expect(within(panel).getByLabelText("DeepSeek 标识")).toHaveTextContent("D");
+    expect(within(panel).getByRole("button", { name: "关闭" }).textContent).toBe("");
+    expect(within(panel).getByRole("button", { name: "测试连接" }).textContent).toBe("");
+    expect(within(panel).getByRole("button", { name: "保存并启用" }).textContent).toBe("");
+    expect(within(panel).getByRole("button", { name: "展开高级参数" })).toHaveTextContent("temperature 0");
+    expect(within(panel).getByText("高级参数")).toBeInTheDocument();
+    expect(within(panel).getByText("max tokens 0")).toBeInTheDocument();
+    expect(within(panel).getByText("timeout 1s")).toBeInTheDocument();
+    expect(within(panel).getByText("JSON mode on")).toBeInTheDocument();
+    expect(within(panel).queryByText("测试当前表单")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("保存并启用")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("展开")).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "轻度润色" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "结构优先" })).not.toBeInTheDocument();
+  });
+
+  test("LLM settings uses a modal scrim and expands technical advanced parameters", async () => {
+    vi.stubGlobal("fetch", createInitialFetchMock());
+
+    render(<App />);
+
+    await screen.findByLabelText("LLM：Mock");
+    await openLlmSettingsFromNativeMenu();
+
+    expect(screen.getByTestId("llm-settings-backdrop")).toBeInTheDocument();
+    const panel = screen.getByRole("region", { name: "LLM 配置面板" });
+    fireEvent.click(within(panel).getByRole("button", { name: /DeepSeek/ }));
+    expect(within(panel).getByText("max tokens 1200")).toBeInTheDocument();
+    expect(within(panel).getByText("timeout 45s")).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("button", { name: "展开高级参数" }));
+
+    expect(within(panel).getByRole("button", { name: "收起高级参数" })).toBeInTheDocument();
+    const temperatureInput = within(panel).getByLabelText("Temperature");
+    expect(temperatureInput).toHaveAttribute("title", "控制输出随机性；越低越稳定，越高越发散。");
+    expect(within(panel).queryByText("控制输出随机性；越低越稳定，越高越发散。")).not.toBeInTheDocument();
+    const maxTokensInput = within(panel).getByLabelText("Max tokens");
+    expect(maxTokensInput).toHaveAttribute("title", "限制单次整理输出长度，避免内容过长。");
+    expect(within(panel).queryByText("限制单次整理输出长度，避免内容过长。")).not.toBeInTheDocument();
+    const timeoutInput = within(panel).getByLabelText("Timeout");
+    expect(timeoutInput).toHaveAttribute("title", "请求等待时间，超过后停止本次调用。");
+    expect(within(panel).queryByText("请求等待时间，超过后停止本次调用。")).not.toBeInTheDocument();
+    const jsonModeStatus = within(panel).getByLabelText("JSON mode");
+    expect(jsonModeStatus).toHaveTextContent("on");
+    expect(jsonModeStatus).toHaveAttribute("title", "固定开启，确保模型返回结构化 JSON。");
+    expect(within(panel).queryByText("固定开启，确保模型返回结构化 JSON。")).not.toBeInTheDocument();
   });
 
   test("tests provider and shows safe technical details", async () => {
@@ -696,7 +739,7 @@ describe("App", () => {
     await screen.findByLabelText("LLM：Mock");
     await openLlmSettingsFromNativeMenu();
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
-    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
 
     expect(await screen.findByText("测试失败，配置没有保存")).toBeInTheDocument();
     expect(screen.getByText("LLM rejected the API key.")).toBeInTheDocument();
@@ -2018,7 +2061,7 @@ describe("LlmSettingsPanel", () => {
     expect(screen.getByPlaceholderText("sk-••••••••••••••••4A7C")).toHaveValue("");
 
     fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-new-secret-value" } });
-    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
 
     await waitFor(() => expect(onTest).toHaveBeenCalled());
     const candidate = onTest.mock.calls[0][1];
@@ -2075,7 +2118,7 @@ describe("LlmSettingsPanel", () => {
 
     expect(screen.getByDisplayValue("sk-revealed-edited-secret")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
 
     await waitFor(() => expect(onTest).toHaveBeenCalled());
     const candidate = onTest.mock.calls[0][1];
@@ -2105,7 +2148,7 @@ describe("LlmSettingsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
     fireEvent.change(screen.getByLabelText("模型"), { target: { value: "deepseek-next" } });
-    fireEvent.click(screen.getByRole("button", { name: "测试当前表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
 
     await waitFor(() => expect(onTest).toHaveBeenCalled());
     expect(onTest.mock.calls[0][0]).toBe("deepseek");
