@@ -71,6 +71,7 @@ Steps:
 - Keep block editing inline on the paper surface, with compact `编辑` chip and `取消` / `保存修改`.
 - Keep the bottom input and main actions visible as the primary workflow.
 - Put raw input trace, tags, and material mapping in left rail and right assistant.
+- Wire `只看日记 / 日记 + 助手` as a real stateful view switch; journal-only mode hides the assistant and expands the paper region.
 
 Acceptance:
 
@@ -78,6 +79,7 @@ Acceptance:
 - There is one primary `保存日记` action in the content flow.
 - The main `重新整理` action remains distinguishable from right-side quick actions.
 - Today Assistant shows status, counts, tags, materials, and save target without exposing backend enum names.
+- The view switch never becomes decorative-only UI.
 
 ## Task 3: Align CSS With Prototype Layout
 
@@ -94,6 +96,8 @@ Steps:
   - right `minmax(360px, 0.72fr)`
 - Use paper-like center document with constrained width, serif title, readable paragraphs, and no debug-card chrome.
 - Use right assistant cards with compact stats, tags, material list, and quick actions.
+- Use rounded quote accents for raw bodies and material items instead of plain straight border lines.
+- Restore LLM provider/current-provider letter avatars as centered circular visual anchors.
 - Keep feedback messages in a dedicated row above the workbench.
 - Add responsive rules:
   - <= 1040px: rail + paper first, assistant below.

@@ -67,6 +67,8 @@ describe("Today workbench productized CSS contract", () => {
   test("uses the accepted three-column command surface layout", () => {
     expect(css).toContain("grid-template-columns: 260px minmax(520px, 1fr) minmax(360px, 0.72fr);");
     expect(css).toContain('grid-template-areas: "rail paper assistant";');
+    expect(css).toMatch(/\.command-workspace\.journal-only\s*\{[^}]*grid-template-columns:\s*260px\s+minmax\(620px,\s*1fr\);/s);
+    expect(css).toMatch(/\.command-workspace\.journal-only\s*\{[^}]*grid-template-areas:\s*"rail paper";/s);
     expect(css).toMatch(/@media\s*\(max-width:\s*1040px\)/);
     expect(css).toMatch(/@media\s*\(max-width:\s*820px\)/);
   });
@@ -89,6 +91,12 @@ describe("Today workbench productized CSS contract", () => {
     expect(css).toMatch(/\.edit-chip\s*\{[^}]*position:\s*absolute;[^}]*border-radius:\s*999px;/s);
     expect(css).toMatch(/\.journal-block-inline-editor\s*\{[^}]*border-left:\s*4px\s+solid\s+var\(--sage\);[^}]*background:\s*#eff7f1;/s);
     expect(css).toMatch(/\.journal-block-inline-actions\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;[^}]*gap:\s*10px;/s);
+  });
+
+  test("uses rounded quote accents instead of plain straight borders", () => {
+    expect(css).toMatch(/\.material-item::before\s*\{[^}]*position:\s*absolute;[^}]*top:\s*11px;[^}]*bottom:\s*11px;[^}]*border-radius:\s*999px;/s);
+    expect(css).toMatch(/\.raw-body::before\s*\{[^}]*position:\s*absolute;[^}]*top:\s*12px;[^}]*bottom:\s*12px;[^}]*border-radius:\s*999px;/s);
+    expect(css).toMatch(/\.llm-provider-avatar,\s*\.llm-current-avatar\s*\{[^}]*display:\s*inline-grid;[^}]*place-items:\s*center;[^}]*border-radius:\s*999px;/s);
   });
 
   test("collapses without nested scroll traps on tablet and phone widths", () => {

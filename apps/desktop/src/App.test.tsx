@@ -457,6 +457,36 @@ describe("App", () => {
     expect(screen.queryByText("Raw inputs")).not.toBeInTheDocument();
   });
 
+  test("view switch toggles between journal-only and journal-with-assistant", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+
+    const { container } = render(<App />);
+
+    await screen.findByLabelText("今日助手");
+
+    const journalOnly = screen.getByRole("button", { name: "只看日记" });
+    const withAssistant = screen.getByRole("button", { name: "日记 + 助手" });
+    expect(withAssistant).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("今日助手")).toBeInTheDocument();
+
+    fireEvent.click(journalOnly);
+
+    expect(journalOnly).toHaveAttribute("aria-pressed", "true");
+    expect(withAssistant).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByLabelText("今日助手")).not.toBeInTheDocument();
+    expect(container.querySelector(".command-workspace")).toHaveClass("journal-only");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(withAssistant);
+
+    expect(withAssistant).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("今日助手")).toBeInTheDocument();
+  });
+
   test("shows current LLM provider in top status strip", async () => {
     mockFetchSequence([
       { body: healthResponse },
@@ -525,6 +555,9 @@ describe("App", () => {
     expect(within(panel).getByText("配置来源")).toBeInTheDocument();
     expect(within(panel).getByText("最近诊断")).toBeInTheDocument();
     expect(within(panel).getByText("忠实整理")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("当前 LLM 标识 Mock")).toHaveTextContent("M");
+    expect(within(panel).getByLabelText("Mock 标识")).toHaveTextContent("M");
+    expect(within(panel).getByLabelText("DeepSeek 标识")).toHaveTextContent("D");
     expect(within(panel).queryByRole("button", { name: "轻度润色" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "结构优先" })).not.toBeInTheDocument();
   });

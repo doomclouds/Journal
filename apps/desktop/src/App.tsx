@@ -73,6 +73,7 @@ export default function App() {
   const [isSettingsSubmitting, setIsSettingsSubmitting] = useState(false);
   const [pendingRegenerateDraft, setPendingRegenerateDraft] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
+  const [workbenchView, setWorkbenchView] = useState<"journal" | "assistant">("assistant");
 
   useEffect(() => {
     let cancelled = false;
@@ -450,7 +451,7 @@ export default function App() {
           ) : null}
       </section>
 
-      <section className="workspace command-workspace">
+      <section className={`workspace command-workspace ${workbenchView === "journal" ? "journal-only" : ""}`}>
         <aside className="context-rail" aria-label="今日上下文">
           <section className="date-card">
             <p className="month">{monthLabel}</p>
@@ -512,8 +513,20 @@ export default function App() {
               <h2>默认阅读，点击段落才编辑</h2>
             </div>
             <div className="view-switch" aria-label="视图切换">
-              <button type="button">只看日记</button>
-              <button type="button" aria-pressed="true">日记 + 助手</button>
+              <button
+                type="button"
+                aria-pressed={workbenchView === "journal"}
+                onClick={() => setWorkbenchView("journal")}
+              >
+                只看日记
+              </button>
+              <button
+                type="button"
+                aria-pressed={workbenchView === "assistant"}
+                onClick={() => setWorkbenchView("assistant")}
+              >
+                日记 + 助手
+              </button>
             </div>
           </div>
 
@@ -584,6 +597,7 @@ export default function App() {
           </section>
         </section>
 
+        {workbenchView === "assistant" ? (
         <aside className="assistant-panel today-assistant" aria-label="今日助手">
           <div className="assistant-head">
             <div>
@@ -727,6 +741,7 @@ export default function App() {
             ) : null}
           </div>
         </aside>
+        ) : null}
       </section>
       {isLlmPanelOpen && aiSettings ? (
         <LlmSettingsPanel

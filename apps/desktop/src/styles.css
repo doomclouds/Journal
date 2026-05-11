@@ -879,8 +879,63 @@ button:focus-visible {
   background: #e8f3ef;
 }
 
-.llm-provider-status,
-.llm-provider-card span {
+.llm-provider-title,
+.llm-current-orbit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.llm-provider-title > div,
+.llm-current-orbit > div {
+  min-width: 0;
+}
+
+.llm-provider-avatar,
+.llm-current-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--sage);
+  color: #fffdf8;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 0 0 6px rgba(47, 111, 95, 0.10);
+}
+
+.llm-provider-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.llm-current-avatar {
+  width: 42px;
+  height: 42px;
+  font-size: 15px;
+}
+
+.llm-provider-title strong {
+  display: block;
+  overflow: hidden;
+  color: #2f2a24;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-provider-title small {
+  display: block;
+  margin-top: 3px;
+}
+
+.llm-current-orbit h2 {
+  margin-top: 0;
+}
+
+.llm-provider-status {
   width: fit-content;
   border-radius: 999px;
   padding: 3px 8px;
@@ -890,7 +945,6 @@ button:focus-visible {
   font-weight: 800;
 }
 
-.llm-provider-card.active span,
 .llm-provider-card.active .llm-provider-status,
 .llm-provider-status.active,
 .llm-provider-status.ready {
@@ -898,8 +952,7 @@ button:focus-visible {
   color: #2d746a;
 }
 
-.llm-provider-status.failed,
-.llm-provider-card span.failed {
+.llm-provider-status.failed {
   background: #f8e3df;
   color: #963c33;
 }
@@ -1277,6 +1330,11 @@ button:focus-visible {
     rgba(248, 246, 239, 0.84);
 }
 
+.command-workspace.journal-only {
+  grid-template-columns: 260px minmax(620px, 1fr);
+  grid-template-areas: "rail paper";
+}
+
 .command-workspace .context-rail,
 .command-workspace .journal-stage,
 .command-workspace .assistant-panel {
@@ -1444,12 +1502,24 @@ button:focus-visible {
 }
 
 .raw-body {
+  position: relative;
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
-  padding: 0 12px 12px 34px;
+  padding: 12px 12px 12px 34px;
   font-size: 13px;
   line-height: 1.75;
   overflow-wrap: anywhere;
+}
+
+.raw-body::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 17px;
+  width: 4px;
+  border-radius: 999px;
+  background: rgba(181, 127, 48, 0.42);
 }
 
 .raw-map {
@@ -2009,13 +2079,25 @@ button:focus-visible {
 }
 
 .material-item {
-  border-left: 3px solid rgba(181, 127, 48, 0.34);
+  position: relative;
+  border-left: 0;
   border-radius: 0 8px 8px 0;
   background: rgba(248, 246, 239, 0.7);
   color: #413b33;
-  padding: 9px 10px;
+  padding: 9px 10px 9px 20px;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.material-item::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 8px;
+  width: 4px;
+  border-radius: 999px;
+  background: rgba(181, 127, 48, 0.48);
 }
 
 .material-meta {

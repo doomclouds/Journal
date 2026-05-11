@@ -77,6 +77,10 @@ function providerStatusLabel(provider: AiProviderView, selectedTestResult: AiPro
   return "需要配置";
 }
 
+function providerInitial(displayName: string) {
+  return displayName.trim().slice(0, 1).toUpperCase() || "?";
+}
+
 function createClientFailure(caught: unknown, technicalDetails: string): AiProviderHealthResult {
   return {
     isSuccess: false,
@@ -296,8 +300,16 @@ export function LlmSettingsPanel({
                 aria-pressed={isSelected}
                 onClick={() => handleSelectProvider(provider.id)}
               >
-                <strong>{provider.displayName}</strong>
-                <span>{providerStatusLabel(providerView ?? {
+                <div className="llm-provider-title">
+                  <span className="llm-provider-avatar" aria-label={`${provider.displayName} 标识`}>
+                    {providerInitial(provider.displayName)}
+                  </span>
+                  <div>
+                    <strong>{provider.displayName}</strong>
+                    <small>{provider.id === "mock" ? "本地备用" : providerSourceLabel(providerView?.source ?? "default")}</small>
+                  </div>
+                </div>
+                <span className="llm-provider-status">{providerStatusLabel(providerView ?? {
                   ...provider,
                   isActive: provider.id === currentViewSettings.activeProviderId,
                   hasApiKey: Boolean(provider.apiKey),
@@ -306,7 +318,6 @@ export function LlmSettingsPanel({
                   source: "default",
                   lastTestStatus: "not-tested"
                 }, selectedProviderTestResult)}</span>
-                <small>{provider.id === "mock" ? "本地备用" : providerSourceLabel(providerView?.source ?? "default")}</small>
               </button>
             );
           })}
@@ -316,12 +327,19 @@ export function LlmSettingsPanel({
           <form className="llm-settings-main" onSubmit={handleActivate}>
             <section className="llm-settings-card">
               <span className="rail-label">当前 LLM</span>
-              <h2>{selected.displayName}</h2>
-              <p>
-                {selectedView?.source === "environment"
-                  ? "当前配置包含环境变量覆盖；环境变量字段不会回写配置文件。"
-                  : "切换后会先做一次最小请求测试，通过后才会保存并启用。"}
-              </p>
+              <div className="llm-current-orbit">
+                <span className="llm-current-avatar" aria-label={`当前 LLM 标识 ${selected.displayName}`}>
+                  {providerInitial(selected.displayName)}
+                </span>
+                <div>
+                  <h2>{selected.displayName}</h2>
+                  <p>
+                    {selectedView?.source === "environment"
+                      ? "当前配置包含环境变量覆盖；环境变量字段不会回写配置文件。"
+                      : "切换后会先做一次最小请求测试，通过后才会保存并启用。"}
+                  </p>
+                </div>
+              </div>
             </section>
 
             <section className="llm-settings-card">
