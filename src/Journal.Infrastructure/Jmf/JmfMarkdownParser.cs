@@ -118,21 +118,52 @@ public static partial class JmfMarkdownParser
             }
 
             var content = body.Substring(start.Index + start.Length, end.Index - start.Index - start.Length);
-            sections.Add(CreateSection(sectionId, RemoveLeadingHeading(content)));
+            sections.Add(CreateSection(sectionId, RemoveLeadingHeading(content), start.Value));
             searchIndex = end.Index + end.Length;
         }
 
         return sections;
     }
 
-    private static JmfSection CreateSection(string id, string content)
+    private static JmfSection CreateSection(string id, string content, string markerLine)
     {
+        var provenance = ParseProvenance(markerLine);
+
         if (!JmfSectionCatalog.TryGet(id, out var definition))
         {
-            return new JmfSection(id, id, content, JmfSectionKind.System, false);
+            return new JmfSection(id, id, content, JmfSectionKind.System, false, provenance);
         }
 
-        return new JmfSection(definition.Id, definition.Title, content, definition.Kind, definition.IsEditableInBlockMode);
+        return new JmfSection(definition.Id, definition.Title, content, definition.Kind, definition.IsEditableInBlockMode, provenance);
+    }
+
+    private static JmfSectionProvenance ParseProvenance(string markerLine)
+    {
+        static string ReadAttribute(string marker, string name)
+        {
+            var pattern = $"{name}=\"";
+            var start = marker.IndexOf(pattern, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return "unknown";
+            }
+
+            start += pattern.Length;
+            var end = marker.IndexOf('"', start);
+            return end > start ? marker[start..end] : "unknown";
+        }
+
+        var rawInputIdsValue = ReadAttribute(markerLine, "based_on_raw_inputs");
+        var rawInputIds = string.Equals(rawInputIdsValue, "unknown", StringComparison.Ordinal)
+            ? Array.Empty<string>()
+            : rawInputIdsValue.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return new JmfSectionProvenance(
+            ReadAttribute(markerLine, "origin"),
+            ReadAttribute(markerLine, "created_by"),
+            ReadAttribute(markerLine, "last_touched_by"),
+            ReadAttribute(markerLine, "last_operation"),
+            rawInputIds);
     }
 
     private static string RemoveLeadingHeading(string content)
@@ -169,7 +200,7 @@ public static partial class JmfMarkdownParser
     private static JmfValidationIssue CreateIssue(string code, string message, string repairHint) =>
         new(code, message, repairHint);
 
-    [GeneratedRegex(@"<!--\s*journal:section\s+(?<id>[^>\s]+)\s*-->")]
+    [GeneratedRegex(@"<!--\s*journal:section\s+(?<id>[^>\s]+)(?:\s+[^>]*)?\s*-->")]
     private static partial Regex SectionStartRegex();
 
     [GeneratedRegex(@"<!--\s*/journal:section\s+(?<id>[^>\s]+)\s*-->")]
