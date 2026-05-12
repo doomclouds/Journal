@@ -24,6 +24,12 @@ public static class JournalHarnessPrompt
 - 用户已触碰的 block 只能 append 追加。
 - 只有纯 AI 生成且未被用户触碰的 section 才允许 revise。
 - 所有计划必须保留 raw input 作为事实来源，不能把当前输入写入历史 raw inputs。
+
+允许工具：
+- appendJournalSection：向已有可编辑 section 追加内容，参数包含 sectionId、content、basedOnRawInputIds、reason。
+- upsertJournalSection：创建缺失的可编辑 section 或在安全边界内补齐内容，参数包含 sectionId、content、basedOnRawInputIds、reason。
+- reviseAiGeneratedSection：仅修订纯 AI 生成且未被用户触碰的 section，参数包含 sectionId、content、basedOnRawInputIds、reason。
+- noOp：无法安全操作或无需操作时使用，参数包含 reason。
 """;
 
     private static readonly JsonSerializerOptions SerializerOptions = new()

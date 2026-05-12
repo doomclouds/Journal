@@ -38,5 +38,9 @@ public sealed class JournalHarnessPromptTests
         Assert.Equal("当前输入：今天先把上下文拆开。", request.UserMessage);
         Assert.Contains("只能调用允许的工具", request.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("JSON", request.SystemInstructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("appendJournalSection", request.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("upsertJournalSection", request.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("reviseAiGeneratedSection", request.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("noOp", request.SystemInstructions, StringComparison.Ordinal);
     }
 }
