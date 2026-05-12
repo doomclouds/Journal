@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Journal Audit Workbench Current Shell</title>
+  <style>
+    :root {
+      --paper: #fffdf7;
+      --bg: #eef1eb;
+      --rail: #f2efe7;
+      --assistant: #efeadd;
+      --ink: #25211d;
+      --muted: #746d63;
+      --line: rgba(52, 45, 36, 0.13);
+      --sage: #2f6f5f;
+      --gold: #b57f30;
+      --danger: #9d5146;
+      --soft-green: rgba(230, 243, 235, 0.72);
+      --soft-gold: rgba(255, 250, 240, 0.82);
+      --soft-red: rgba(246, 230, 226, 0.82);
+      --shadow-paper: 0 18px 42px rgba(52, 43, 31, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif; letter-spacing: 0; }
+    button, input, select { font: inherit; }
+
+    .desktop-shell { height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+    .top-context { display: grid; grid-template-columns: 210px minmax(0, 1fr) auto; align-items: center; gap: 18px; border-bottom: 1px solid var(--line); background: rgba(255, 253, 247, 0.88); padding: 12px 20px; }
+    .brand { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+    .brand strong { font-size: 18px; }
+    .brand span, .today-line { color: var(--muted); font-size: 13px; }
+    .today-line { display: flex; justify-content: center; gap: 8px; white-space: nowrap; }
+    .top-action { min-height: 30px; border: 1px solid rgba(47,111,95,.18); border-radius: 999px; background: var(--soft-green); color: var(--sage); padding: 0 11px; font-size: 12px; font-weight: 900; }
+    .dot { width: 9px; height: 9px; border-radius: 999px; background: var(--sage); box-shadow: 0 0 0 4px rgba(47,111,95,.12); display: inline-block; margin-top: 4px; }
+
+    .workspace { min-height: 0; display: grid; grid-template-columns: 250px minmax(640px, 1fr) minmax(300px, .46fr); grid-template-areas: "rail main inspector"; background: rgba(248, 246, 239, 0.84); }
+    .rail { grid-area: rail; overflow: auto; border-right: 1px solid var(--line); background: linear-gradient(180deg, rgba(247,244,236,.86), rgba(238,232,219,.82)), var(--rail); }
+    .main-stage { grid-area: main; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: rgba(248,246,239,.74); }
+    .inspector { grid-area: inspector; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0,1fr); overflow: hidden; border-left: 1px solid rgba(52,45,36,.13); background: linear-gradient(180deg, rgba(255,253,247,.84), rgba(239,234,222,.9)), var(--assistant); }
+
+    .date-card { border-bottom: 1px solid var(--line); padding: 22px 20px 18px; }
+    .date-card p { margin: 0 0 10px; color: var(--gold); font-size: 12px; font-weight: 900; }
+    .date-card h1 { margin: 0; font-size: 30px; line-height: 1.1; }
+    .date-card h1 span { display: block; margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .date-card input { width: 100%; min-height: 34px; margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,253,247,.88); color: var(--ink); padding: 0 9px; }
+
+    .rail-section { border-bottom: 1px solid var(--line); padding: 16px 18px; }
+    .section-head, .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .section-head h2, .panel-head h2 { margin: 0; font-size: 14px; line-height: 1.2; }
+    .section-head span, .panel-head span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+    .run-list, .tool-list, .field-list, .summary-grid { display: grid; gap: 9px; }
+    .run-card, .tool-card, .field-row, .summary-card, .inspector-card {
+      border: 1px solid rgba(52,45,36,.12);
+      border-radius: 10px;
+      background: rgba(255,253,247,.68);
+      padding: 11px;
+    }
+    .run-card { cursor: default; }
+    .run-card.active { border-color: rgba(47,111,95,.3); background: var(--soft-green); }
+    .run-card.blocked { border-color: rgba(157,81,70,.22); background: var(--soft-red); }
+    .meta { display: flex; gap: 7px; justify-content: space-between; color: var(--muted); font-size: 11px; font-weight: 800; margin-bottom: 7px; }
+    .run-card p, .tool-card p, .summary-card p, .inspector-card p { margin: 0; color: #4d463e; font-size: 12px; line-height: 1.65; }
+    .mini-pill { border-radius: 999px; background: rgba(47,111,95,.1); color: var(--sage); padding: 3px 7px; font-size: 10px; font-weight: 900; }
+    .mini-pill.blocked { background: rgba(157,81,70,.1); color: var(--danger); }
+    .mini-pill.warn { background: rgba(181,127,48,.14); color: #805b1d; }
+
+    .stage-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 26px 12px; border-bottom: 1px solid rgba(52,45,36,.08); }
+    .stage-title p { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
+    .stage-title h2 { margin: 0; font-size: 18px; }
+    .view-switch { display: inline-flex; gap: 4px; border: 1px solid var(--line); border-radius: 999px; background: #ebe5d9; padding: 4px; }
+    .view-switch button { min-width: 84px; min-height: 30px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); padding: 0 12px; font-size: 12px; font-weight: 900; }
+    .view-switch button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 8px 20px rgba(43,38,30,.08); }
+
+    .audit-scroll { min-height: 0; overflow: auto; padding: 22px 34px 36px; }
+    .audit-board { width: min(940px, 100%); margin: 0 auto; display: grid; gap: 16px; }
+    .summary-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    .summary-card strong { display: block; color: var(--sage); font-size: 22px; line-height: 1.15; }
+    .summary-card span { color: var(--muted); font-size: 12px; }
+
+    .timeline-panel {
+      border: 1px solid rgba(52,45,36,.12);
+      background: var(--paper);
+      box-shadow: var(--shadow-paper);
+      padding: 24px;
+    }
+    .timeline-panel h2 { margin: 0 0 16px; font-size: 20px; }
+    .tool-card { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; align-items: start; border-left: 4px solid rgba(47,111,95,.34); }
+    .tool-card.blocked { border-left-color: rgba(157,81,70,.55); background: rgba(246,230,226,.5); }
+    .tool-name { font-size: 12px; font-weight: 900; color: var(--ink); overflow-wrap: anywhere; }
+    .tool-target { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+    .inspector-head { display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(52,45,36,.12); padding: 16px 18px 14px; }
+    .eyebrow { margin: 0; color: var(--sage); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .inspector-head h2 { margin: 4px 0 0; font-size: 19px; line-height: 1.25; }
+    .inspector-body { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 12px; padding: 14px; }
+    .field-row { display: grid; grid-template-columns: 112px 1fr; gap: 8px; font-size: 12px; line-height: 1.5; }
+    .field-row span:first-child { color: var(--muted); }
+    .code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow: auto; background: rgba(255,253,247,.72); }
+
+    .placement-note {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      width: min(600px, calc(100vw - 36px));
+      border: 1px solid rgba(47,111,95,.22);
+      border-radius: 10px;
+      background: rgba(255,253,247,.96);
+      box-shadow: 0 16px 40px rgba(52,43,31,.16);
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.65;
+      color: #3c3831;
+    }
+    .placement-note strong { color: var(--sage); }
+
+    @media (max-width: 1040px) {
+      .desktop-shell { height: auto; min-height: 100vh; overflow: visible; }
+      .top-context { grid-template-columns: 1fr; align-items: start; }
+      .today-line { justify-content: flex-start; }
+      .workspace { grid-template-columns: 250px minmax(0,1fr); grid-template-areas: "rail main" "inspector inspector"; }
+      .rail, .inspector, .main-stage { min-height: auto; overflow: visible; }
+      .inspector { border-left: 0; border-top: 1px solid rgba(52,45,36,.13); min-height: 420px; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .tool-card { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="desktop-shell">
+    <header class="top-context">
+      <div class="brand"><strong>Journal</strong><span>本地优先晨间日记</span></div>
+      <div class="today-line"><span class="dot"></span><span><strong>AI 审计</strong> · 2026年5月12日 · 只查看工具执行，不编辑日记正文</span></div>
+      <button class="top-action">返回今日</button>
+    </header>
+
+    <section class="workspace">
+      <aside class="rail">
+        <section class="date-card">
+          <p>Audit Date</p>
+          <h1>5月12日<span>当天 harness run</span></h1>
+          <input type="date" value="2026-05-12">
+        </section>
+        <section class="rail-section">
+          <div class="section-head"><h2>运行记录</h2><span>3 次</span></div>
+          <div class="run-list">
+            <article class="run-card active"><div class="meta"><span>08:31</span><span class="mini-pill">reviewing</span></div><p>整理当前 user message，追加到「灵感」。</p></article>
+            <article class="run-card blocked"><div class="meta"><span>08:16</span><span class="mini-pill blocked">blocked</span></div><p>尝试替换用户块，被规则拒绝。</p></article>
+            <article class="run-card"><div class="meta"><span>08:02</span><span class="mini-pill">reviewing</span></div><p>创建初始整理草稿。</p></article>
+          </div>
+        </section>
+        <section class="rail-section">
+          <div class="section-head"><h2>筛选</h2><span>当前日</span></div>
+          <div class="run-list">
+            <article class="run-card"><div class="meta"><span>状态</span><span class="mini-pill warn">全部</span></div><p>成功、拒绝、attention 都保留在当天审计里。</p></article>
+          </div>
+        </section>
+      </aside>
+
+      <section class="main-stage">
+        <div class="stage-toolbar">
+          <div class="stage-title"><p>审计工作台</p><h2>工具调用时间线</h2></div>
+          <div class="view-switch">
+            <button>摘要</button>
+            <button aria-pressed="true">工具调用</button>
+            <button>草稿差异</button>
+          </div>
+        </div>
+        <div class="audit-scroll">
+          <div class="audit-board">
+            <section class="summary-grid">
+              <article class="summary-card"><strong>4</strong><span>工具调用</span></article>
+              <article class="summary-card"><strong>2</strong><span>已应用</span></article>
+              <article class="summary-card"><strong>1</strong><span>被拒绝</span></article>
+              <article class="summary-card"><strong>Valid</strong><span>JMF 校验</span></article>
+            </section>
+
+            <section class="timeline-panel">
+              <h2>08:31 · 本次输入整理</h2>
+              <div class="tool-list">
+                <article class="tool-card">
+                  <div class="tool-name">organizeNewInput</div>
+                  <p>当前输入作为 user message，历史 raw inputs 作为 protected context。Planner 判断本次意图是补充 prompt 设计，不重洗全量历史材料。</p>
+                  <div class="mini-pill">allowed</div>
+                </article>
+                <article class="tool-card">
+                  <div class="tool-name">appendJournalSection</div>
+                  <p>目标 section：inspiration。追加 1 段内容，保留原段落不变，更新 provenance 为 mixed / last_operation append。</p>
+                  <div class="mini-pill">applied</div>
+                </article>
+                <article class="tool-card">
+                  <div class="tool-name">upsertJournalSection</div>
+                  <p>目标 section 已存在，因此降级为 append，不执行整块替换。</p>
+                  <div class="mini-pill">applied</div>
+                </article>
+                <article class="tool-card blocked">
+                  <div class="tool-name">replaceSection</div>
+                  <p>拒绝原因：目标块包含用户编辑内容。第一阶段用户块只允许 append，不允许 delete / clear / replace。</p>
+                  <div class="mini-pill blocked">rejected</div>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <aside class="inspector">
+        <div class="inspector-head">
+          <div><p class="eyebrow">Inspector</p><h2>选中操作详情</h2></div>
+        </div>
+        <div class="inspector-body">
+          <section class="inspector-card">
+            <div class="panel-head"><h2>操作合同</h2><span>append</span></div>
+            <div class="field-list">
+              <div class="field-row"><span>目标 section</span><strong>inspiration</strong></div>
+              <div class="field-row"><span>来源</span><strong>current user message</strong></div>
+              <div class="field-row"><span>写入边界</span><strong>reviewing draft</strong></div>
+              <div class="field-row"><span>正式 entry</span><strong>未写入</strong></div>
+            </div>
+          </section>
+          <section class="inspector-card">
+            <div class="panel-head"><h2>Provenance</h2><span>hidden in normal UI</span></div>
+            <pre class="code">&lt;!-- journal:section inspiration
+origin="mixed"
+created_by="ai"
+last_touched_by="ai"
+last_operation="append"
+based_on_raw_inputs="raw-3" --&gt;</pre>
+          </section>
+          <section class="inspector-card">
+            <div class="panel-head"><h2>用户可见结论</h2><span>summary</span></div>
+            <p>AI 只追加了新内容，没有覆盖用户已写段落；当前 draft 可确认。</p>
+          </section>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="placement-note">
+    <strong>推荐最终形态：</strong>入口仍在当前 Today Assistant 的「整理证据」附近；点击后进入这个“审计工作台”。它复用当前真实三栏 shell：左栏变日期/run 列表，中间变工具时间线，右栏变操作详情。这样既是单独审计页面，又不发明一套和当前产品不一致的新导航。
+  </div>
+</body>
+</html>
