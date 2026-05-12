@@ -151,18 +151,11 @@ public static class JournalHarnessOperationExecutor
             return existingContent;
         }
 
-        if (existingContent.EndsWith("\n\n", StringComparison.Ordinal))
-        {
-            return $"{existingContent}{next}";
-        }
-
-        if (existingContent.EndsWith('\n'))
-        {
-            return $"{existingContent}\n{next}";
-        }
-
-        return $"{existingContent}\n\n{next}";
+        return $"{TrimTrailingBlankLines(existingContent)}\n{next}";
     }
+
+    private static string TrimTrailingBlankLines(string content) =>
+        content.TrimEnd('\r', '\n');
 
     private static JmfValidationIssue CreateIssue(string code, string message) =>
         new(code, message, "Review the harness tool call and retry with an allowed operation.");

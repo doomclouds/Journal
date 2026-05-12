@@ -14,6 +14,7 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 
 - Harness tool call 的 `content` 参数包含多余空行，例如 `\n\n- item\n\n\n- item`。
 - `JournalHarnessOperationExecutor` 原样保留 AI 新内容里的空行，只做整体 `Trim()`。
+- `AppendContent` 在已有 section 和 AI append 内容之间主动使用 `\n\n` 拼接，导致即使 AI 内容已规范化，仍会额外插入一个空白分隔行。
 - `JournalBlockCard` 预览层把每一行都渲染成一个 `<p>`，空行也会渲染成 `&nbsp;` 段落。
 - `raw-inputs` 是系统材料区，内容会随用户输入增长，但阅读态默认完整展开。
 
@@ -22,6 +23,7 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 后端和前端都把模型输出当成已经排版好的 Markdown 片段：
 
 - 后端只用 `AppendContent(existing, operation.Content)` 做拼接，没有对 AI 片段内部的空行和行首尾空白做规范化。
+- `AppendContent` 把 append 当成 Markdown 段落拼接，默认加空白分隔行；但 Journal 的 section 内容主要是 bullet list，这会让列表被拆成视觉上不连续的两段。
 - 前端预览层没有压缩连续空行，导致一个模型生成的空行序列被放大成多个可见段落。
 - 今日材料区和正文 section 采用同样的默认展开策略，系统上下文材料越多，越容易压住用户真正关心的日记内容。
 
@@ -31,6 +33,7 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 
 - 后端对 harness AI 生成的新 `content` 做行级规范化：统一换行、去掉空行、去掉每行首尾空白。
 - 仅规范化 AI 工具新内容，不裁剪用户已有 section 内容，避免破坏用户手写 Markdown。
+- 后端 append 拼接改为单换行，并压掉已有内容末尾的空白行，避免“修完 AI 内容后又由拼接器插入一行空白”。
 - 前端阅读态压缩连续空行，空白段落使用更小的视觉间距。
 - `raw-inputs` / 今日材料默认折叠，只保留标题和展开按钮；用户需要看原始材料时再展开。
 - 补回归测试覆盖 AI append/upsert 空行规范化、阅读态连续空行压缩、今日材料默认折叠和展开。
@@ -45,6 +48,7 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 
 - UI 截图里同一 section 的 bullet 之间出现多倍空白。
 - Markdown section content 中可以看到连续空行。
+- 最新 AI append 内容本身已经没有空行，但已有内容和追加内容之间仍出现一个空白行。
 - `JournalBlockCard.renderPreview` 对空行生成多个 `<p>`。
 - 用户说“今日材料很长，挡住下面日记内容”。
 

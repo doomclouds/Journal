@@ -28,7 +28,7 @@ public sealed class JournalHarnessOperationExecutorTests
         Assert.Empty(result.Issues);
         var section = GetSection(result.Document, "today-focus");
         Assert.Equal(
-            "- 用户已经调整今日计划\n\n- AI 追加 harness 验证",
+            "- 用户已经调整今日计划\n- AI 追加 harness 验证",
             section.Content);
         Assert.Equal("mixed", section.Provenance.Origin);
         Assert.Equal("user", section.Provenance.CreatedBy);
@@ -63,7 +63,7 @@ public sealed class JournalHarnessOperationExecutorTests
 
         var content = GetSection(result.Document, "today-focus").Content;
         Assert.StartsWith(existingContent, content, StringComparison.Ordinal);
-        Assert.Equal($"{existingContent}\n\n- AI 追加内容", content);
+        Assert.Equal($"{existingContent}\n- AI 追加内容", content);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public sealed class JournalHarnessOperationExecutorTests
 
         Assert.True(result.Validation.IsValid);
         Assert.Equal(
-            "- 用户已经写好的计划\n\n- 今天可能较早下班\n- 测试新整理的接口",
+            "- 用户已经写好的计划\n- 今天可能较早下班\n- 测试新整理的接口",
             GetSection(result.Document, "today-focus").Content);
     }
 
