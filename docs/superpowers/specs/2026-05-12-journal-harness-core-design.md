@@ -1,7 +1,7 @@
 # Journal LLM Harness Core 设计
 
 > 日期：2026-05-12
-> 状态：待审阅
+> 状态：已交付
 > 对应方向：规范化大模型操作日记文件的能力边界
 > 最终原型：[审计工作台推荐原型](./2026-05-12-journal-harness-audit-workbench-prototype.html)
 
@@ -479,13 +479,12 @@ GET  /journal/audit?date=yyyy-MM-dd
 
 - `run-started`
 - `planner-started`
-- `tool-collected`
-- `tool-rejected`
-- `tool-applied`
-- `validation-completed`
-- `draft-updated`
 - `run-completed`
 - `run-failed`
+- `run-status`
+- `run-already-completed`
+
+当前已实现版本发送 run 级状态事件，工具调用明细、拒绝原因和 validation 结果持久化在 audit run JSON 中，由 `GET /journal/harness/runs/{runId}` 和 `GET /journal/audit?date=yyyy-MM-dd` 查询。后续如果需要更细粒度实时 UI，可以继续补 `tool-collected` / `tool-rejected` / `tool-applied` / `validation-completed` / `draft-updated` 事件，但不要把它们当成第一阶段已交付事件。
 
 `GET /journal/harness/runs/{runId}` 用于 SSE 断线重连后的状态恢复，也可作为不支持 SSE 时的 polling fallback。
 
@@ -571,7 +570,23 @@ GET  /journal/audit?date=yyyy-MM-dd
 - 审计入口放在 Today Assistant 的「整理证据」附近。
 - 完整审计页复用当前三栏 shell，点击 `返回今日` 回到日记工作台。
 
-## 14. 待后续设计的问题
+## 14. 交付落点 / Implementation notes
+
+本设计在 `feat/journal-harness-core` 分支按 Phase 6 第一阶段落地，关键实现点如下：
+
+- Section provenance：`JmfMarkdownParser` 读取 section marker 上的 `origin`、`created_by`、`last_touched_by`、`last_operation`、`based_on_raw_inputs`；`JmfMarkdownComposer` 写回非 unknown provenance；块编辑保存时把对应 section 标记为 `last_touched_by=user`、`last_operation=edit`。
+- Harness operation executor：`JournalHarnessOperationExecutor` 执行 append / upsert / revise AI-generated section / no-op。append 只追加内容；upsert 在目标 optional section 缺失时创建、存在时追加；revise 只允许纯 AI 且未被用户触碰的 section；`raw-inputs`、system section、只读 section 和未知操作会进入 validation issue。
+- Prompt split：`JournalHarnessPrompt.Build` 将历史 raw inputs、当前 draft Markdown、confirmed entry Markdown 放入 protected context，将本次 current raw input 单独作为 user message。
+- Agent Framework planner：`OpenAiCompatibleAgentRuntime.RunHarnessPlannerAsync` 暴露 `appendJournalSection`、`upsertJournalSection`、`reviseAiGeneratedSection`、`noOp` 四个 side-effect-free collector tools；工具调用只收集为 `JournalHarnessOperation`，真正的 JMF 修改、validation、draft 写入和 audit 写入都在服务端执行。
+- Audit persistence：`JournalHarnessAuditStore` 将每次 run 写成 `%LocalAppData%/Journal/.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json`，API 提供 `POST /journal/today/harness/runs`、`GET /journal/harness/runs/{runId}`、`GET /journal/harness/runs/{runId}/events`、`GET /journal/audit?date=yyyy-MM-dd`。
+- SSE：`Program.cs` 使用 `TypedResults.ServerSentEvents(...)` 和 `System.Net.ServerSentEvents.SseItem<T>` 返回事件流；已知事件名包括 `run-started`、`planner-started`、`run-completed`、`run-failed`、`run-status`、`run-already-completed`。
+- Draft boundary：工具执行成功写 `reviewing` draft；validation 或 planner 问题写 `attention` draft；no-op 保留为 audit 状态并不制造正式 entry；所有路径都不直接写 `entries/`。
+- Frontend audit workbench：`apps/desktop/src/AuditWorkbench.tsx` 嵌入当前三栏 command workspace，入口位于 Today Assistant 的整理证据区域，支持按日期加载 harness run、查看工具调用、拒绝原因、summary 和 provenance 相关信息，普通日记预览仍隐藏 marker。
+- Review hardening：Task 7/8 已补 SSE disconnect/concurrent execution 保护、重复执行 gate、audit workbench dirty guard、stale guard 和 SSE parse handling，避免旧响应覆盖当前审计状态。
+
+第一阶段没有交付 item 级 provenance、用户授权删除/隐藏、draft diff、rollback 或多日期日记浏览；这些仍保持为后续问题。
+
+## 15. 待后续设计的问题
 
 - 是否需要 item 级 provenance。
 - 是否需要用户授权删除/隐藏流程。

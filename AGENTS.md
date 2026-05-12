@@ -4,13 +4,13 @@
 
 Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
 
-Current delivered scope is Phase 5:
+Current delivered scope is Phase 6:
 
 ```text
-Natural language input -> Mock or real LLM JSON -> JMF Markdown draft -> block/source edit with JMF validation -> user confirmation -> formal Markdown file
+Natural language input -> Mock or real LLM JSON or Harness Core tool plan -> JMF Markdown draft -> block/source edit or harness execution with JMF validation -> user confirmation -> formal Markdown file
 ```
 
-Phase 5 includes the Phase 3 generation/confirmation/editor workflow plus real OpenAI-compatible LLM integration:
+Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 real OpenAI-compatible LLM integration, and Harness Core:
 
 - Backend parses draft/entry Markdown into a JMF document.
 - Block mode edits known editable sections while preserving protected/system sections.
@@ -24,8 +24,13 @@ Phase 5 includes the Phase 3 generation/confirmation/editor workflow plus real O
 - `POST /settings/ai/activate` is the protected activation path: test first, then save/enable only on success.
 - `POST /journal/today/draft/regenerate` can regenerate the current draft through a selected LLM, but the settings panel remains configuration-only; user-facing regeneration belongs in the Today workflow.
 - Real LLM output must not overwrite `raw-inputs`; server-side raw input text remains the source of truth in draft and formal JMF.
+- Phase 6 adds Harness Core: real LLMs can use side-effect-free Agent Framework tools to plan draft operations.
+- Harness operations write draft only; formal entries still require user confirmation.
+- Harness tools are limited to append, upsert, revise AI-generated section, and no-op; user content must not be deleted, cleared, or replaced.
+- Section-level provenance is stored in JMF markers and hidden from normal preview.
+- Audit run records are stored as per-run JSON files under `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` and exposed through the audit workbench.
 
-Do not assume these are implemented yet unless the code or docs say so: SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows.
+Do not assume these are implemented yet unless the code or docs say so: SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.
 
 ## Tech Stack
 
@@ -43,12 +48,14 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementations are `MockAiProvider` and `OpenAiCompatibleJournalAiProvider`.
 - OpenAI-compatible runtime and settings: `src/Journal.Infrastructure/Ai/OpenAiCompatibleAgentRuntime.cs`, `JournalAiGenerationService.cs`, `JournalAiSettingsService.cs`, `JournalAiSettingsStore.cs`, and `JournalAiSettings.cs`.
 - AI JSON validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
+- Harness Core service/planner/audit: `src/Journal.Infrastructure/Harness/JournalHarnessService.cs`, `JournalHarnessPlanner.cs`, `JournalHarnessToolCollector.cs`, `JournalHarnessOperationExecutor.cs`, and `JournalHarnessAuditStore.cs`.
 - JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, and editor request/state records.
 - JMF parse/validate/compose layer: `src/Journal.Infrastructure/Jmf/JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, and `JmfMarkdownComposer.cs`.
 - Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
 - Main desktop screen: `apps/desktop/src/App.tsx`.
 - JMF editor UI: `apps/desktop/src/JournalEditor.tsx`, `JournalBlockCard.tsx`, `InsertBlockMenu.tsx`, and `ValidationPanel.tsx`.
 - LLM settings UI: `apps/desktop/src/LlmSettingsPanel.tsx`.
+- AI audit workbench UI: `apps/desktop/src/AuditWorkbench.tsx`.
 - API client and shared frontend contracts: `apps/desktop/src/api.ts`.
 - Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
@@ -65,6 +72,9 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - Environment variables override file settings for the active/effective LLM provider. On Windows, read environment values from Process first, then User, then Machine, so user-level API keys configured outside the current terminal are still picked up. File settings are the fallback and the only source whose API key can be revealed through the UI.
 - Provider activation should remain protected: failed health checks should not switch the active provider or persist a broken candidate.
 - Regenerating a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
+- Harness execution is also draft-only. `POST /journal/today/harness/runs` appends the current raw input and creates a run record; executing the run may write `reviewing` or `attention` draft, never `entries/`.
+- Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
+- Harness provenance is section-level. Do not claim item-level provenance, diff, or rollback unless those features are added.
 - The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
 - Keep the UI quiet, tool-like, fast to scan, and focused on the daily writing workflow.
 
@@ -106,9 +116,10 @@ entries/yyyy/MM/yyyy-MM-dd.md
 .journal/raw-inputs/yyyy/MM/yyyy-MM-dd.jsonl
 .journal/drafts/yyyy/MM/yyyy-MM-dd.md
 .journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
+.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json
 ```
 
-Phase 5 continues to use the same locations, and adds `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for persisted LLM settings. There is still no `.journal/versions/` or SQLite/index directory in delivered scope. Be careful with changes that alter these paths or formats; update docs and tests together.
+Phase 5 added `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for persisted LLM settings. Phase 6 adds `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` for harness audit records. There is still no `.journal/versions/` or SQLite/index directory in delivered scope. Be careful with changes that alter these paths or formats; update docs and tests together.
 
 ## Working Rules
 
