@@ -52,6 +52,7 @@ public sealed class JournalHarnessAuditStore
 
         return runs
             .OrderByDescending(run => run.CreatedAt)
+            .ThenBy(run => run.Id, StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -60,7 +61,7 @@ public sealed class JournalHarnessAuditStore
         string runId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(runId))
+        if (!LocalJournalPaths.IsValidHarnessRunId(runId))
         {
             return null;
         }

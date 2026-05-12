@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Globalization;
 using System.Threading.Channels;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Ai;
@@ -63,7 +64,7 @@ public sealed class JournalHarnessService
         var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
         var provider = ResolveProvider(settings);
         var run = new JournalHarnessAuditRun(
-            $"run-{now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}",
+            $"run-{date.IsoDate}-{Guid.NewGuid():N}",
             date,
             now,
             null,
@@ -131,7 +132,7 @@ public sealed class JournalHarnessService
             throw new ArgumentException("runId is required", nameof(runId));
         }
 
-        var date = JournalDate.From(_clock.Today);
+        var date = ParseDateFromRunId(runId);
         var run = await _auditStore.ReadAsync(date, runId, cancellationToken)
             ?? throw new InvalidOperationException("harness run does not exist.");
         var now = _clock.Now;
@@ -139,87 +140,96 @@ public sealed class JournalHarnessService
         await _auditStore.WriteAsync(run, cancellationToken);
         Emit(emit, "run-started", run, "Harness run started.");
 
-        var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
-        var provider = ResolveProvider(settings);
-        var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
-        var currentInput = inputs.FirstOrDefault(input => string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException("current raw input does not exist.");
-        var draft = await _draftStore.ReadAsync(date, cancellationToken);
-        var entry = await _entryStore.ReadAsync(date, cancellationToken);
-        var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, inputs, now);
-        var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, inputs);
-        var authoritativeBaselineMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
-        var prompt = JournalHarnessPrompt.Build(
-            date,
-            inputs.Where(input => !string.Equals(input.Id, currentInput.Id, StringComparison.Ordinal)).ToArray(),
-            currentInput,
-            authoritativeBaselineMarkdown,
-            entry?.Markdown ?? string.Empty);
-
-        Emit(emit, "planner-started", run, "Planner started.");
-        var plan = await _planner.PlanAsync(provider, prompt, cancellationToken);
-        if (!plan.IsSuccess)
+        try
         {
-            var errors = ToPlanErrors(plan);
-            run = await CompleteWithAttentionAsync(
-                run,
+            var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
+            var provider = ResolveProvider(settings);
+            var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
+            var currentInput = inputs.FirstOrDefault(input => string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("current raw input does not exist.");
+            var draft = await _draftStore.ReadAsync(date, cancellationToken);
+            var entry = await _entryStore.ReadAsync(date, cancellationToken);
+            var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, inputs, now);
+            var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, inputs);
+            var authoritativeBaselineMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
+            var prompt = JournalHarnessPrompt.Build(
                 date,
+                inputs.Where(input => !string.Equals(input.Id, currentInput.Id, StringComparison.Ordinal)).ToArray(),
+                currentInput,
                 authoritativeBaselineMarkdown,
-                inputs,
-                errors,
-                "Planner failed.",
-                cancellationToken);
-            Emit(emit, "run-completed", run, run.Summary);
-            return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
-        }
+                entry?.Markdown ?? string.Empty);
 
-        var execution = JournalHarnessOperationExecutor.Apply(baselineDocument, plan.Operations);
-        var toolCalls = CreateToolCalls(plan.Operations, execution.Issues);
-        var sourceRawInputIds = inputs.Select(input => input.Id).ToArray();
-        if (execution.Validation.IsValid)
-        {
-            var markdown = JmfMarkdownComposer.Compose(execution.Document);
-            var status = plan.Operations.Any(operation => !string.Equals(operation.Kind, "no-op", StringComparison.Ordinal))
-                ? "reviewing"
-                : "no-change";
+            Emit(emit, "planner-started", run, "Planner started.");
+            var plan = await _planner.PlanAsync(provider, prompt, cancellationToken);
+            if (!plan.IsSuccess)
+            {
+                var errors = ToPlanErrors(plan);
+                run = await CompleteWithAttentionAsync(
+                    run,
+                    date,
+                    authoritativeBaselineMarkdown,
+                    inputs,
+                    errors,
+                    "Planner failed.",
+                    cancellationToken);
+                Emit(emit, "run-completed", run, run.Summary);
+                return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
+            }
+
+            var execution = JournalHarnessOperationExecutor.Apply(baselineDocument, plan.Operations);
+            var toolCalls = CreateToolCalls(plan.Operations, execution.Issues);
+            var sourceRawInputIds = inputs.Select(input => input.Id).ToArray();
+            if (execution.Validation.IsValid)
+            {
+                var markdown = JmfMarkdownComposer.Compose(execution.Document);
+                var status = plan.Operations.Any(operation => !string.Equals(operation.Kind, "no-op", StringComparison.Ordinal))
+                    ? "reviewing"
+                    : "no-change";
+                await _draftStore.WriteAsync(
+                    new JournalDraft(date, JournalStatus.Reviewing, markdown, sourceRawInputIds, Array.Empty<string>(), _clock.Now),
+                    cancellationToken);
+
+                run = run with
+                {
+                    CompletedAt = _clock.Now,
+                    Status = status,
+                    ProviderId = provider.Id,
+                    ToolCalls = toolCalls,
+                    Errors = Array.Empty<string>(),
+                    Summary = status == "reviewing"
+                        ? "Harness run completed and wrote a reviewing draft."
+                        : "Harness run completed with no draft changes."
+                };
+                await _auditStore.WriteAsync(run, cancellationToken);
+                Emit(emit, "run-completed", run, run.Summary);
+                return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Reviewing, cancellationToken), run);
+            }
+
+            var validationErrors = execution.Issues.Select(issue => issue.Message).ToArray();
+            var attentionMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
             await _draftStore.WriteAsync(
-                new JournalDraft(date, JournalStatus.Reviewing, markdown, sourceRawInputIds, Array.Empty<string>(), _clock.Now),
+                new JournalDraft(date, JournalStatus.Attention, attentionMarkdown, sourceRawInputIds, validationErrors, _clock.Now),
                 cancellationToken);
 
             run = run with
             {
                 CompletedAt = _clock.Now,
-                Status = status,
+                Status = "attention",
                 ProviderId = provider.Id,
                 ToolCalls = toolCalls,
-                Errors = Array.Empty<string>(),
-                Summary = status == "reviewing"
-                    ? "Harness run completed and wrote a reviewing draft."
-                    : "Harness run completed with no draft changes."
+                Errors = validationErrors,
+                Summary = "Harness run completed with validation issues."
             };
             await _auditStore.WriteAsync(run, cancellationToken);
             Emit(emit, "run-completed", run, run.Summary);
-            return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Reviewing, cancellationToken), run);
+            return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
         }
-
-        var validationErrors = execution.Issues.Select(issue => issue.Message).ToArray();
-        var attentionMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
-        await _draftStore.WriteAsync(
-            new JournalDraft(date, JournalStatus.Attention, attentionMarkdown, sourceRawInputIds, validationErrors, _clock.Now),
-            cancellationToken);
-
-        run = run with
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            CompletedAt = _clock.Now,
-            Status = "attention",
-            ProviderId = provider.Id,
-            ToolCalls = toolCalls,
-            Errors = validationErrors,
-            Summary = "Harness run completed with validation issues."
-        };
-        await _auditStore.WriteAsync(run, cancellationToken);
-        Emit(emit, "run-completed", run, run.Summary);
-        return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
+            var failed = await CompleteWithFailureAsync(run, date, exception, cancellationToken);
+            Emit(emit, "run-failed", failed, failed.Summary);
+            return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), failed);
+        }
     }
 
     private async Task<JournalHarnessAuditRun> CompleteWithAttentionAsync(
@@ -281,6 +291,64 @@ public sealed class JournalHarnessService
             ?? settings.Providers.FirstOrDefault()
             ?? throw new InvalidOperationException("No AI provider is configured.");
     }
+
+    private static JournalDate ParseDateFromRunId(string runId)
+    {
+        if (!LocalJournalPaths.IsValidHarnessRunId(runId)
+            || runId.Length < 16
+            || !runId.StartsWith("run-", StringComparison.Ordinal)
+            || runId[14] != '-'
+            || !DateOnly.TryParseExact(runId.AsSpan(4, 10), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        {
+            throw new ArgumentException("runId is invalid.", nameof(runId));
+        }
+
+        return JournalDate.From(date);
+    }
+
+    private async Task<JournalHarnessAuditRun> CompleteWithFailureAsync(
+        JournalHarnessAuditRun run,
+        JournalDate date,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var errors = new[] { ToSafeErrorMessage(exception) };
+
+        try
+        {
+            var inputs = await _rawInputStore.ReadAsync(date, CancellationToken.None);
+            var draft = await _draftStore.ReadAsync(date, CancellationToken.None);
+            var entry = await _entryStore.ReadAsync(date, CancellationToken.None);
+            var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, inputs, _clock.Now);
+            var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, inputs);
+            await _draftStore.WriteAsync(
+                new JournalDraft(
+                    date,
+                    JournalStatus.Attention,
+                    JmfMarkdownComposer.Compose(baselineDocument),
+                    inputs.Select(input => input.Id).ToArray(),
+                    errors,
+                    _clock.Now),
+                CancellationToken.None);
+        }
+        catch (Exception draftException) when (draftException is not OperationCanceledException)
+        {
+            errors = [errors[0], $"Failed to write attention draft: {ToSafeErrorMessage(draftException)}"];
+        }
+
+        var failed = run with
+        {
+            CompletedAt = _clock.Now,
+            Status = "failed",
+            Errors = errors,
+            Summary = "Harness run failed before completion."
+        };
+        await _auditStore.WriteAsync(failed, CancellationToken.None);
+        return failed;
+    }
+
+    private static string ToSafeErrorMessage(Exception exception) =>
+        exception.GetType().Name;
 
     private static string CreateEmptyDraftMarkdown(
         JournalDate date,

@@ -28,6 +28,7 @@ public sealed class JournalHarnessServiceTests
         Assert.Equal(JournalStatus.Empty, result.Today.Status);
         Assert.Single(result.Today.RawInputs);
         Assert.False(runtime.HarnessPlannerCalled);
+        Assert.StartsWith("run-2026-05-12-", result.Run.Id, StringComparison.Ordinal);
         Assert.Equal("queued", result.Run.Status);
         Assert.Equal("mock", result.Run.ProviderId);
         Assert.Equal(JournalHarnessPrompt.Version, result.Run.PromptVersion);
@@ -143,9 +144,104 @@ public sealed class JournalHarnessServiceTests
         Assert.False(File.Exists(paths.EntryPath(date)));
     }
 
+    [Fact]
+    public async Task ExecuteRunAsync_UsesDateEmbeddedInRunIdWhenClockMovesToNextDay()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var clock = new MutableJournalClock(FixedDay, FixedNow);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "- 跨日恢复执行仍写回原日期 draft",
+            ["raw-current"],
+            "跨日恢复执行。");
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([operation], "append accepted", TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime, clock);
+        var started = await service.StartTodayRunAsync("跨日执行的当前 raw input", "text", CancellationToken.None);
+        runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            "append accepted",
+            TimeSpan.FromMilliseconds(17));
+        clock.Today = FixedDay.AddDays(1);
+        clock.Now = FixedNow.AddDays(1);
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        Assert.Equal(JournalDate.From(FixedDay), result.Today.Date);
+        Assert.Equal("reviewing", result.Run.Status);
+        Assert.Contains("跨日执行的当前 raw input", result.Today.Draft!.Markdown, StringComparison.Ordinal);
+        Assert.True(File.Exists(paths.DraftPath(JournalDate.From(FixedDay))));
+        Assert.False(File.Exists(paths.DraftPath(JournalDate.From(FixedDay.AddDays(1)))));
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_WhenPlannerThrows_FinalizesRunAsFailedAndWritesAttentionDraft()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([], "unused", TimeSpan.Zero))
+        {
+            ThrowOnHarnessPlanner = true
+        };
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("planner 抛异常也要保留 raw input", "text", CancellationToken.None);
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        Assert.Equal("failed", result.Run.Status);
+        Assert.NotNull(result.Run.CompletedAt);
+        Assert.NotEmpty(result.Run.Errors);
+        Assert.DoesNotContain(result.Run.Errors, error => error.Contains("secret", StringComparison.OrdinalIgnoreCase));
+        var persisted = await new JournalHarnessAuditStore(paths).ReadAsync(result.Run.Date, result.Run.Id, CancellationToken.None);
+        Assert.NotNull(persisted);
+        Assert.Equal("failed", persisted.Status);
+        Assert.Equal(JournalStatus.Attention, result.Today.Status);
+        var rawInputs = GetSection(result.Today.Draft!.Markdown, "raw-inputs");
+        Assert.Contains("planner 抛异常也要保留 raw input", rawInputs.Content, StringComparison.Ordinal);
+        Assert.False(File.Exists(paths.EntryPath(result.Run.Date)));
+    }
+
+    [Fact]
+    public async Task AuditStore_RejectsInvalidRunIdWithoutPathTraversal()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var store = new JournalHarnessAuditStore(paths);
+        var date = JournalDate.From(FixedDay);
+
+        Assert.Throws<ArgumentException>(() => paths.HarnessAuditRunPath(date, "..\\outside"));
+        Assert.Throws<ArgumentException>(() => paths.HarnessAuditRunPath(date, "../outside"));
+        Assert.Throws<ArgumentException>(() => paths.HarnessAuditRunPath(date, "run:bad"));
+        Assert.Null(await store.ReadAsync(date, "..\\outside", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AuditStore_ReadByDateAsync_SortsByCreatedAtThenRunId()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var store = new JournalHarnessAuditStore(paths);
+        var date = JournalDate.From(FixedDay);
+        var createdAt = FixedNow;
+        var later = CreateRun(date, "run-2026-05-12-cccc", createdAt.AddMinutes(1));
+        var second = CreateRun(date, "run-2026-05-12-bbbb", createdAt);
+        var first = CreateRun(date, "run-2026-05-12-aaaa", createdAt);
+
+        await store.WriteAsync(second, CancellationToken.None);
+        await store.WriteAsync(later, CancellationToken.None);
+        await store.WriteAsync(first, CancellationToken.None);
+
+        var runs = await store.ReadByDateAsync(date, CancellationToken.None);
+
+        Assert.Equal(["run-2026-05-12-cccc", "run-2026-05-12-aaaa", "run-2026-05-12-bbbb"], runs.Select(run => run.Id).ToArray());
+    }
+
     private static JournalHarnessService CreateService(
         LocalJournalPaths paths,
-        CapturingPlannerRuntime runtime) =>
+        CapturingPlannerRuntime runtime,
+        IJournalClock? clock = null) =>
         new(
             new RawInputStore(paths),
             new DraftStore(paths),
@@ -153,7 +249,7 @@ public sealed class JournalHarnessServiceTests
             new StaticSettingsReader(JournalAiSettings.CreateDefault()),
             new JournalHarnessPlanner(runtime),
             new JournalHarnessAuditStore(paths),
-            new FixedJournalClock(FixedDay, FixedNow));
+            clock ?? new FixedJournalClock(FixedDay, FixedNow));
 
     private static LocalJournalPaths CreatePaths(string root) =>
         new(new JournalStorageOptions(root));
@@ -214,11 +310,36 @@ public sealed class JournalHarnessServiceTests
         <!-- /journal:section today-focus -->
         """;
 
+    private static JournalHarnessAuditRun CreateRun(
+        JournalDate date,
+        string runId,
+        DateTimeOffset createdAt) =>
+        new(
+            runId,
+            date,
+            createdAt,
+            null,
+            null,
+            "queued",
+            "mock",
+            JournalHarnessPrompt.Version,
+            "raw-test",
+            Array.Empty<JournalHarnessAuditToolCall>(),
+            Array.Empty<string>(),
+            "queued");
+
     private sealed class FixedJournalClock(DateOnly today, DateTimeOffset now) : IJournalClock
     {
         public DateOnly Today => today;
 
         public DateTimeOffset Now => now;
+    }
+
+    private sealed class MutableJournalClock(DateOnly today, DateTimeOffset now) : IJournalClock
+    {
+        public DateOnly Today { get; set; } = today;
+
+        public DateTimeOffset Now { get; set; } = now;
     }
 
     private sealed class StaticSettingsReader(JournalAiSettings settings) : IJournalAiSettingsReader
@@ -233,6 +354,8 @@ public sealed class JournalHarnessServiceTests
 
         public bool HarnessPlannerCalled { get; private set; }
 
+        public bool ThrowOnHarnessPlanner { get; set; }
+
         public Task<OpenAiCompatibleRunResult> RunJsonAsync(
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
@@ -245,6 +368,11 @@ public sealed class JournalHarnessServiceTests
             CancellationToken cancellationToken)
         {
             HarnessPlannerCalled = true;
+            if (ThrowOnHarnessPlanner)
+            {
+                throw new InvalidOperationException("Planner exploded with secret test detail.");
+            }
+
             return Task.FromResult(PlannerResult);
         }
     }

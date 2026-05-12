@@ -30,7 +30,15 @@ public sealed class LocalJournalPaths
         Path.Combine(_rootDirectory, ".journal", "audit", date.Year, date.Month, date.IsoDate);
 
     public string HarnessAuditRunPath(JournalDate date, string runId) =>
-        Path.Combine(HarnessAuditDirectory(date), $"{runId}.json");
+        IsValidHarnessRunId(runId)
+            ? Path.Combine(HarnessAuditDirectory(date), $"{runId}.json")
+            : throw new ArgumentException("runId contains invalid path characters.", nameof(runId));
+
+    public static bool IsValidHarnessRunId(string? runId) =>
+        !string.IsNullOrWhiteSpace(runId)
+        && runId.All(character =>
+            char.IsAsciiLetterOrDigit(character)
+            || character == '-');
 
     public static void EnsureParentDirectory(string filePath)
     {
