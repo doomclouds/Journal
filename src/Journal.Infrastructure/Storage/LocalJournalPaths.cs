@@ -26,6 +26,12 @@ public sealed class LocalJournalPaths
     public string AiSettingsPath() =>
         Path.Combine(_rootDirectory, ".journal", "settings", "ai-providers.json");
 
+    public string HarnessAuditDirectory(JournalDate date) =>
+        Path.Combine(_rootDirectory, ".journal", "audit", date.Year, date.Month, date.IsoDate);
+
+    public string HarnessAuditRunPath(JournalDate date, string runId) =>
+        Path.Combine(HarnessAuditDirectory(date), $"{runId}.json");
+
     public static void EnsureParentDirectory(string filePath)
     {
         var directory = Path.GetDirectoryName(filePath);

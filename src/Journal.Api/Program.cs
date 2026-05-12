@@ -4,6 +4,7 @@ using Journal.Domain.Application;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Ai;
 using Journal.Infrastructure.Clock;
+using Journal.Infrastructure.Harness;
 using Journal.Infrastructure.Storage;
 using Journal.Infrastructure.Today;
 
@@ -42,6 +43,9 @@ builder.Services.AddSingleton<MockAiProvider>();
 builder.Services.AddSingleton<IJournalAiAgentRuntime, OpenAiCompatibleAgentRuntime>();
 builder.Services.AddSingleton<OpenAiCompatibleJournalAiProvider>();
 builder.Services.AddSingleton<JournalAiGenerationService>();
+builder.Services.AddSingleton<JournalHarnessPlanner>();
+builder.Services.AddSingleton<JournalHarnessAuditStore>();
+builder.Services.AddSingleton<JournalHarnessService>();
 builder.Services.AddSingleton<TodayJournalService>();
 
 var app = builder.Build();
