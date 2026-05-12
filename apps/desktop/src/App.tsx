@@ -6,6 +6,7 @@ import {
   confirmTodayDraft,
   getAiSettings,
   getHealth,
+  getJournalAudit,
   getTodayEditor,
   regenerateTodayDraft,
   revealAiProviderApiKey,
@@ -16,9 +17,11 @@ import {
   type AiProviderHealthResult,
   type AiSettingsView,
   type JournalBlockEditSection,
+  type JournalHarnessAuditRun,
   type HealthResponse,
   type TodayEditorState
 } from "./api";
+import { AuditWorkbench } from "./AuditWorkbench";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
 import {
@@ -75,6 +78,9 @@ export default function App() {
   const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
   const [workbenchView, setWorkbenchView] = useState<"journal" | "assistant">("assistant");
+  const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit">("today");
+  const [auditDate, setAuditDate] = useState("");
+  const [auditRuns, setAuditRuns] = useState<JournalHarnessAuditRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -403,6 +409,40 @@ export default function App() {
     setIsRegenerateConfirmOpen(true);
   }
 
+  async function openAuditWorkbench() {
+    const date = today?.date.isoDate ?? editor?.date.isoDate ?? "";
+    if (!date) {
+      return;
+    }
+
+    resetPendingRegenerateDraft();
+    setAuditDate(date);
+    setApiError("");
+    try {
+      const runs = await getJournalAudit(date);
+      setAuditRuns(runs);
+      setWorkspaceMode("audit");
+    } catch (caught) {
+      setApiError(getErrorMessage(caught));
+    }
+  }
+
+  async function handleAuditDateChange(date: string) {
+    setAuditDate(date);
+    if (!date) {
+      setAuditRuns([]);
+      return;
+    }
+
+    setApiError("");
+    try {
+      const runs = await getJournalAudit(date);
+      setAuditRuns(runs);
+    } catch (caught) {
+      setApiError(getErrorMessage(caught));
+    }
+  }
+
   return (
     <main className="desktop-shell" aria-label="Journal 今日工作台">
       <header className="top-context command-top-context">
@@ -434,7 +474,16 @@ export default function App() {
           ) : null}
       </section>
 
-      <section className={`workspace command-workspace ${workbenchView === "journal" ? "journal-only" : ""}`}>
+      <section className={`workspace command-workspace ${workspaceMode === "today" && workbenchView === "journal" ? "journal-only" : ""}`}>
+        {workspaceMode === "audit" ? (
+          <AuditWorkbench
+            runs={auditRuns}
+            selectedDate={auditDate}
+            onDateChange={handleAuditDateChange}
+            onReturnToday={() => setWorkspaceMode("today")}
+          />
+        ) : (
+        <>
         <aside className="context-rail" aria-label="今日上下文">
           <section className="date-card">
             <p className="month">{monthLabel}</p>
@@ -676,6 +725,9 @@ export default function App() {
             <section className="assistant-card">
               <div className="assistant-card-head">
                 <h3>整理证据</h3>
+                <button type="button" className="assistant-inline-action" onClick={openAuditWorkbench}>
+                  查看审计
+                </button>
               </div>
               {rawInputViews.length > 0 ? (
                 <div className="evidence-list">
@@ -723,6 +775,8 @@ export default function App() {
           </div>
         </aside>
         ) : null}
+        </>
+        )}
       </section>
       {isLlmPanelOpen && aiSettings ? (
         <LlmSettingsPanel

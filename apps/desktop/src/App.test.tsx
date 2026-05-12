@@ -3,15 +3,19 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
   activateAiSettings,
+  getJournalAudit,
   getAiSettings,
   getTodayEditor,
+  openHarnessRunEvents,
   regenerateTodayDraft,
   revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
+  startHarnessRun,
   testAiProvider,
   type AiProviderSaveRequest,
   type AiSettingsSaveRequest,
+  type JournalHarnessRunEvent,
   type JournalDraft,
   type TodayJournalState,
   type TodayEditorState
@@ -551,6 +555,58 @@ describe("App", () => {
 
     expect(withAssistant).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("今日助手")).toBeInTheDocument();
+  });
+
+  test("opens audit workbench from Today Assistant and returns to today", async () => {
+    const editorState = createEditorState();
+    const auditRuns = [
+      {
+        id: "run-1",
+        date: reviewingToday.date,
+        createdAt: "2026-05-08T09:30:00+08:00",
+        startedAt: "2026-05-08T09:30:01+08:00",
+        completedAt: "2026-05-08T09:30:03+08:00",
+        status: "reviewing",
+        providerId: "mock",
+        promptVersion: "journal-harness-v1",
+        currentRawInputId: "raw-1",
+        toolCalls: [
+          {
+            id: "tool-1",
+            name: "appendJournalSection",
+            operationKind: "append",
+            targetSectionId: "today-focus",
+            status: "applied",
+            reason: "整理新增内容",
+            resultSummary: "追加 1 条",
+            rejectionReason: null
+          }
+        ],
+        errors: [],
+        summary: "AI 追加 1 条。"
+      }
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(editorState))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(auditRuns));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看审计" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-08", undefined)
+    );
+    expect(await screen.findByRole("heading", { name: "工具调用时间线" })).toBeInTheDocument();
+    expect(screen.getByText("appendJournalSection")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回今日" }));
+
+    expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
   });
 
   test("uses the top status dot for API health instead of exposing an API text pill", async () => {
@@ -2508,6 +2564,71 @@ describe("editor API client", () => {
       },
       body: JSON.stringify({ providerId: "mock" })
     });
+  });
+
+  test("startHarnessRun posts text to harness run endpoint", async () => {
+    const run = {
+      id: "run-1",
+      date: journalDate,
+      createdAt: "2026-05-08T09:30:00+08:00",
+      startedAt: null,
+      completedAt: null,
+      status: "queued",
+      providerId: "mock",
+      promptVersion: "journal-harness-v1",
+      currentRawInputId: "raw-1",
+      toolCalls: [],
+      errors: [],
+      summary: "Queued."
+    };
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({ today: reviewingToday, run }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startHarnessRun("今天继续整理 harness");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/harness/runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text: "今天继续整理 harness", source: "text" })
+    });
+  });
+
+  test("getJournalAudit reads audit records for selected date", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getJournalAudit("2026-05-08");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-08", undefined);
+  });
+
+  test("openHarnessRunEvents opens SSE stream and parses known events", () => {
+    const addEventListener = vi.fn();
+    const eventSource = { addEventListener } as unknown as EventSource;
+    const EventSourceMock = vi.fn(function () {
+      return eventSource;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const onEvent = vi.fn();
+
+    const result = openHarnessRunEvents("run id", onEvent);
+
+    expect(result).toBe(eventSource);
+    expect(EventSourceMock).toHaveBeenCalledWith("http://localhost:5057/journal/harness/runs/run%20id/events");
+    expect(addEventListener).toHaveBeenCalledWith("run-started", expect.any(Function));
+    expect(addEventListener).toHaveBeenCalledWith("run-completed", expect.any(Function));
+    const completedListener = addEventListener.mock.calls.find(([name]) => name === "run-completed")?.[1];
+    const event: JournalHarnessRunEvent = {
+      type: "run-completed",
+      runId: "run id",
+      status: "reviewing",
+      message: "done"
+    };
+    completedListener?.({ data: JSON.stringify(event) } as MessageEvent);
+
+    expect(onEvent).toHaveBeenCalledWith(event);
   });
 
   test("getTodayEditor calls editor endpoint", async () => {
