@@ -65,6 +65,7 @@ const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补
 export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
+  const auditRequestIdRef = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
@@ -410,24 +411,39 @@ export default function App() {
   }
 
   async function openAuditWorkbench() {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
     const date = today?.date.isoDate ?? editor?.date.isoDate ?? "";
     if (!date) {
       return;
     }
 
+    const auditRequestId = auditRequestIdRef.current + 1;
+    auditRequestIdRef.current = auditRequestId;
     resetPendingRegenerateDraft();
+    setValidationError("");
     setAuditDate(date);
     setApiError("");
     try {
       const runs = await getJournalAudit(date);
-      setAuditRuns(runs);
-      setWorkspaceMode("audit");
+      if (auditRequestId === auditRequestIdRef.current) {
+        setAuditRuns(runs);
+        setWorkspaceMode("audit");
+      }
     } catch (caught) {
-      setApiError(getErrorMessage(caught));
+      if (auditRequestId === auditRequestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
     }
   }
 
   async function handleAuditDateChange(date: string) {
+    const auditRequestId = auditRequestIdRef.current + 1;
+    auditRequestIdRef.current = auditRequestId;
     setAuditDate(date);
     if (!date) {
       setAuditRuns([]);
@@ -437,9 +453,13 @@ export default function App() {
     setApiError("");
     try {
       const runs = await getJournalAudit(date);
-      setAuditRuns(runs);
+      if (auditRequestId === auditRequestIdRef.current) {
+        setAuditRuns(runs);
+      }
     } catch (caught) {
-      setApiError(getErrorMessage(caught));
+      if (auditRequestId === auditRequestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
     }
   }
 

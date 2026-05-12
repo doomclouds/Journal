@@ -316,11 +316,14 @@ export function startHarnessRun(text: string, source = "text"): Promise<StartHar
 
 export function openHarnessRunEvents(
   runId: string,
-  onEvent: (event: JournalHarnessRunEvent) => void
+  onEvent: (event: JournalHarnessRunEvent) => void,
+  onError?: (error: Error) => void
 ): EventSource {
   const events = new EventSource(`${apiBaseUrl}/journal/harness/runs/${encodeURIComponent(runId)}/events`);
   const eventNames = [
     "run-started",
+    "run-status",
+    "run-already-completed",
     "planner-started",
     "tool-collected",
     "tool-rejected",
@@ -332,12 +335,20 @@ export function openHarnessRunEvents(
     "run-reconnected",
     "run-interrupted"
   ];
+  const reportError = (caught: unknown) => {
+    onError?.(caught instanceof Error ? caught : new Error("Harness run event stream failed."));
+  };
 
   for (const name of eventNames) {
     events.addEventListener(name, event => {
-      onEvent(JSON.parse((event as MessageEvent).data) as JournalHarnessRunEvent);
+      try {
+        onEvent(JSON.parse((event as MessageEvent).data) as JournalHarnessRunEvent);
+      } catch (caught) {
+        reportError(caught);
+      }
     });
   }
+  events.addEventListener("error", () => reportError(new Error("Harness run event stream failed.")));
 
   return events;
 }

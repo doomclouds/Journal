@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
@@ -607,6 +607,142 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回今日" }));
 
     expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
+  });
+
+  test("blocks audit workbench while inline block edits are dirty", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存的审计前编辑" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "查看审计" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
+    expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的审计前编辑");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-08", undefined);
+  });
+
+  test("keeps newest audit date runs when date requests resolve out of order", async () => {
+    const firstDateAuditDeferred = createDeferred<Response>();
+    const secondDateAuditDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse([
+        {
+          id: "run-open",
+          date: reviewingToday.date,
+          createdAt: "2026-05-08T09:30:00+08:00",
+          startedAt: "2026-05-08T09:30:01+08:00",
+          completedAt: "2026-05-08T09:30:03+08:00",
+          status: "reviewing",
+          providerId: "mock",
+          promptVersion: "journal-harness-v1",
+          currentRawInputId: "raw-1",
+          toolCalls: [
+            {
+              id: "tool-open",
+              name: "appendJournalSection",
+              operationKind: "append",
+              targetSectionId: "today-focus",
+              status: "applied",
+              reason: "打开审计",
+              resultSummary: "打开记录",
+              rejectionReason: null
+            }
+          ],
+          errors: [],
+          summary: "打开审计记录"
+        }
+      ]))
+      .mockReturnValueOnce(firstDateAuditDeferred.promise)
+      .mockReturnValueOnce(secondDateAuditDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看审计" }));
+    expect(await screen.findByRole("heading", { name: "工具调用时间线" })).toBeInTheDocument();
+
+    const dateInput = screen.getByLabelText("审计日期");
+    fireEvent.change(dateInput, { target: { value: "2026-05-09" } });
+    fireEvent.change(dateInput, { target: { value: "2026-05-10" } });
+
+    secondDateAuditDeferred.resolve(mockJsonResponse([
+      {
+        id: "run-new",
+        date: { ...journalDate, value: "2026-05-10", isoDate: "2026-05-10", monthDay: "05-10", markdownFileName: "2026-05-10.md" },
+        createdAt: "2026-05-10T09:30:00+08:00",
+        startedAt: "2026-05-10T09:30:01+08:00",
+        completedAt: "2026-05-10T09:30:03+08:00",
+        status: "reviewing",
+        providerId: "mock",
+        promptVersion: "journal-harness-v1",
+        currentRawInputId: "raw-new",
+        toolCalls: [
+          {
+            id: "tool-new",
+            name: "appendNewestAuditSection",
+            operationKind: "append",
+            targetSectionId: "today-focus",
+            status: "applied",
+            reason: "最新日期",
+            resultSummary: "最新记录",
+            rejectionReason: null
+          }
+        ],
+        errors: [],
+        summary: "最新日期审计"
+      }
+    ]));
+
+    expect(await screen.findByText("appendNewestAuditSection")).toBeInTheDocument();
+    expect(screen.queryByText("appendOlderAuditSection")).not.toBeInTheDocument();
+
+    await act(async () => {
+      firstDateAuditDeferred.resolve(mockJsonResponse([
+        {
+          id: "run-old",
+          date: { ...journalDate, value: "2026-05-09", isoDate: "2026-05-09", monthDay: "05-09", markdownFileName: "2026-05-09.md" },
+          createdAt: "2026-05-09T09:30:00+08:00",
+          startedAt: "2026-05-09T09:30:01+08:00",
+          completedAt: "2026-05-09T09:30:03+08:00",
+          status: "reviewing",
+          providerId: "mock",
+          promptVersion: "journal-harness-v1",
+          currentRawInputId: "raw-old",
+          toolCalls: [
+            {
+              id: "tool-old",
+              name: "appendOlderAuditSection",
+              operationKind: "append",
+              targetSectionId: "today-focus",
+              status: "applied",
+              reason: "旧日期",
+              resultSummary: "旧记录",
+              rejectionReason: null
+            }
+          ],
+          errors: [],
+          summary: "旧日期审计"
+        }
+      ]));
+      await firstDateAuditDeferred.promise;
+    });
+
+    expect(screen.getByText("appendNewestAuditSection")).toBeInTheDocument();
+    expect(screen.queryByText("appendOlderAuditSection")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-09", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-10", undefined);
   });
 
   test("uses the top status dot for API health instead of exposing an API text pill", async () => {
@@ -2618,6 +2754,8 @@ describe("editor API client", () => {
     expect(result).toBe(eventSource);
     expect(EventSourceMock).toHaveBeenCalledWith("http://localhost:5057/journal/harness/runs/run%20id/events");
     expect(addEventListener).toHaveBeenCalledWith("run-started", expect.any(Function));
+    expect(addEventListener).toHaveBeenCalledWith("run-status", expect.any(Function));
+    expect(addEventListener).toHaveBeenCalledWith("run-already-completed", expect.any(Function));
     expect(addEventListener).toHaveBeenCalledWith("run-completed", expect.any(Function));
     const completedListener = addEventListener.mock.calls.find(([name]) => name === "run-completed")?.[1];
     const event: JournalHarnessRunEvent = {
@@ -2629,6 +2767,43 @@ describe("editor API client", () => {
     completedListener?.({ data: JSON.stringify(event) } as MessageEvent);
 
     expect(onEvent).toHaveBeenCalledWith(event);
+  });
+
+  test("openHarnessRunEvents reports invalid event JSON without throwing", () => {
+    const addEventListener = vi.fn();
+    const eventSource = { addEventListener } as unknown as EventSource;
+    const EventSourceMock = vi.fn(function () {
+      return eventSource;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+
+    openHarnessRunEvents("run-1", onEvent, onError);
+
+    const statusListener = addEventListener.mock.calls.find(([name]) => name === "run-status")?.[1];
+    expect(() => statusListener?.({ data: "{not-json" } as MessageEvent)).not.toThrow();
+
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  test("openHarnessRunEvents reports EventSource errors", () => {
+    const addEventListener = vi.fn();
+    const eventSource = { addEventListener } as unknown as EventSource;
+    const EventSourceMock = vi.fn(function () {
+      return eventSource;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const onError = vi.fn();
+
+    openHarnessRunEvents("run-1", vi.fn(), onError);
+
+    const errorListener = addEventListener.mock.calls.find(([name]) => name === "error")?.[1];
+    expect(errorListener).toBeDefined();
+    errorListener?.(new Event("error"));
+
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
   });
 
   test("getTodayEditor calls editor endpoint", async () => {
