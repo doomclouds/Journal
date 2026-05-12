@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Net.ServerSentEvents;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Journal.Domain.Application;
@@ -168,6 +171,77 @@ app.MapPost("/journal/today/inputs", async (
     return Results.Ok(state);
 });
 
+app.MapPost("/journal/today/harness/runs", async (
+    HarnessRunRequest request,
+    JournalHarnessService service,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Text))
+    {
+        return Results.BadRequest(new { error = "text is required" });
+    }
+
+    try
+    {
+        var result = await service.StartTodayRunAsync(request.Text, request.Source ?? "text", cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/journal/harness/runs/{runId}", async Task<IResult> (
+    string runId,
+    JournalHarnessAuditStore auditStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseHarnessRunDate(runId, out var date))
+    {
+        return Results.BadRequest(new { error = "runId is invalid" });
+    }
+
+    var run = await auditStore.ReadAsync(date, runId, cancellationToken);
+    return run is null
+        ? Results.NotFound(new { error = "harness run was not found" })
+        : Results.Ok(run);
+});
+
+app.MapGet("/journal/harness/runs/{runId}/events", async Task<IResult> (
+    string runId,
+    JournalHarnessAuditStore auditStore,
+    JournalHarnessService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseHarnessRunDate(runId, out var date))
+    {
+        return Results.BadRequest(new { error = "runId is invalid" });
+    }
+
+    var run = await auditStore.ReadAsync(date, runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound(new { error = "harness run was not found" });
+    }
+
+    return TypedResults.ServerSentEvents(ToHarnessRunSseItems(service, runId, cancellationToken));
+});
+
+app.MapGet("/journal/audit", async Task<IResult> (
+    string? date,
+    JournalHarnessAuditStore auditStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseJournalDate(date, out var journalDate))
+    {
+        return Results.BadRequest(new { error = "date must use yyyy-MM-dd" });
+    }
+
+    var runs = await auditStore.ReadByDateAsync(journalDate, cancellationToken);
+    return Results.Ok(runs);
+});
+
 app.MapPost("/journal/today/draft/confirm", async (TodayJournalService service, CancellationToken cancellationToken) =>
 {
     try
@@ -230,6 +304,63 @@ app.MapPut("/journal/today/editor/blocks", async (
     }
 });
 
+static async IAsyncEnumerable<SseItem<HarnessRunEventView>> ToHarnessRunSseItems(
+    JournalHarnessService service,
+    string runId,
+    [EnumeratorCancellation] CancellationToken cancellationToken)
+{
+    var sequence = 0;
+    await foreach (var runEvent in service.ExecuteRunAsStreamAsync(runId, cancellationToken))
+    {
+        sequence++;
+        yield return new SseItem<HarnessRunEventView>(
+            new HarnessRunEventView(runEvent.Type, runEvent.RunId, runEvent.Status, runEvent.Message),
+            runEvent.Type)
+        {
+            EventId = $"{runEvent.RunId}:{sequence}"
+        };
+    }
+}
+
+static bool TryParseJournalDate(string? value, out JournalDate date)
+{
+    if (DateOnly.TryParseExact(
+        value,
+        "yyyy-MM-dd",
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.None,
+        out var parsed))
+    {
+        date = JournalDate.From(parsed);
+        return true;
+    }
+
+    date = default!;
+    return false;
+}
+
+static bool TryParseHarnessRunDate(string? runId, out JournalDate date)
+{
+    if (runId is not null
+        && LocalJournalPaths.IsValidHarnessRunId(runId)
+        && runId.Length >= 16
+        && runId.StartsWith("run-", StringComparison.Ordinal)
+        && runId[14] == '-'
+        && DateOnly.TryParseExact(
+            runId.AsSpan(4, 10),
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed))
+    {
+        date = JournalDate.From(parsed);
+        return true;
+    }
+
+    date = default!;
+    return false;
+}
+
 app.Run();
 
 public partial class Program
@@ -237,6 +368,14 @@ public partial class Program
 }
 
 public sealed record AddTodayInputRequest(string Text, string? Source);
+
+public sealed record HarnessRunRequest(string Text, string? Source);
+
+public sealed record HarnessRunEventView(
+    string Type,
+    string RunId,
+    string Status,
+    string Message);
 
 public sealed record AiProviderTestRequest(
     string ProviderId,
