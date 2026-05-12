@@ -10,8 +10,7 @@ public interface IJournalAiAgentRuntime
 
     Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
         JournalHarnessPlannerRuntimeRequest request,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException("Harness planner runtime is not supported by this implementation.");
+        CancellationToken cancellationToken);
 }
 
 public sealed record JournalHarnessPlannerRuntimeRequest(

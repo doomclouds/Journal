@@ -241,6 +241,11 @@ public sealed class JournalAiGenerationServiceTests
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
             Task.FromResult(result);
+
+        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+            JournalHarnessPlannerRuntimeRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Harness planner runtime should not be called by AI generation tests.");
     }
 
     private sealed class ThrowingRuntime : IJournalAiAgentRuntime
@@ -249,5 +254,10 @@ public sealed class JournalAiGenerationServiceTests
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("OpenAI-compatible runtime should not be called for mock provider.");
+
+        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+            JournalHarnessPlannerRuntimeRequest request,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Harness planner runtime should not be called for mock provider.");
     }
 }

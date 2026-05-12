@@ -268,6 +268,11 @@ public sealed class TodayJournalEditorServiceTests
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
             Task.FromResult(result);
+
+        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+            JournalHarnessPlannerRuntimeRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Harness planner runtime should not be called by editor service tests.");
     }
 
     private sealed class TempWorkspace : IDisposable

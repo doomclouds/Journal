@@ -195,6 +195,20 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
 
             stopwatch.Stop();
             var safeSnippet = JournalAiSafeError.Redact(response.Text, [request.ApiKey]);
+            if (collector.Operations.Count == 0)
+            {
+                return JournalHarnessPlannerRuntimeResult.Failure(
+                    JournalAiSafeError.Create(
+                        "runtime",
+                        "no_tool_calls",
+                        "LLM did not call a harness tool.",
+                        safeSnippet,
+                        [request.ApiKey]),
+                    stopwatch.Elapsed,
+                    200,
+                    safeSnippet);
+            }
+
             return JournalHarnessPlannerRuntimeResult.Success(
                 collector.Operations.ToArray(),
                 safeSnippet,

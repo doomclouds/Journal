@@ -170,5 +170,10 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
             CapturedRequest = request;
             return Task.FromResult(result);
         }
+
+        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+            JournalHarnessPlannerRuntimeRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Harness planner runtime should not be called by provider tests.");
     }
 }
