@@ -147,11 +147,13 @@ public sealed class JournalHarnessService
         var draft = await _draftStore.ReadAsync(date, cancellationToken);
         var entry = await _entryStore.ReadAsync(date, cancellationToken);
         var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, inputs, now);
+        var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, inputs);
+        var authoritativeBaselineMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
         var prompt = JournalHarnessPrompt.Build(
             date,
             inputs.Where(input => !string.Equals(input.Id, currentInput.Id, StringComparison.Ordinal)).ToArray(),
             currentInput,
-            baselineMarkdown,
+            authoritativeBaselineMarkdown,
             entry?.Markdown ?? string.Empty);
 
         Emit(emit, "planner-started", run, "Planner started.");
@@ -159,13 +161,19 @@ public sealed class JournalHarnessService
         if (!plan.IsSuccess)
         {
             var errors = ToPlanErrors(plan);
-            run = await CompleteWithAttentionAsync(run, date, baselineMarkdown, inputs, errors, "Planner failed.", cancellationToken);
+            run = await CompleteWithAttentionAsync(
+                run,
+                date,
+                authoritativeBaselineMarkdown,
+                inputs,
+                errors,
+                "Planner failed.",
+                cancellationToken);
             Emit(emit, "run-completed", run, run.Summary);
             return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
         }
 
-        var parseResult = JmfMarkdownParser.Parse(baselineMarkdown);
-        var execution = JournalHarnessOperationExecutor.Apply(parseResult.Document, plan.Operations);
+        var execution = JournalHarnessOperationExecutor.Apply(baselineDocument, plan.Operations);
         var toolCalls = CreateToolCalls(plan.Operations, execution.Issues);
         var sourceRawInputIds = inputs.Select(input => input.Id).ToArray();
         if (execution.Validation.IsValid)
@@ -195,7 +203,7 @@ public sealed class JournalHarnessService
         }
 
         var validationErrors = execution.Issues.Select(issue => issue.Message).ToArray();
-        var attentionMarkdown = JmfMarkdownComposer.Compose(parseResult.Document);
+        var attentionMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
         await _draftStore.WriteAsync(
             new JournalDraft(date, JournalStatus.Attention, attentionMarkdown, sourceRawInputIds, validationErrors, _clock.Now),
             cancellationToken);
@@ -298,6 +306,47 @@ public sealed class JournalHarnessService
 
         return JmfMarkdownRenderer.Render(aiJson, now, metadata);
     }
+
+    private static JmfDocument BuildBaselineDocumentWithServerRawInputs(
+        string baselineMarkdown,
+        IReadOnlyList<RawInput> inputs)
+    {
+        var parseResult = JmfMarkdownParser.Parse(baselineMarkdown);
+        var rawContent = RenderRawInputsSectionContent(inputs);
+        var sections = parseResult.Document.Sections.ToList();
+        var rawIndex = sections.FindIndex(section => string.Equals(section.Id, "raw-inputs", StringComparison.Ordinal));
+        if (rawIndex >= 0)
+        {
+            sections[rawIndex] = sections[rawIndex] with { Content = rawContent };
+            return parseResult.Document with { Sections = sections };
+        }
+
+        var definition = JmfSectionCatalog.Require("raw-inputs");
+        sections.Insert(0, new JmfSection(
+            definition.Id,
+            definition.Title,
+            rawContent,
+            definition.Kind,
+            definition.IsEditableInBlockMode));
+
+        return parseResult.Document with { Sections = sections };
+    }
+
+    private static string RenderRawInputsSectionContent(IReadOnlyList<RawInput> inputs) =>
+        string.Join(
+            Environment.NewLine,
+            inputs
+                .Where(input => !string.IsNullOrWhiteSpace(input.Text))
+                .Select(input => $"- {SanitizeBullet(input.Text)}"));
+
+    private static string SanitizeBullet(string value) =>
+        value
+            .Trim()
+            .Replace("\r\n", " ", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("<!--", "&lt;!--", StringComparison.Ordinal)
+            .Replace("-->", "--&gt;", StringComparison.Ordinal);
 
     private static IReadOnlyList<JournalHarnessAuditToolCall> CreateToolCalls(
         IReadOnlyList<JournalHarnessOperation> operations,
