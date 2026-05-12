@@ -63,6 +63,12 @@ public static class JournalHarnessPrompt
         return new JournalHarnessPromptRequest(
             SystemInstructions,
             JsonSerializer.Serialize(protectedContext, SerializerOptions),
-            currentInput.Text);
+            JsonSerializer.Serialize(new
+            {
+                id = currentInput.Id,
+                createdAt = currentInput.CreatedAt,
+                source = currentInput.Source,
+                text = currentInput.Text
+            }, SerializerOptions));
     }
 }

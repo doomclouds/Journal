@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Harness;
 
@@ -19,7 +20,7 @@ public sealed class JournalHarnessPromptTests
                 "历史输入：昨晚完成了 prompt harness 计划。")
         };
         var currentInput = new RawInput(
-            "raw-2",
+            "raw-3",
             date,
             new DateTimeOffset(2026, 5, 12, 7, 45, 0, TimeSpan.FromHours(8)),
             "manual",
@@ -35,7 +36,15 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("historicalRawInputs", request.ProtectedContext, StringComparison.Ordinal);
         Assert.Contains("历史输入：昨晚完成了 prompt harness 计划。", request.ProtectedContext, StringComparison.Ordinal);
         Assert.DoesNotContain("当前输入：今天先把上下文拆开。", request.ProtectedContext, StringComparison.Ordinal);
-        Assert.Equal("当前输入：今天先把上下文拆开。", request.UserMessage);
+        using var userMessage = JsonDocument.Parse(request.UserMessage);
+        Assert.Equal("raw-3", userMessage.RootElement.GetProperty("id").GetString());
+        Assert.Equal("manual", userMessage.RootElement.GetProperty("source").GetString());
+        Assert.Equal("当前输入：今天先把上下文拆开。", userMessage.RootElement.GetProperty("text").GetString());
+        Assert.Equal(
+            "2026-05-12T07:45:00+08:00",
+            userMessage.RootElement.GetProperty("createdAt").GetDateTimeOffset().ToString("yyyy-MM-ddTHH:mm:sszzz"));
+        Assert.Contains("当前输入：今天先把上下文拆开。", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("raw-3", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("只能调用允许的工具", request.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("JSON", request.SystemInstructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("appendJournalSection", request.SystemInstructions, StringComparison.Ordinal);
