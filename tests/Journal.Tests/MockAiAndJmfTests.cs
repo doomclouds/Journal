@@ -139,12 +139,12 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("generated_at: \"2026-05-08T09:30:00.0000000+08:00\"", markdown);
         Assert.Contains("<!-- journal:section raw-inputs -->", markdown);
         Assert.Contains("<!-- /journal:section raw-inputs -->", markdown);
-        Assert.Contains("<!-- journal:section yesterday-review -->", markdown);
+        Assert.Contains("<!-- journal:section yesterday-review origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("<!-- /journal:section yesterday-review -->", markdown);
-        Assert.Contains("<!-- journal:section today-focus -->", markdown);
+        Assert.Contains("<!-- journal:section today-focus origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("<!-- /journal:section today-focus -->", markdown);
-        Assert.Contains("<!-- journal:section mood -->", markdown);
-        Assert.Contains("<!-- journal:section inspiration -->", markdown);
+        Assert.Contains("<!-- journal:section mood origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
+        Assert.Contains("<!-- journal:section inspiration origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("## 原始输入", markdown);
         Assert.Contains("## 昨日回顾", markdown);
         Assert.Contains("## 今日重点", markdown);
@@ -279,7 +279,7 @@ public sealed class MockAiAndJmfTests
         var markdown = JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse("2026-05-08T09:30:00+08:00"));
 
         Assert.Equal(8, CountSectionMarkers(markdown));
-        Assert.Contains("<!-- journal:section inspiration -->", markdown);
+        Assert.Contains("<!-- journal:section inspiration origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("<!-- /journal:section inspiration -->", markdown);
         Assert.DoesNotContain("<!-- journal:section fake -->", markdown);
         Assert.DoesNotContain("<!-- /journal:section raw-inputs --> 完成", markdown);

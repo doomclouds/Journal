@@ -427,13 +427,14 @@ public sealed class JournalHarnessService
         IReadOnlyList<RawInput> inputs)
     {
         var parseResult = JmfMarkdownParser.Parse(baselineMarkdown);
+        var document = RestoreLegacyGeneratedSectionProvenance(parseResult.Document);
         var rawContent = RenderRawInputsSectionContent(inputs);
-        var sections = parseResult.Document.Sections.ToList();
+        var sections = document.Sections.ToList();
         var rawIndex = sections.FindIndex(section => string.Equals(section.Id, "raw-inputs", StringComparison.Ordinal));
         if (rawIndex >= 0)
         {
             sections[rawIndex] = sections[rawIndex] with { Content = rawContent };
-            return parseResult.Document with { Sections = sections };
+            return document with { Sections = sections };
         }
 
         var definition = JmfSectionCatalog.Require("raw-inputs");
@@ -444,8 +445,64 @@ public sealed class JournalHarnessService
             definition.Kind,
             definition.IsEditableInBlockMode));
 
-        return parseResult.Document with { Sections = sections };
+        return document with { Sections = sections };
     }
+
+    private static JmfDocument RestoreLegacyGeneratedSectionProvenance(JmfDocument document)
+    {
+        if (!LooksLikeGeneratedDocument(document))
+        {
+            return document;
+        }
+
+        var changed = false;
+        var sections = document.Sections
+            .Select(section =>
+            {
+                if (!CanRestoreLegacyAiProvenance(section))
+                {
+                    return section;
+                }
+
+                changed = true;
+                return section with
+                {
+                    Provenance = new JmfSectionProvenance(
+                        "ai",
+                        "ai",
+                        "ai",
+                        "create",
+                        Array.Empty<string>())
+                };
+            })
+            .ToArray();
+
+        return changed ? document with { Sections = sections } : document;
+    }
+
+    private static bool LooksLikeGeneratedDocument(JmfDocument document) =>
+        HasFrontMatterValue(document, "provider")
+        && HasFrontMatterValue(document, "model")
+        && HasFrontMatterValue(document, "prompt_version")
+        && HasFrontMatterValue(document, "generated_at");
+
+    private static bool HasFrontMatterValue(JmfDocument document, string key) =>
+        document.FrontMatter.TryGetValue(key, out var value)
+        && !string.IsNullOrWhiteSpace(value);
+
+    private static bool CanRestoreLegacyAiProvenance(JmfSection section) =>
+        IsUnknownProvenance(section.Provenance)
+        && JmfSectionCatalog.TryGet(section.Id, out var definition)
+        && definition.IsEditableInBlockMode
+        && definition.Kind != JmfSectionKind.System
+        && !string.Equals(definition.Id, "raw-inputs", StringComparison.Ordinal);
+
+    private static bool IsUnknownProvenance(JmfSectionProvenance provenance) =>
+        string.Equals(provenance.Origin, "unknown", StringComparison.Ordinal)
+        && string.Equals(provenance.CreatedBy, "unknown", StringComparison.Ordinal)
+        && string.Equals(provenance.LastTouchedBy, "unknown", StringComparison.Ordinal)
+        && string.Equals(provenance.LastOperation, "unknown", StringComparison.Ordinal)
+        && provenance.BasedOnRawInputIds.Count == 0;
 
     private static string RenderRawInputsSectionContent(IReadOnlyList<RawInput> inputs) =>
         string.Join(

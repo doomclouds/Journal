@@ -8,6 +8,8 @@ public static class JmfMarkdownRenderer
     private const string DocumentSchema = "journal-entry/v1";
     private const string YamlFlowIndicatorCharacters = "[]{},";
     private const string YamlLeadingIndicatorCharacters = "-?:,[]{}#&*!|>'\"%@`";
+    private static readonly JmfSectionProvenance AiCreateProvenance =
+        new("ai", "ai", "ai", "create", Array.Empty<string>());
 
     public static string Render(
         JournalAiJson aiJson,
@@ -34,18 +36,18 @@ public static class JmfMarkdownRenderer
         builder.AppendLine("---");
         builder.AppendLine();
 
-        AppendSection(builder, "raw-inputs", aiJson.RawInputs);
-        AppendSection(builder, "yesterday-review", aiJson.YesterdayReview);
-        AppendSection(builder, "today-focus", aiJson.TodayFocus);
+        AppendSection(builder, "raw-inputs", aiJson.RawInputs, JmfSectionProvenance.Unknown);
+        AppendSection(builder, "yesterday-review", aiJson.YesterdayReview, AiCreateProvenance);
+        AppendSection(builder, "today-focus", aiJson.TodayFocus, AiCreateProvenance);
 
         if (!string.IsNullOrWhiteSpace(aiJson.Mood) && !string.Equals(aiJson.Mood, "未标注", StringComparison.Ordinal))
         {
-            AppendSection(builder, "mood", [aiJson.Mood]);
+            AppendSection(builder, "mood", [aiJson.Mood], AiCreateProvenance);
         }
 
         if (aiJson.Inspiration.Count > 0 && aiJson.Inspiration.Any(item => !string.IsNullOrWhiteSpace(item)))
         {
-            AppendSection(builder, "inspiration", aiJson.Inspiration);
+            AppendSection(builder, "inspiration", aiJson.Inspiration, AiCreateProvenance);
         }
 
         return builder.ToString();
@@ -70,11 +72,17 @@ public static class JmfMarkdownRenderer
         }
     }
 
-    private static void AppendSection(StringBuilder builder, string marker, IReadOnlyList<string> items)
+    private static void AppendSection(
+        StringBuilder builder,
+        string marker,
+        IReadOnlyList<string> items,
+        JmfSectionProvenance provenance)
     {
         var title = JmfSectionCatalog.Require(marker).Title;
 
-        builder.AppendLine($"<!-- journal:section {marker} -->");
+        builder.Append("<!-- journal:section ").Append(marker);
+        AppendProvenanceAttributes(builder, provenance);
+        builder.AppendLine(" -->");
         builder.AppendLine($"## {title}");
         builder.AppendLine();
 
@@ -85,6 +93,25 @@ public static class JmfMarkdownRenderer
 
         builder.AppendLine($"<!-- /journal:section {marker} -->");
         builder.AppendLine();
+    }
+
+    private static void AppendProvenanceAttributes(StringBuilder builder, JmfSectionProvenance provenance)
+    {
+        if (provenance == JmfSectionProvenance.Unknown)
+        {
+            return;
+        }
+
+        builder.Append(" origin=\"").Append(EscapeAttributeValue(provenance.Origin)).Append('"');
+        builder.Append(" created_by=\"").Append(EscapeAttributeValue(provenance.CreatedBy)).Append('"');
+        builder.Append(" last_touched_by=\"").Append(EscapeAttributeValue(provenance.LastTouchedBy)).Append('"');
+        builder.Append(" last_operation=\"").Append(EscapeAttributeValue(provenance.LastOperation)).Append('"');
+        if (provenance.BasedOnRawInputIds.Count > 0)
+        {
+            builder.Append(" based_on_raw_inputs=\"")
+                .Append(EscapeAttributeValue(string.Join(' ', provenance.BasedOnRawInputIds)))
+                .Append('"');
+        }
     }
 
     private static string EscapeYaml(string value)
@@ -138,4 +165,14 @@ public static class JmfMarkdownRenderer
             .Replace("\n", " ", StringComparison.Ordinal)
             .Replace("<!--", "&lt;!--", StringComparison.Ordinal)
             .Replace("-->", "--&gt;", StringComparison.Ordinal);
+
+    private static string EscapeAttributeValue(string value) =>
+        value
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\r", "\n", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("<", "&#60;", StringComparison.Ordinal)
+            .Replace(">", "&#62;", StringComparison.Ordinal);
 }

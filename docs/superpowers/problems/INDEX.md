@@ -3,6 +3,7 @@
 ## 2026-05
 
 - [2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md](./2026-05/2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md): 记录 DeepSeek V4 thinking mode 在 Agent Framework tool call 后必须回传 `reasoning_content`，而 OpenAI-compatible 适配层未写回该扩展字段导致 400 的运行时兼容问题。
+- [2026-05-13-generated-draft-missing-ai-provenance-problem.md](./2026-05/2026-05-13-generated-draft-missing-ai-provenance-problem.md): 记录 AI 草稿生成入口漏写 section provenance，导致 harness 误把 AI 生成段落视为 unknown 并拒绝 revise 的来源边界问题。
 - [2026-05-13-harness-submit-not-wired-audit-empty-problem.md](./2026-05/2026-05-13-harness-submit-not-wired-audit-empty-problem.md): 记录 Phase 6 审计页已交付但主输入提交仍走旧接口，导致正常用户工作流不会产生 harness audit run 的接线缺口；现已改为 submit 走 harness run + SSE。
 - [2026-05-13-journal-generated-content-blank-line-inflation-problem.md](./2026-05/2026-05-13-journal-generated-content-blank-line-inflation-problem.md): 记录 AI 生成内容多余空行被后端原样写入、前端按段落放大，且今日材料默认展开过长导致正文阅读被遮挡的格式化体验问题。
 - [2026-05-12-harness-noop-draft-overwrite-problem.md](./2026-05/2026-05-12-harness-noop-draft-overwrite-problem.md): 记录 harness no-op/no-change 在 service 层仍写入或刷新 reviewing draft 的分层合同漂移问题。

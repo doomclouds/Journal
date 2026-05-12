@@ -299,6 +299,46 @@ public sealed class JournalHarnessServiceTests
     }
 
     [Fact]
+    public async Task ExecuteRunAsync_AllowsReviseAiGeneratedSectionFromLegacyGeneratedDraftWithoutProvenance()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var date = JournalDate.From(FixedDay);
+        await SeedLegacyGeneratedDraftWithoutProvenanceAsync(paths, date);
+        var operation = JournalHarnessOperation.ReviseAiGeneratedSection(
+            "today-focus",
+            "- 也许翻翻《第一性原理》这本书，看缘分吧～",
+            ["raw-current"],
+            "将 AI 生成的原描述改得更柔和俏皮。");
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([operation], "revise accepted", TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync(
+            "帮我把可能看《第一性原理》这本书（但不确定）改得更俏皮柔和",
+            "text",
+            CancellationToken.None);
+        runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            "revise accepted",
+            TimeSpan.FromMilliseconds(17));
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        Assert.Equal(JournalStatus.Reviewing, result.Today.Status);
+        Assert.Equal("reviewing", result.Run.Status);
+        Assert.Single(result.Run.ToolCalls);
+        Assert.Equal("applied", result.Run.ToolCalls[0].Status);
+        var todayFocus = GetSection(result.Today.Draft!.Markdown, "today-focus");
+        Assert.Equal("- 也许翻翻《第一性原理》这本书，看缘分吧～", todayFocus.Content);
+        Assert.Equal("ai", todayFocus.Provenance.Origin);
+        Assert.Equal("ai", todayFocus.Provenance.CreatedBy);
+        Assert.Equal("ai", todayFocus.Provenance.LastTouchedBy);
+        Assert.Equal("revise", todayFocus.Provenance.LastOperation);
+        Assert.Equal([started.Run.CurrentRawInputId], todayFocus.Provenance.BasedOnRawInputIds);
+        Assert.False(File.Exists(paths.EntryPath(date)));
+    }
+
+    [Fact]
     public async Task ExecuteRunAsync_FiltersPlannerRawInputIdsToCurrentServerRawInput()
     {
         using var workspace = TempWorkspace.Create();
@@ -491,6 +531,26 @@ public sealed class JournalHarnessServiceTests
             CancellationToken.None);
     }
 
+    private static async Task SeedLegacyGeneratedDraftWithoutProvenanceAsync(LocalJournalPaths paths, JournalDate date)
+    {
+        var oldRawInput = new RawInput(
+            "raw-existing",
+            date,
+            FixedNow.AddMinutes(-30),
+            "text",
+            "旧 raw input 已在 draft 里");
+        await new RawInputStore(paths).AppendAsync(oldRawInput, CancellationToken.None);
+        await new DraftStore(paths).WriteAsync(
+            new JournalDraft(
+                date,
+                JournalStatus.Reviewing,
+                LegacyGeneratedDraftWithoutProvenanceMarkdown(),
+                [oldRawInput.Id],
+                Array.Empty<string>(),
+                FixedNow.AddMinutes(-20)),
+            CancellationToken.None);
+    }
+
     private static JmfSection GetSection(string markdown, string sectionId) =>
         JmfMarkdownParser.Parse(markdown).Document.Sections.Single(section =>
             string.Equals(section.Id, sectionId, StringComparison.Ordinal));
@@ -562,6 +622,42 @@ public sealed class JournalHarnessServiceTests
         ## 今日重点
 
         - 用户保留的今日重点
+
+        <!-- /journal:section today-focus -->
+        """;
+
+    private static string LegacyGeneratedDraftWithoutProvenanceMarkdown() =>
+        """
+        ---
+        schema: journal-entry/v1
+        date: "2026-05-12"
+        month_day: "05-12"
+        status: draft
+        version: 1
+        provider: deepseek
+        model: deepseek-chat
+        prompt_version: journal-entry-json-v1.1
+        generated_at: "2026-05-12T08:30:00.0000000+08:00"
+        ---
+
+        <!-- journal:section raw-inputs -->
+        ## 原始输入
+
+        - 旧 raw input 已在 draft 里
+
+        <!-- /journal:section raw-inputs -->
+
+        <!-- journal:section yesterday-review -->
+        ## 昨日回顾
+
+        - 昨天继续推进 Journal
+
+        <!-- /journal:section yesterday-review -->
+
+        <!-- journal:section today-focus -->
+        ## 今日重点
+
+        - 可能看《第一性原理》这本书（但不确定）
 
         <!-- /journal:section today-focus -->
         """;
