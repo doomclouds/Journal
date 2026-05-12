@@ -119,6 +119,37 @@ public sealed class JmfMarkdownComposerTests
         Assert.True(validationResult.IsValid);
     }
 
+    [Fact]
+    public void Compose_WritesSectionProvenanceAttributes()
+    {
+        var document = new JmfDocument(
+            """
+            schema: journal-entry/v1
+            date: "2026-05-12"
+            """,
+            new Dictionary<string, string> { ["schema"] = "journal-entry/v1" },
+            [
+                new JmfSection(
+                    "raw-inputs",
+                    "原始输入",
+                    "- 用户原话",
+                    JmfSectionKind.Required,
+                    false,
+                    JmfSectionProvenance.Unknown),
+                new JmfSection(
+                    "today-focus",
+                    "今日重点",
+                    "- 推进 harness",
+                    JmfSectionKind.Required,
+                    true,
+                    new JmfSectionProvenance("mixed", "ai", "ai", "append", ["raw-1"]))
+            ]);
+
+        var markdown = JmfMarkdownComposer.Compose(document);
+
+        Assert.Contains("<!-- journal:section today-focus origin=\"mixed\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"append\" based_on_raw_inputs=\"raw-1\" -->", markdown);
+    }
+
     private static JmfDocument CreateDocument(params JmfSection[] sections) =>
         CreateDocument("schema: journal-entry/v1\ndate: \"2026-05-09\"", sections);
 

@@ -51,7 +51,9 @@ public static class JmfMarkdownComposer
             : section.Title;
         var content = EscapeMarkers(NormalizeLineEndings(section.Content));
 
-        builder.AppendLine($"<!-- journal:section {section.Id} -->");
+        builder.Append("<!-- journal:section ").Append(section.Id);
+        AppendProvenanceAttributes(builder, section.Provenance);
+        builder.AppendLine(" -->");
         builder.AppendLine($"## {title}");
         builder.AppendLine();
         builder.Append(content);
@@ -63,6 +65,25 @@ public static class JmfMarkdownComposer
 
         builder.AppendLine($"<!-- /journal:section {section.Id} -->");
         builder.AppendLine();
+    }
+
+    private static void AppendProvenanceAttributes(StringBuilder builder, JmfSectionProvenance provenance)
+    {
+        if (provenance == JmfSectionProvenance.Unknown)
+        {
+            return;
+        }
+
+        builder.Append(" origin=\"").Append(provenance.Origin).Append('"');
+        builder.Append(" created_by=\"").Append(provenance.CreatedBy).Append('"');
+        builder.Append(" last_touched_by=\"").Append(provenance.LastTouchedBy).Append('"');
+        builder.Append(" last_operation=\"").Append(provenance.LastOperation).Append('"');
+        if (provenance.BasedOnRawInputIds.Count > 0)
+        {
+            builder.Append(" based_on_raw_inputs=\"")
+                .Append(string.Join(' ', provenance.BasedOnRawInputIds))
+                .Append('"');
+        }
     }
 
     private static string EscapeMarkers(string content) =>

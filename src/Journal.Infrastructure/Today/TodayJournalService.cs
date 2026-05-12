@@ -281,16 +281,21 @@ public sealed class TodayJournalService
                 continue;
             }
 
+            var existing = indexes.TryGetValue(definition.Id, out var existingIndex)
+                ? merged[existingIndex]
+                : null;
+
             var section = new JmfSection(
                 definition.Id,
                 definition.Title,
                 requestSection.Content,
                 definition.Kind,
-                definition.IsEditableInBlockMode);
+                definition.IsEditableInBlockMode,
+                (existing?.Provenance ?? JmfSectionProvenance.Unknown).WithUserEdit());
 
-            if (indexes.TryGetValue(definition.Id, out var index))
+            if (existing is not null)
             {
-                merged[index] = section;
+                merged[existingIndex] = section;
             }
             else
             {
