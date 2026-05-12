@@ -62,7 +62,10 @@
 
 ## Related Problems
 
-- None.
+- [Harness Submit Not Wired Leaves Audit Empty](../../problems/2026-05/2026-05-13-harness-submit-not-wired-audit-empty-problem.md)
+- [Harness No-Op Draft Overwrite](../../problems/2026-05/2026-05-12-harness-noop-draft-overwrite-problem.md)
+- [Harness Provenance Attribute Pollution](../../problems/2026-05/2026-05-12-harness-provenance-attribute-pollution-problem.md)
+- [Harness SSE Run Lifecycle Re-Execution](../../problems/2026-05/2026-05-12-harness-sse-run-lifecycle-problem.md)
 
 ## Notes
 
