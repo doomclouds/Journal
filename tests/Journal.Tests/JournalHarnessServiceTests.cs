@@ -127,6 +127,84 @@ public sealed class JournalHarnessServiceTests
     }
 
     [Fact]
+    public async Task ExecuteRunAsStreamAsync_WhenTwoStreamsStartQueuedRun_InvokesPlannerOnce()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success(
+                [JournalHarnessOperation.NoOp("并发连接只允许首个执行。")],
+                "no-op",
+                TimeSpan.FromMilliseconds(17)))
+        {
+            PlannerEntered = CreateSignal(),
+            ReleasePlanner = CreateSignal()
+        };
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("并发 SSE 连接不应重复执行", "text", CancellationToken.None);
+
+        var firstStreamTask = CollectRunEventsAsync(service.ExecuteRunAsStreamAsync(started.Run.Id, CancellationToken.None));
+        await runtime.PlannerEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var secondEvents = await CollectRunEventsAsync(service.ExecuteRunAsStreamAsync(started.Run.Id, CancellationToken.None));
+        runtime.ReleasePlanner.SetResult(null);
+        var firstEvents = await firstStreamTask.WaitAsync(TimeSpan.FromSeconds(5));
+        var persisted = await new JournalHarnessAuditStore(paths).ReadAsync(started.Run.Date, started.Run.Id, CancellationToken.None);
+
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+        Assert.Contains(firstEvents, runEvent => runEvent.Type == "run-completed");
+        var secondEvent = Assert.Single(secondEvents);
+        Assert.Equal("run-status", secondEvent.Type);
+        Assert.Equal("running", secondEvent.Status);
+        Assert.NotEqual("running", persisted!.Status);
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsStreamAsync_WhenClientCancelsAfterStart_RunContinuesToCompletion()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success(
+                [JournalHarnessOperation.NoOp("断开连接不取消执行。")],
+                "no-op",
+                TimeSpan.FromMilliseconds(17)))
+        {
+            PlannerEntered = CreateSignal(),
+            ReleasePlanner = CreateSignal()
+        };
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("SSE 断开后 run 仍要完成", "text", CancellationToken.None);
+        using var streamCancellation = new CancellationTokenSource();
+        var enumerator = service
+            .ExecuteRunAsStreamAsync(started.Run.Id, streamCancellation.Token)
+            .GetAsyncEnumerator(streamCancellation.Token);
+
+        Assert.True(await enumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        await runtime.PlannerEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await streamCancellation.CancelAsync();
+        try
+        {
+            await enumerator.DisposeAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        runtime.ReleasePlanner.SetResult(null);
+        var completed = await WaitForRunStatusAsync(
+            paths,
+            started.Run.Date,
+            started.Run.Id,
+            status => status != "running",
+            TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+        Assert.Equal("no-change", completed.Status);
+        Assert.NotNull(completed.CompletedAt);
+    }
+
+    [Fact]
     public async Task ExecuteRunAsync_WithExistingDraft_RebuildsRawInputsFromServerInputs()
     {
         using var workspace = TempWorkspace.Create();
@@ -317,6 +395,45 @@ public sealed class JournalHarnessServiceTests
         JmfMarkdownParser.Parse(markdown).Document.Sections.Single(section =>
             string.Equals(section.Id, sectionId, StringComparison.Ordinal));
 
+    private static TaskCompletionSource<object?> CreateSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static async Task<IReadOnlyList<JournalHarnessRunEvent>> CollectRunEventsAsync(
+        IAsyncEnumerable<JournalHarnessRunEvent> events)
+    {
+        var result = new List<JournalHarnessRunEvent>();
+        await foreach (var runEvent in events)
+        {
+            result.Add(runEvent);
+        }
+
+        return result;
+    }
+
+    private static async Task<JournalHarnessAuditRun> WaitForRunStatusAsync(
+        LocalJournalPaths paths,
+        JournalDate date,
+        string runId,
+        Func<string, bool> predicate,
+        TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        var store = new JournalHarnessAuditStore(paths);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var run = await store.ReadAsync(date, runId, CancellationToken.None);
+            if (run is not null && predicate(run.Status))
+            {
+                return run;
+            }
+
+            await Task.Delay(20);
+        }
+
+        var latest = await store.ReadAsync(date, runId, CancellationToken.None);
+        throw new TimeoutException($"Run {runId} stayed {latest?.Status ?? "missing"}.");
+    }
+
     private static string ExistingDraftMarkdown() =>
         """
         ---
@@ -391,6 +508,10 @@ public sealed class JournalHarnessServiceTests
     {
         public JournalHarnessPlannerRuntimeResult PlannerResult { get; set; } = plannerResult;
 
+        public TaskCompletionSource<object?>? PlannerEntered { get; set; }
+
+        public TaskCompletionSource<object?>? ReleasePlanner { get; set; }
+
         public bool HarnessPlannerCalled { get; private set; }
 
         public int HarnessPlannerCallCount { get; private set; }
@@ -404,18 +525,24 @@ public sealed class JournalHarnessServiceTests
                 JournalAiSafeError.Create("test", "wrong_path", "Wrong runtime path.", "RunJsonAsync was called."),
                 TimeSpan.Zero));
 
-        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+        public async Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
             JournalHarnessPlannerRuntimeRequest request,
             CancellationToken cancellationToken)
         {
             HarnessPlannerCalled = true;
             HarnessPlannerCallCount++;
+            PlannerEntered?.TrySetResult(null);
+            if (ReleasePlanner is not null)
+            {
+                await ReleasePlanner.Task.WaitAsync(cancellationToken);
+            }
+
             if (ThrowOnHarnessPlanner)
             {
                 throw new InvalidOperationException("Planner exploded with secret test detail.");
             }
 
-            return Task.FromResult(PlannerResult);
+            return PlannerResult;
         }
     }
 
