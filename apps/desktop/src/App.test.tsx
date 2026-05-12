@@ -1807,6 +1807,37 @@ describe("JournalEditor", () => {
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
+  test("reading preview collapses repeated blank lines from generated content", () => {
+    const { container } = render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "- 今天可能较早下班\n\n\n\n- 测试新整理的接口\n\n\n- 检查 DeepSeek bug",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+      />
+    );
+
+    const previewLines = [...container.querySelectorAll(".journal-block-readonly p")]
+      .map(line => line.textContent);
+
+    expect(previewLines).toEqual([
+      "- 今天可能较早下班",
+      "\u00a0",
+      "- 测试新整理的接口",
+      "\u00a0",
+      "- 检查 DeepSeek bug"
+    ]);
+  });
+
   test("selected block save only submits the inline block being edited", () => {
     const onSaveBlocks = vi.fn();
     render(
@@ -1911,7 +1942,7 @@ describe("JournalEditor", () => {
     expect(screen.queryByText("临时改动，不保存")).not.toBeInTheDocument();
   });
 
-  test("assistant-friendly system raw block shows product labels without edit action", () => {
+  test("assistant-friendly system raw block is collapsed until expanded", () => {
     render(
       <JournalEditor
         editor={createEditorState()}
@@ -1921,10 +1952,15 @@ describe("JournalEditor", () => {
     );
 
     expect(screen.getByRole("heading", { name: "今日材料" })).toBeInTheDocument();
-    expect(screen.getByText("保留原话")).toBeInTheDocument();
-    expect(screen.getByText("今天要保留原始表达")).toBeInTheDocument();
+    expect(screen.queryByText("今天要保留原始表达")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "编辑 今日材料" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "编辑 今日材料" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开 今日材料" })).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "展开 今日材料" }));
+
+    expect(screen.getByText("今天要保留原始表达")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "收起 今日材料" })).toHaveAttribute("aria-expanded", "true");
   });
 
   test("shows 添加 情绪感受 for optional inserts and opens the new inline block", () => {

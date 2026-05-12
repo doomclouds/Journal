@@ -67,6 +67,49 @@ public sealed class JournalHarnessOperationExecutorTests
     }
 
     [Fact]
+    public void Apply_NormalizesBlankLinesFromAiOperationContentWhenAppending()
+    {
+        var document = CreateDocument([
+            Section("raw-inputs", "- raw"),
+            Section("yesterday-review", "- 昨天完成基础设计"),
+            Section(
+                "today-focus",
+                "- 用户已经写好的计划",
+                new JmfSectionProvenance("user", "user", "user", "edit", ["raw-1"]))
+        ]);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "\n\n  - 今天可能较早下班  \n\n\n  \n- 测试新整理的接口\n\n",
+            ["raw-2"],
+            "模型输出里带了多余空行。");
+
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(
+            "- 用户已经写好的计划\n\n- 今天可能较早下班\n- 测试新整理的接口",
+            GetSection(result.Document, "today-focus").Content);
+    }
+
+    [Fact]
+    public void Apply_NormalizesBlankLinesFromAiOperationContentWhenCreatingSection()
+    {
+        var document = CreateDocument();
+        var operation = JournalHarnessOperation.Upsert(
+            "inspiration",
+            "\n- 期待日积月累的观察\n\n\n- 希望 bug 已修复\n",
+            ["raw-2"],
+            "新增灵感时模型输出里带了多余空行。");
+
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(
+            "- 期待日积月累的观察\n- 希望 bug 已修复",
+            GetSection(result.Document, "inspiration").Content);
+    }
+
+    [Fact]
     public void Apply_RejectsReviseAiGeneratedSectionWhenSectionWasTouchedByUser()
     {
         var document = CreateDocument([

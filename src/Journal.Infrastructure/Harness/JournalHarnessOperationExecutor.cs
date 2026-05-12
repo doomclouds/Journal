@@ -46,12 +46,13 @@ public static class JournalHarnessOperationExecutor
 
             var index = sections.FindIndex(section => string.Equals(section.Id, operation.TargetSectionId, StringComparison.Ordinal));
             var basedOnRawInputIds = FilterBasedOnRawInputIds(operation.BasedOnRawInputIds, allowedRawInputIdSet);
+            var normalizedContent = NormalizeGeneratedContent(operation.Content);
             if (operation.Kind == "upsert" && index < 0)
             {
                 sections.Add(new JmfSection(
                     definition.Id,
                     definition.Title,
-                    operation.Content.Trim(),
+                    normalizedContent,
                     definition.Kind,
                     definition.IsEditableInBlockMode,
                     new JmfSectionProvenance("ai", "ai", "ai", "create", basedOnRawInputIds)));
@@ -76,7 +77,7 @@ public static class JournalHarnessOperationExecutor
 
                 sections[index] = existing with
                 {
-                    Content = operation.Content.Trim(),
+                    Content = normalizedContent,
                     Provenance = existing.Provenance with
                     {
                         Origin = "ai",
@@ -92,7 +93,7 @@ public static class JournalHarnessOperationExecutor
 
             sections[index] = existing with
             {
-                Content = AppendContent(existing.Content, operation.Content),
+                Content = AppendContent(existing.Content, normalizedContent),
                 Provenance = existing.Provenance.WithAiAppend(basedOnRawInputIds)
             };
             changed = true;
@@ -124,9 +125,21 @@ public static class JournalHarnessOperationExecutor
             .ToArray();
     }
 
+    private static string NormalizeGeneratedContent(string content)
+    {
+        var lines = content
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\r", "\n", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.None)
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0);
+
+        return string.Join('\n', lines);
+    }
+
     private static string AppendContent(string existingContent, string newContent)
     {
-        var next = newContent.Trim();
+        var next = newContent;
 
         if (existingContent.Length == 0)
         {

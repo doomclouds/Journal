@@ -759,6 +759,12 @@ button:focus-visible {
   margin: 0 0 8px;
 }
 
+.journal-block-readonly p.blank-line {
+  min-height: 4px;
+  margin: 0;
+  line-height: 1;
+}
+
 .journal-block-readonly p:last-child {
   margin-bottom: 0;
 }
@@ -1837,6 +1843,24 @@ button:focus-visible {
   color: #38362f;
   font-size: 16px;
   line-height: 1.95;
+}
+
+.journal-block-readonly p.blank-line {
+  min-height: 4px;
+  margin: 0;
+  line-height: 1;
+}
+
+.raw-inputs-toggle {
+  justify-self: start;
+  min-height: 28px;
+  border: 1px solid rgba(47, 111, 95, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.92);
+  color: var(--sage);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .edit-chip {
