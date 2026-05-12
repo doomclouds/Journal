@@ -135,6 +135,15 @@ public sealed class JournalHarnessService
         var date = ParseDateFromRunId(runId);
         var run = await _auditStore.ReadAsync(date, runId, cancellationToken)
             ?? throw new InvalidOperationException("harness run does not exist.");
+        if (!string.Equals(run.Status, "queued", StringComparison.Ordinal))
+        {
+            var eventType = IsTerminalRunStatus(run.Status)
+                ? "run-already-completed"
+                : "run-status";
+            Emit(emit, eventType, run, $"Harness run is {run.Status}.");
+            return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, null, cancellationToken), run);
+        }
+
         var now = _clock.Now;
         run = run with { StartedAt = now, Status = "running", Summary = "Harness run started." };
         await _auditStore.WriteAsync(run, cancellationToken);
@@ -349,6 +358,12 @@ public sealed class JournalHarnessService
 
     private static string ToSafeErrorMessage(Exception exception) =>
         exception.GetType().Name;
+
+    private static bool IsTerminalRunStatus(string status) =>
+        string.Equals(status, "reviewing", StringComparison.Ordinal)
+        || string.Equals(status, "no-change", StringComparison.Ordinal)
+        || string.Equals(status, "attention", StringComparison.Ordinal)
+        || string.Equals(status, "failed", StringComparison.Ordinal);
 
     private static string CreateEmptyDraftMarkdown(
         JournalDate date,

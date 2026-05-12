@@ -722,7 +722,8 @@ public sealed class TodayJournalEndpointTests
     public async Task GetHarnessRunEvents_ReturnsServerSentEventStream()
     {
         using var workspace = TempWorkspace.Create();
-        using var factory = CreateFactory(workspace.Root);
+        var runtime = new EndpointHarnessRuntime();
+        using var factory = CreateFactory(workspace.Root, runtime: runtime);
         using var client = factory.CreateClient();
 
         using var startResponse = await client.PostAsJsonAsync(
@@ -738,6 +739,51 @@ public sealed class TodayJournalEndpointTests
 
         response.EnsureSuccessStatusCode();
         Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var body = await response.Content.ReadAsStringAsync(timeout.Token);
+
+        Assert.Contains("event: run-started", body, StringComparison.Ordinal);
+        Assert.Contains("event: run-completed", body, StringComparison.Ordinal);
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+    }
+
+    [Fact]
+    public async Task GetHarnessRunEvents_WhenRunAlreadyCompleted_ReturnsTerminalEventWithoutExecutingAgain()
+    {
+        using var workspace = TempWorkspace.Create();
+        var runtime = new EndpointHarnessRuntime();
+        using var factory = CreateFactory(workspace.Root, runtime: runtime);
+        using var client = factory.CreateClient();
+
+        using var startResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "验证 harness SSE reconnect 不重复执行", source = "text" });
+        startResponse.EnsureSuccessStatusCode();
+        using var startDocument = await JsonDocument.ParseAsync(await startResponse.Content.ReadAsStreamAsync());
+        var runId = startDocument.RootElement.GetProperty("run").GetProperty("id").GetString();
+
+        using var firstResponse = await client.GetAsync(
+            $"/journal/harness/runs/{runId}/events",
+            HttpCompletionOption.ResponseHeadersRead);
+        firstResponse.EnsureSuccessStatusCode();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var firstBody = await firstResponse.Content.ReadAsStringAsync(timeout.Token);
+
+        using var secondResponse = await client.GetAsync(
+            $"/journal/harness/runs/{runId}/events",
+            HttpCompletionOption.ResponseHeadersRead);
+        secondResponse.EnsureSuccessStatusCode();
+        var secondBody = await secondResponse.Content.ReadAsStringAsync(timeout.Token);
+
+        using var auditResponse = await client.GetAsync($"/journal/harness/runs/{runId}");
+        auditResponse.EnsureSuccessStatusCode();
+        using var auditDocument = await JsonDocument.ParseAsync(await auditResponse.Content.ReadAsStreamAsync());
+
+        Assert.Contains("event: run-completed", firstBody, StringComparison.Ordinal);
+        Assert.Contains("event: run-already-completed", secondBody, StringComparison.Ordinal);
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+        Assert.Single(auditDocument.RootElement.GetProperty("toolCalls").EnumerateArray());
     }
 
     [Fact]
@@ -797,7 +843,8 @@ public sealed class TodayJournalEndpointTests
 
     private static WebApplicationFactory<Program> CreateFactory(
         string root,
-        IReadOnlyDictionary<string, string?>? env = null) =>
+        IReadOnlyDictionary<string, string?>? env = null,
+        EndpointHarnessRuntime? runtime = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -810,7 +857,7 @@ public sealed class TodayJournalEndpointTests
                     services.AddSingleton(new JournalStorageOptions(root));
                     services.AddSingleton<IJournalClock>(new FixedJournalClock(FixedDay, FixedNow));
                     services.AddSingleton<IJournalAiEnvironment>(new DictionaryJournalAiEnvironment(env));
-                    services.AddSingleton<IJournalAiAgentRuntime>(new EndpointHarnessRuntime());
+                    services.AddSingleton<IJournalAiAgentRuntime>(runtime ?? new EndpointHarnessRuntime());
                 });
             });
 
@@ -830,6 +877,8 @@ public sealed class TodayJournalEndpointTests
 
     private sealed class EndpointHarnessRuntime : IJournalAiAgentRuntime
     {
+        public int HarnessPlannerCallCount { get; private set; }
+
         public Task<OpenAiCompatibleRunResult> RunJsonAsync(
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
@@ -839,12 +888,15 @@ public sealed class TodayJournalEndpointTests
 
         public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
             JournalHarnessPlannerRuntimeRequest request,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(JournalHarnessPlannerRuntimeResult.Success(
+            CancellationToken cancellationToken)
+        {
+            HarnessPlannerCallCount++;
+            return Task.FromResult(JournalHarnessPlannerRuntimeResult.Success(
                 [JournalHarnessOperation.NoOp("Endpoint SSE test completed without draft changes.")],
                 "no-op",
                 TimeSpan.Zero,
                 200));
+        }
     }
 
     private sealed class TempWorkspace : IDisposable

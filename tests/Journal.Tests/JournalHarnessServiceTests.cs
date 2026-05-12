@@ -88,6 +88,45 @@ public sealed class JournalHarnessServiceTests
     }
 
     [Fact]
+    public async Task ExecuteRunAsync_WhenRunIsNotQueued_DoesNotInvokePlannerOrRewriteAudit()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "- 首次执行写入草稿",
+            ["raw-current"],
+            "首次执行。");
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([operation], "append accepted", TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("首次执行后不允许重复执行", "text", CancellationToken.None);
+        runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            "append accepted",
+            TimeSpan.FromMilliseconds(17));
+
+        var first = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+        var second = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+        var persisted = await new JournalHarnessAuditStore(paths).ReadAsync(started.Run.Date, started.Run.Id, CancellationToken.None);
+
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+        Assert.Equal(first.Run.Id, second.Run.Id);
+        Assert.Equal(first.Run.Status, second.Run.Status);
+        Assert.Equal(first.Run.StartedAt, second.Run.StartedAt);
+        Assert.Equal(first.Run.CompletedAt, second.Run.CompletedAt);
+        Assert.Equal(first.Run.Summary, second.Run.Summary);
+        Assert.Equal(first.Run.Id, persisted!.Id);
+        Assert.Equal(first.Run.Status, persisted.Status);
+        Assert.Equal(first.Run.StartedAt, persisted.StartedAt);
+        Assert.Equal(first.Run.CompletedAt, persisted.CompletedAt);
+        Assert.Equal(first.Run.Summary, persisted.Summary);
+        Assert.Single(second.Run.ToolCalls);
+        Assert.Single(persisted.ToolCalls);
+        Assert.Equal("reviewing", second.Run.Status);
+    }
+
+    [Fact]
     public async Task ExecuteRunAsync_WithExistingDraft_RebuildsRawInputsFromServerInputs()
     {
         using var workspace = TempWorkspace.Create();
@@ -354,6 +393,8 @@ public sealed class JournalHarnessServiceTests
 
         public bool HarnessPlannerCalled { get; private set; }
 
+        public int HarnessPlannerCallCount { get; private set; }
+
         public bool ThrowOnHarnessPlanner { get; set; }
 
         public Task<OpenAiCompatibleRunResult> RunJsonAsync(
@@ -368,6 +409,7 @@ public sealed class JournalHarnessServiceTests
             CancellationToken cancellationToken)
         {
             HarnessPlannerCalled = true;
+            HarnessPlannerCallCount++;
             if (ThrowOnHarnessPlanner)
             {
                 throw new InvalidOperationException("Planner exploded with secret test detail.");
