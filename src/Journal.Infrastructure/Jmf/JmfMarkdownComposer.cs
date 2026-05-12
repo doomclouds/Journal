@@ -51,7 +51,9 @@ public static class JmfMarkdownComposer
             : section.Title;
         var content = EscapeMarkers(NormalizeLineEndings(section.Content));
 
-        builder.AppendLine($"<!-- journal:section {section.Id} -->");
+        builder.Append("<!-- journal:section ").Append(section.Id);
+        AppendProvenanceAttributes(builder, section.Provenance);
+        builder.AppendLine(" -->");
         builder.AppendLine($"## {title}");
         builder.AppendLine();
         builder.Append(content);
@@ -65,10 +67,37 @@ public static class JmfMarkdownComposer
         builder.AppendLine();
     }
 
+    private static void AppendProvenanceAttributes(StringBuilder builder, JmfSectionProvenance provenance)
+    {
+        if (provenance == JmfSectionProvenance.Unknown)
+        {
+            return;
+        }
+
+        builder.Append(" origin=\"").Append(EscapeAttributeValue(provenance.Origin)).Append('"');
+        builder.Append(" created_by=\"").Append(EscapeAttributeValue(provenance.CreatedBy)).Append('"');
+        builder.Append(" last_touched_by=\"").Append(EscapeAttributeValue(provenance.LastTouchedBy)).Append('"');
+        builder.Append(" last_operation=\"").Append(EscapeAttributeValue(provenance.LastOperation)).Append('"');
+        if (provenance.BasedOnRawInputIds.Count > 0)
+        {
+            builder.Append(" based_on_raw_inputs=\"")
+                .Append(EscapeAttributeValue(string.Join(' ', provenance.BasedOnRawInputIds)))
+                .Append('"');
+        }
+    }
+
     private static string EscapeMarkers(string content) =>
         content
             .Replace("<!--", "&lt;!--", StringComparison.Ordinal)
             .Replace("-->", "--&gt;", StringComparison.Ordinal);
+
+    private static string EscapeAttributeValue(string value) =>
+        NormalizeLineEndings(value)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("<", "&#60;", StringComparison.Ordinal)
+            .Replace(">", "&#62;", StringComparison.Ordinal);
 
     private static string NormalizeLineEndings(string value) =>
         value

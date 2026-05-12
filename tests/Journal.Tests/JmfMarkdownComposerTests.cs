@@ -119,6 +119,75 @@ public sealed class JmfMarkdownComposerTests
         Assert.True(validationResult.IsValid);
     }
 
+    [Fact]
+    public void Compose_WritesSectionProvenanceAttributes()
+    {
+        var document = new JmfDocument(
+            """
+            schema: journal-entry/v1
+            date: "2026-05-12"
+            """,
+            new Dictionary<string, string> { ["schema"] = "journal-entry/v1" },
+            [
+                new JmfSection(
+                    "raw-inputs",
+                    "原始输入",
+                    "- 用户原话",
+                    JmfSectionKind.Required,
+                    false,
+                    JmfSectionProvenance.Unknown),
+                new JmfSection(
+                    "today-focus",
+                    "今日重点",
+                    "- 推进 harness",
+                    JmfSectionKind.Required,
+                    true,
+                    new JmfSectionProvenance("mixed", "ai", "ai", "append", ["raw-1"]))
+            ]);
+
+        var markdown = JmfMarkdownComposer.Compose(document);
+
+        Assert.Contains("<!-- journal:section today-focus origin=\"mixed\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"append\" based_on_raw_inputs=\"raw-1\" -->", markdown);
+    }
+
+    [Fact]
+    public void Compose_EscapesProvenanceAttributeValues()
+    {
+        var document = new JmfDocument(
+            """
+            schema: journal-entry/v1
+            date: "2026-05-12"
+            """,
+            new Dictionary<string, string> { ["schema"] = "journal-entry/v1" },
+            [
+                new JmfSection(
+                    "today-focus",
+                    "今日重点",
+                    "- 推进 harness",
+                    JmfSectionKind.Required,
+                    true,
+                    new JmfSectionProvenance(
+                        "ai\" --><script>alert(1)</script><!--",
+                        "ai\nuser",
+                        "ai",
+                        "append",
+                        ["raw-1", "raw-x\" --><script>alert(1)</script><!--"]))
+            ]);
+
+        var markdown = JmfMarkdownComposer.Compose(document);
+        var markerLine = markdown.Split('\n').Single(line => line.StartsWith("<!-- journal:section today-focus", StringComparison.Ordinal));
+
+        Assert.Contains("origin=\"ai&quot; --&#62;&#60;script&#62;alert(1)&#60;/script&#62;&#60;!--\"", markerLine);
+        Assert.Contains("created_by=\"ai user\"", markerLine);
+        Assert.Contains("based_on_raw_inputs=\"raw-1 raw-x&quot; --&#62;&#60;script&#62;alert(1)&#60;/script&#62;&#60;!--\"", markerLine);
+        Assert.DoesNotContain("<script>", markerLine);
+        Assert.DoesNotContain("--><script>", markerLine);
+        Assert.EndsWith(" -->", markerLine, StringComparison.Ordinal);
+
+        var parseResult = JmfMarkdownParser.Parse(markdown);
+        Assert.Empty(parseResult.Issues);
+    }
+
     private static JmfDocument CreateDocument(params JmfSection[] sections) =>
         CreateDocument("schema: journal-entry/v1\ndate: \"2026-05-09\"", sections);
 

@@ -173,6 +173,53 @@ export type AiSettingsActivationResult = {
   testResult: AiProviderHealthResult;
 };
 
+export type JournalHarnessRunStatus =
+  | "queued"
+  | "running"
+  | "reviewing"
+  | "attention"
+  | "no-change"
+  | "failed"
+  | "interrupted";
+
+export type JournalHarnessAuditToolCall = {
+  id: string;
+  name: string;
+  operationKind: string;
+  targetSectionId: string;
+  status: string;
+  reason: string;
+  resultSummary: string;
+  rejectionReason: string | null;
+};
+
+export type JournalHarnessAuditRun = {
+  id: string;
+  date: JournalDate;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: JournalHarnessRunStatus;
+  providerId: string;
+  promptVersion: string;
+  currentRawInputId: string;
+  toolCalls: JournalHarnessAuditToolCall[];
+  errors: string[];
+  summary: string;
+};
+
+export type JournalHarnessRunEvent = {
+  type: string;
+  runId: string;
+  status: JournalHarnessRunStatus;
+  message: string;
+};
+
+export type StartHarnessRunResponse = {
+  today: TodayJournalState;
+  run: JournalHarnessAuditRun;
+};
+
 const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
 
 type ErrorResponse = {
@@ -255,6 +302,59 @@ export function addTodayInput(text: string, source = "text"): Promise<TodayJourn
     },
     body: JSON.stringify({ text, source })
   });
+}
+
+export function startHarnessRun(text: string, source = "text"): Promise<StartHarnessRunResponse> {
+  return requestJson<StartHarnessRunResponse>("/journal/today/harness/runs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ text, source })
+  });
+}
+
+export function openHarnessRunEvents(
+  runId: string,
+  onEvent: (event: JournalHarnessRunEvent) => void,
+  onError?: (error: Error) => void
+): EventSource {
+  const events = new EventSource(`${apiBaseUrl}/journal/harness/runs/${encodeURIComponent(runId)}/events`);
+  const eventNames = [
+    "run-started",
+    "run-status",
+    "run-already-completed",
+    "planner-started",
+    "tool-collected",
+    "tool-rejected",
+    "tool-applied",
+    "validation-completed",
+    "draft-updated",
+    "run-completed",
+    "run-failed",
+    "run-reconnected",
+    "run-interrupted"
+  ];
+  const reportError = (caught: unknown) => {
+    onError?.(caught instanceof Error ? caught : new Error("Harness run event stream failed."));
+  };
+
+  for (const name of eventNames) {
+    events.addEventListener(name, event => {
+      try {
+        onEvent(JSON.parse((event as MessageEvent).data) as JournalHarnessRunEvent);
+      } catch (caught) {
+        reportError(caught);
+      }
+    });
+  }
+  events.addEventListener("error", () => reportError(new Error("Harness run event stream failed.")));
+
+  return events;
+}
+
+export function getJournalAudit(date: string): Promise<JournalHarnessAuditRun[]> {
+  return requestJson<JournalHarnessAuditRun[]>(`/journal/audit?date=${encodeURIComponent(date)}`);
 }
 
 export function confirmTodayDraft(): Promise<TodayJournalState> {

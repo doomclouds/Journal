@@ -17,23 +17,28 @@
 - [LLM 设置体验设计](./docs/superpowers/specs/2026-05-10-llm-settings-ux-polish-design.md)
 - [LLM 设置体验原型](./docs/superpowers/specs/2026-05-10-llm-settings-ux-polish-prototype.html)
 - [LLM 设置体验实施归档](./docs/superpowers/archives/2026-05/2026-05-10-llm-settings-ux-polish-archives.md)
+- [阶段 6 Harness Core 设计](./docs/superpowers/specs/2026-05-12-journal-harness-core-design.md)
+- [阶段 6 审计工作台原型](./docs/superpowers/specs/2026-05-12-journal-harness-audit-workbench-prototype.html)
+- [阶段 6 实施计划](./docs/superpowers/plans/2026-05-12-journal-harness-core-implementation-plan.md)
+- [阶段 6 实施归档](./docs/superpowers/archives/2026-05/2026-05-12-journal-harness-core-archives.md)
 - [Superpowers 交付归档索引](./docs/superpowers/archives/INDEX.md)
 - [产品故事演示](./docs/product/journal-product-story.html)
 
 ## 当前状态
 
-当前主线已经跑通到 Phase 5：
+当前主线已经跑通到 Phase 6：
 
 ```text
-自然语言输入 -> Raw input 持久化 -> Mock 或真实 LLM JSON -> JMF Markdown 草稿
-  -> 块编辑 / 源码编辑与 JMF 校验
+自然语言输入 -> Raw input 持久化 -> Mock / 真实 LLM JSON 或 Harness Core 工具计划
+  -> JMF Markdown 草稿 / reviewing draft / attention draft
+  -> 块编辑 / 源码编辑 / Harness 审计
   -> 用户确认
   -> 正式 Markdown 文件
 ```
 
-已交付能力包括：今日输入、原始输入保存、Mock 整理、OpenAI-compatible 真实 LLM 调用、JMF 草稿预览、块编辑、源码编辑、结构校验、确认写入正式 Markdown，以及可用的 LLM 参数配置界面。
+已交付能力包括：今日输入、原始输入保存、Mock 整理、OpenAI-compatible 真实 LLM 调用、JMF 草稿预览、块编辑、源码编辑、结构校验、确认写入正式 Markdown、可用的 LLM 参数配置界面，以及 LLM Harness Core 的受控工具调用、草稿写入保护、section 级 provenance 和按日期查看 harness run 的 AI 审计工作台。
 
-仍未交付：版本快照、SQLite 索引/搜索、多日期浏览、AI 改写聊天、自动保存、应用内录音/语音转写、安装包、生产 Electron 托管 .NET 后端。
+仍未交付：版本快照、SQLite 索引/搜索、多日期日记浏览、AI 改写聊天、自动保存、应用内录音/语音转写、安装包、生产 Electron 托管 .NET 后端、删除流程、item 级 provenance、draft diff 和 rollback。
 
 ## 阶段 1：应用框架骨架
 
@@ -134,6 +139,21 @@ PUT http://localhost:5057/journal/today/editor/source
 - 真实 LLM 失败会进入 `attention` draft，不会静默回退或覆盖正式 entry。
 
 阶段 5 仍不包含版本快照、SQLite 索引、AI 改写聊天、自动保存、多日期浏览和安装包。
+
+## 阶段 6：LLM Harness Core
+
+Harness Core 将 LLM 从“整篇生成器”收束为受控工具调用：当前输入作为 user message，历史 raw inputs、当前 draft 和正式 entry 作为 protected context，模型不能直接写 Markdown 或正式 entry。
+
+阶段 6 已交付：
+
+- LLM 只能调用 append / upsert / revise AI section / no-op 工具，工具调用先被收集为计划，再由服务端执行。
+- 用户内容只能被追加，不能被删除、清空或替换；`raw-inputs` 仍由服务端原始输入生成和保护。
+- `appendJournalSection`、`upsertJournalSection`、`reviseAiGeneratedSection` 和 `noOp` 映射到 JMF operation executor，并经过 JMF validation。
+- 工具执行只写 `reviewing` / `attention` draft，不直接写正式 entry；正式 Markdown 仍必须由用户确认。
+- JMF section marker 支持 section 级 provenance，普通预览隐藏，审计和调试路径可见。
+- AI 审计工作台支持按日期查看 harness run、工具调用、拒绝原因、验证状态和运行摘要。
+
+阶段 6 仍不包含 item 级 provenance、用户授权删除/隐藏、draft diff、rollback、多日期日记浏览、版本快照或 SQLite 搜索索引。
 
 ## 环境要求
 

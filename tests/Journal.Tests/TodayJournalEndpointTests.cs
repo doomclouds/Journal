@@ -5,6 +5,7 @@ using System.Text.Json;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Ai;
 using Journal.Infrastructure.Clock;
+using Journal.Infrastructure.Harness;
 using Journal.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -599,6 +600,204 @@ public sealed class TodayJournalEndpointTests
         Assert.Equal("invalid request body", document.RootElement.GetProperty("error").GetString());
     }
 
+    [Fact]
+    public async Task PostTodayHarnessRun_AppendsInputAndReturnsQueuedRunWithId()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "今天把 harness API 接起来", source = "text" });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+        var run = root.GetProperty("run");
+
+        Assert.Equal("empty", root.GetProperty("today").GetProperty("status").GetString());
+        Assert.Single(root.GetProperty("today").GetProperty("rawInputs").EnumerateArray());
+        Assert.StartsWith("run-2026-05-08-", run.GetProperty("id").GetString(), StringComparison.Ordinal);
+        Assert.Equal("queued", run.GetProperty("status").GetString());
+        Assert.Equal("mock", run.GetProperty("providerId").GetString());
+        Assert.NotEmpty(run.GetProperty("currentRawInputId").GetString()!);
+    }
+
+    [Fact]
+    public async Task PostTodayHarnessRun_WithBlankTextReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "   ", source = "text" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("text is required", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task GetAuditByDate_ReturnsDailyHarnessRuns()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var firstResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "第一条 harness 输入", source = "text" });
+        firstResponse.EnsureSuccessStatusCode();
+        using var secondResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "第二条 harness 输入", source = "text" });
+        secondResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.GetAsync("/journal/audit?date=2026-05-08");
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var runs = document.RootElement.EnumerateArray().ToArray();
+
+        Assert.Equal(2, runs.Length);
+        Assert.All(runs, run => Assert.StartsWith("run-2026-05-08-", run.GetProperty("id").GetString(), StringComparison.Ordinal));
+        Assert.All(runs, run => Assert.Equal("queued", run.GetProperty("status").GetString()));
+    }
+
+    [Fact]
+    public async Task GetAuditByDate_WithInvalidDateReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/journal/audit?date=not-a-date");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("date must use yyyy-MM-dd", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task GetHarnessRunById_ReturnsRunFromEmbeddedRunDate()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var startResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "按 runId 查询 harness run", source = "text" });
+        startResponse.EnsureSuccessStatusCode();
+        using var startDocument = await JsonDocument.ParseAsync(await startResponse.Content.ReadAsStreamAsync());
+        var runId = startDocument.RootElement.GetProperty("run").GetProperty("id").GetString();
+
+        using var response = await client.GetAsync($"/journal/harness/runs/{runId}");
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(runId, document.RootElement.GetProperty("id").GetString());
+        Assert.Equal("queued", document.RootElement.GetProperty("status").GetString());
+        Assert.Equal("2026-05-08", document.RootElement.GetProperty("date").GetProperty("isoDate").GetString());
+    }
+
+    [Fact]
+    public async Task GetHarnessRunById_WithInvalidRunIdReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/journal/harness/runs/not-a-run");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("runId is invalid", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task GetHarnessRunEvents_ReturnsServerSentEventStream()
+    {
+        using var workspace = TempWorkspace.Create();
+        var runtime = new EndpointHarnessRuntime();
+        using var factory = CreateFactory(workspace.Root, runtime: runtime);
+        using var client = factory.CreateClient();
+
+        using var startResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "验证 harness SSE stream", source = "text" });
+        startResponse.EnsureSuccessStatusCode();
+        using var startDocument = await JsonDocument.ParseAsync(await startResponse.Content.ReadAsStreamAsync());
+        var runId = startDocument.RootElement.GetProperty("run").GetProperty("id").GetString();
+
+        using var response = await client.GetAsync(
+            $"/journal/harness/runs/{runId}/events",
+            HttpCompletionOption.ResponseHeadersRead);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var body = await response.Content.ReadAsStringAsync(timeout.Token);
+
+        Assert.Contains("event: run-started", body, StringComparison.Ordinal);
+        Assert.Contains("event: run-completed", body, StringComparison.Ordinal);
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+    }
+
+    [Fact]
+    public async Task GetHarnessRunEvents_WhenRunAlreadyCompleted_ReturnsTerminalEventWithoutExecutingAgain()
+    {
+        using var workspace = TempWorkspace.Create();
+        var runtime = new EndpointHarnessRuntime();
+        using var factory = CreateFactory(workspace.Root, runtime: runtime);
+        using var client = factory.CreateClient();
+
+        using var startResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "验证 harness SSE reconnect 不重复执行", source = "text" });
+        startResponse.EnsureSuccessStatusCode();
+        using var startDocument = await JsonDocument.ParseAsync(await startResponse.Content.ReadAsStreamAsync());
+        var runId = startDocument.RootElement.GetProperty("run").GetProperty("id").GetString();
+
+        using var firstResponse = await client.GetAsync(
+            $"/journal/harness/runs/{runId}/events",
+            HttpCompletionOption.ResponseHeadersRead);
+        firstResponse.EnsureSuccessStatusCode();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var firstBody = await firstResponse.Content.ReadAsStringAsync(timeout.Token);
+
+        using var secondResponse = await client.GetAsync(
+            $"/journal/harness/runs/{runId}/events",
+            HttpCompletionOption.ResponseHeadersRead);
+        secondResponse.EnsureSuccessStatusCode();
+        var secondBody = await secondResponse.Content.ReadAsStringAsync(timeout.Token);
+
+        using var auditResponse = await client.GetAsync($"/journal/harness/runs/{runId}");
+        auditResponse.EnsureSuccessStatusCode();
+        using var auditDocument = await JsonDocument.ParseAsync(await auditResponse.Content.ReadAsStreamAsync());
+
+        Assert.Contains("event: run-completed", firstBody, StringComparison.Ordinal);
+        Assert.Contains("event: run-already-completed", secondBody, StringComparison.Ordinal);
+        Assert.Equal(1, runtime.HarnessPlannerCallCount);
+        Assert.Single(auditDocument.RootElement.GetProperty("toolCalls").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task GetHarnessRunEvents_WithMissingRunReturnsNotFound()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/journal/harness/runs/run-2026-05-08-missing/events");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private static object CreateAiSettingsSaveRequest(
         string activeProviderId,
         string deepSeekApiKey,
@@ -644,7 +843,8 @@ public sealed class TodayJournalEndpointTests
 
     private static WebApplicationFactory<Program> CreateFactory(
         string root,
-        IReadOnlyDictionary<string, string?>? env = null) =>
+        IReadOnlyDictionary<string, string?>? env = null,
+        EndpointHarnessRuntime? runtime = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -653,9 +853,11 @@ public sealed class TodayJournalEndpointTests
                     services.RemoveAll<JournalStorageOptions>();
                     services.RemoveAll<IJournalClock>();
                     services.RemoveAll<IJournalAiEnvironment>();
+                    services.RemoveAll<IJournalAiAgentRuntime>();
                     services.AddSingleton(new JournalStorageOptions(root));
                     services.AddSingleton<IJournalClock>(new FixedJournalClock(FixedDay, FixedNow));
                     services.AddSingleton<IJournalAiEnvironment>(new DictionaryJournalAiEnvironment(env));
+                    services.AddSingleton<IJournalAiAgentRuntime>(runtime ?? new EndpointHarnessRuntime());
                 });
             });
 
@@ -671,6 +873,30 @@ public sealed class TodayJournalEndpointTests
         private readonly IReadOnlyDictionary<string, string?> _values = values ?? new Dictionary<string, string?>();
 
         public string? Get(string name) => _values.TryGetValue(name, out var value) ? value : null;
+    }
+
+    private sealed class EndpointHarnessRuntime : IJournalAiAgentRuntime
+    {
+        public int HarnessPlannerCallCount { get; private set; }
+
+        public Task<OpenAiCompatibleRunResult> RunJsonAsync(
+            OpenAiCompatibleRunRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(OpenAiCompatibleRunResult.Failure(
+                JournalAiSafeError.Create("test", "wrong_path", "Wrong runtime path.", "RunJsonAsync was called."),
+                TimeSpan.Zero));
+
+        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+            JournalHarnessPlannerRuntimeRequest request,
+            CancellationToken cancellationToken)
+        {
+            HarnessPlannerCallCount++;
+            return Task.FromResult(JournalHarnessPlannerRuntimeResult.Success(
+                [JournalHarnessOperation.NoOp("Endpoint SSE test completed without draft changes.")],
+                "no-op",
+                TimeSpan.Zero,
+                200));
+        }
     }
 
     private sealed class TempWorkspace : IDisposable

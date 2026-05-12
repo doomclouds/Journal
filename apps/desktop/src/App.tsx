@@ -6,6 +6,7 @@ import {
   confirmTodayDraft,
   getAiSettings,
   getHealth,
+  getJournalAudit,
   getTodayEditor,
   regenerateTodayDraft,
   revealAiProviderApiKey,
@@ -16,9 +17,11 @@ import {
   type AiProviderHealthResult,
   type AiSettingsView,
   type JournalBlockEditSection,
+  type JournalHarnessAuditRun,
   type HealthResponse,
   type TodayEditorState
 } from "./api";
+import { AuditWorkbench } from "./AuditWorkbench";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
 import {
@@ -62,6 +65,7 @@ const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补
 export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
+  const auditRequestIdRef = useRef(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
@@ -75,6 +79,9 @@ export default function App() {
   const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
   const [workbenchView, setWorkbenchView] = useState<"journal" | "assistant">("assistant");
+  const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit">("today");
+  const [auditDate, setAuditDate] = useState("");
+  const [auditRuns, setAuditRuns] = useState<JournalHarnessAuditRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -403,6 +410,59 @@ export default function App() {
     setIsRegenerateConfirmOpen(true);
   }
 
+  async function openAuditWorkbench() {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
+    const date = today?.date.isoDate ?? editor?.date.isoDate ?? "";
+    if (!date) {
+      return;
+    }
+
+    const auditRequestId = auditRequestIdRef.current + 1;
+    auditRequestIdRef.current = auditRequestId;
+    resetPendingRegenerateDraft();
+    setValidationError("");
+    setAuditDate(date);
+    setApiError("");
+    try {
+      const runs = await getJournalAudit(date);
+      if (auditRequestId === auditRequestIdRef.current) {
+        setAuditRuns(runs);
+        setWorkspaceMode("audit");
+      }
+    } catch (caught) {
+      if (auditRequestId === auditRequestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
+    }
+  }
+
+  async function handleAuditDateChange(date: string) {
+    const auditRequestId = auditRequestIdRef.current + 1;
+    auditRequestIdRef.current = auditRequestId;
+    setAuditDate(date);
+    if (!date) {
+      setAuditRuns([]);
+      return;
+    }
+
+    setApiError("");
+    try {
+      const runs = await getJournalAudit(date);
+      if (auditRequestId === auditRequestIdRef.current) {
+        setAuditRuns(runs);
+      }
+    } catch (caught) {
+      if (auditRequestId === auditRequestIdRef.current) {
+        setApiError(getErrorMessage(caught));
+      }
+    }
+  }
+
   return (
     <main className="desktop-shell" aria-label="Journal 今日工作台">
       <header className="top-context command-top-context">
@@ -434,7 +494,16 @@ export default function App() {
           ) : null}
       </section>
 
-      <section className={`workspace command-workspace ${workbenchView === "journal" ? "journal-only" : ""}`}>
+      <section className={`workspace command-workspace ${workspaceMode === "today" && workbenchView === "journal" ? "journal-only" : ""}`}>
+        {workspaceMode === "audit" ? (
+          <AuditWorkbench
+            runs={auditRuns}
+            selectedDate={auditDate}
+            onDateChange={handleAuditDateChange}
+            onReturnToday={() => setWorkspaceMode("today")}
+          />
+        ) : (
+        <>
         <aside className="context-rail" aria-label="今日上下文">
           <section className="date-card">
             <p className="month">{monthLabel}</p>
@@ -676,6 +745,9 @@ export default function App() {
             <section className="assistant-card">
               <div className="assistant-card-head">
                 <h3>整理证据</h3>
+                <button type="button" className="assistant-inline-action" onClick={openAuditWorkbench}>
+                  查看审计
+                </button>
               </div>
               {rawInputViews.length > 0 ? (
                 <div className="evidence-list">
@@ -723,6 +795,8 @@ export default function App() {
           </div>
         </aside>
         ) : null}
+        </>
+        )}
       </section>
       {isLlmPanelOpen && aiSettings ? (
         <LlmSettingsPanel

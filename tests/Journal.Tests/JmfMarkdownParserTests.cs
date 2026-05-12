@@ -6,6 +6,78 @@ namespace Journal.Tests;
 public sealed class JmfMarkdownParserTests
 {
     [Fact]
+    public void Parse_ReadsSectionProvenanceAttributes()
+    {
+        const string markdown = """
+            ---
+            schema: journal-entry/v1
+            date: "2026-05-12"
+            ---
+
+            <!-- journal:section today-focus origin="mixed" created_by="ai" last_touched_by="ai" last_operation="append" based_on_raw_inputs="raw-1 raw-2" -->
+            ## 今日重点
+
+            - 推进 harness 设计
+
+            <!-- /journal:section today-focus -->
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+
+            - 用户原话
+
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section yesterday-review -->
+            ## 昨日回顾
+
+            <!-- /journal:section yesterday-review -->
+            """;
+
+        var result = JmfMarkdownParser.Parse(markdown);
+        var todayFocus = result.Document.Sections.Single(section => section.Id == "today-focus");
+
+        Assert.Equal("mixed", todayFocus.Provenance.Origin);
+        Assert.Equal("ai", todayFocus.Provenance.CreatedBy);
+        Assert.Equal("ai", todayFocus.Provenance.LastTouchedBy);
+        Assert.Equal("append", todayFocus.Provenance.LastOperation);
+        Assert.Equal(["raw-1", "raw-2"], todayFocus.Provenance.BasedOnRawInputIds);
+    }
+
+    [Fact]
+    public void Parse_DefaultsMissingProvenanceToUnknown()
+    {
+        const string markdown = """
+            ---
+            schema: journal-entry/v1
+            ---
+
+            <!-- journal:section raw-inputs -->
+            ## 原始输入
+            <!-- /journal:section raw-inputs -->
+
+            <!-- journal:section yesterday-review -->
+            ## 昨日回顾
+            <!-- /journal:section yesterday-review -->
+
+            <!-- journal:section today-focus -->
+            ## 今日重点
+            <!-- /journal:section today-focus -->
+            """;
+
+        var result = JmfMarkdownParser.Parse(markdown);
+
+        Assert.All(result.Document.Sections, section =>
+        {
+            Assert.Equal("unknown", section.Provenance.Origin);
+            Assert.Equal("unknown", section.Provenance.CreatedBy);
+            Assert.Equal("unknown", section.Provenance.LastTouchedBy);
+            Assert.Equal("unknown", section.Provenance.LastOperation);
+            Assert.Empty(section.Provenance.BasedOnRawInputIds);
+        });
+    }
+
+    [Fact]
     public void Parse_ReturnsDocumentForValidJmfMarkdown()
     {
         const string markdown = """

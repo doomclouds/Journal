@@ -5,4 +5,16 @@ public sealed record JmfSection(
     string Title,
     string Content,
     JmfSectionKind Kind,
-    bool IsEditableInBlockMode);
+    bool IsEditableInBlockMode,
+    JmfSectionProvenance Provenance)
+{
+    public JmfSection(
+        string id,
+        string title,
+        string content,
+        JmfSectionKind kind,
+        bool isEditableInBlockMode)
+        : this(id, title, content, kind, isEditableInBlockMode, JmfSectionProvenance.Unknown)
+    {
+    }
+}

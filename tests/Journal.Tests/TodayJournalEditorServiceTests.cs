@@ -75,6 +75,23 @@ public sealed class TodayJournalEditorServiceTests
     }
 
     [Fact]
+    public async Task SaveBlockDraftAsync_MarksEditedSectionAsUserTouched()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var service = CreateService(paths);
+        await service.AddInputAsync("今天验证 provenance #Journal", "text", CancellationToken.None);
+
+        var editor = await service.SaveBlockDraftAsync(
+            new JournalBlockEditRequest([new("today-focus", "- 用户手动编辑")]),
+            CancellationToken.None);
+
+        var section = GetSection(editor.Markdown, "today-focus");
+        Assert.Equal("user", section.Provenance.LastTouchedBy);
+        Assert.Equal("edit", section.Provenance.LastOperation);
+    }
+
+    [Fact]
     public async Task SaveBlockDraftAsync_ReturnsAttentionWhenRequestContainsRawInputs()
     {
         using var workspace = TempWorkspace.Create();
@@ -251,6 +268,11 @@ public sealed class TodayJournalEditorServiceTests
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
             Task.FromResult(result);
+
+        public Task<JournalHarnessPlannerRuntimeResult> RunHarnessPlannerAsync(
+            JournalHarnessPlannerRuntimeRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Harness planner runtime should not be called by editor service tests.");
     }
 
     private sealed class TempWorkspace : IDisposable
