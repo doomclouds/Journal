@@ -36,13 +36,7 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
                 instructions: request.SystemPrompt,
                 name: "JournalJsonFormatter",
                 description: "Formats morning journal raw inputs into JournalAiJson.");
-            var options = new ChatClientAgentRunOptions(new ChatOptions
-            {
-                ResponseFormat = Microsoft.Extensions.AI.ChatResponseFormat.Json,
-                Temperature = (float)request.Temperature,
-                MaxOutputTokens = request.MaxTokens > 0 ? request.MaxTokens : null,
-                ModelId = request.Model
-            });
+            var options = new ChatClientAgentRunOptions(CreateJsonChatOptions(request));
 
             var response = await agent.RunAsync(
                 request.UserPrompt,
@@ -156,36 +150,30 @@ public sealed class OpenAiCompatibleAgentRuntime : IJournalAiAgentRuntime
                 instructions: request.SystemInstructions,
                 name: "JournalHarnessPlanner",
                 description: "Plans side-effect-free journal harness operations by calling collector tools.");
-            var options = new ChatClientAgentRunOptions(new ChatOptions
+            var tools = new AITool[]
             {
-                Temperature = (float)request.Temperature,
-                MaxOutputTokens = request.MaxTokens > 0 ? request.MaxTokens : null,
-                ModelId = request.Model,
-                ToolMode = ChatToolMode.Auto,
-                Tools =
-                [
-                    AIFunctionFactory.Create(
-                        collector.AppendJournalSection,
-                        "appendJournalSection",
-                        "Record a side-effect-free append operation for an editable journal section.",
-                        ToolSerializerOptions),
-                    AIFunctionFactory.Create(
-                        collector.UpsertJournalSection,
-                        "upsertJournalSection",
-                        "Record a side-effect-free upsert operation for an editable journal section.",
-                        ToolSerializerOptions),
-                    AIFunctionFactory.Create(
-                        collector.ReviseAiGeneratedSection,
-                        "reviseAiGeneratedSection",
-                        "Record a side-effect-free revision operation for a pure AI-generated section.",
-                        ToolSerializerOptions),
-                    AIFunctionFactory.Create(
-                        collector.NoOp,
-                        "noOp",
-                        "Record that no safe journal operation should be applied.",
-                        ToolSerializerOptions)
-                ]
-            });
+                AIFunctionFactory.Create(
+                    collector.AppendJournalSection,
+                    "appendJournalSection",
+                    "Record a side-effect-free append operation for an editable journal section.",
+                    ToolSerializerOptions),
+                AIFunctionFactory.Create(
+                    collector.UpsertJournalSection,
+                    "upsertJournalSection",
+                    "Record a side-effect-free upsert operation for an editable journal section.",
+                    ToolSerializerOptions),
+                AIFunctionFactory.Create(
+                    collector.ReviseAiGeneratedSection,
+                    "reviseAiGeneratedSection",
+                    "Record a side-effect-free revision operation for a pure AI-generated section.",
+                    ToolSerializerOptions),
+                AIFunctionFactory.Create(
+                    collector.NoOp,
+                    "noOp",
+                    "Record that no safe journal operation should be applied.",
+                    ToolSerializerOptions)
+            };
+            var options = new ChatClientAgentRunOptions(CreateHarnessPlannerChatOptions(request, tools));
 
             var response = await agent.RunAsync(
                 BuildHarnessPlannerMessage(request.ProtectedContext, request.UserMessage),
@@ -282,6 +270,66 @@ Protected context:
 Current user message:
 {userMessage}
 """;
+
+    internal static ChatOptions CreateJsonChatOptions(OpenAiCompatibleRunRequest request)
+    {
+        var options = new ChatOptions
+        {
+            ResponseFormat = Microsoft.Extensions.AI.ChatResponseFormat.Json,
+            Temperature = (float)request.Temperature,
+            MaxOutputTokens = request.MaxTokens > 0 ? request.MaxTokens : null,
+            ModelId = request.Model
+        };
+
+        ApplyProviderCompatibility(options, request.ProviderId, request.BaseUrl);
+        return options;
+    }
+
+    internal static ChatOptions CreateHarnessPlannerChatOptions(
+        JournalHarnessPlannerRuntimeRequest request,
+        IList<AITool> tools)
+    {
+        var options = new ChatOptions
+        {
+            Temperature = (float)request.Temperature,
+            MaxOutputTokens = request.MaxTokens > 0 ? request.MaxTokens : null,
+            ModelId = request.Model,
+            ToolMode = ChatToolMode.Auto,
+            Tools = tools
+        };
+
+        ApplyProviderCompatibility(options, request.ProviderId, request.BaseUrl);
+        return options;
+    }
+
+    private static void ApplyProviderCompatibility(ChatOptions options, string providerId, string baseUrl)
+    {
+        if (!ShouldDisableDeepSeekThinking(providerId, baseUrl))
+        {
+            return;
+        }
+
+        options.RawRepresentationFactory = _ =>
+        {
+            var rawOptions = new ChatCompletionOptions();
+            // DeepSeek exposes thinking as an OpenAI-compatible extra body field.
+#pragma warning disable SCME0001
+            rawOptions.Patch.Set("$.thinking"u8, BinaryData.FromString("""{"type":"disabled"}"""));
+#pragma warning restore SCME0001
+            return rawOptions;
+        };
+    }
+
+    internal static bool ShouldDisableDeepSeekThinking(string providerId, string baseUrl)
+    {
+        if (providerId.Equals("deepseek", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+            && uri.Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string MapStatusToCode(int status) =>
         status switch

@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md](./2026-05/2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md): 记录 DeepSeek V4 thinking mode 在 Agent Framework tool call 后必须回传 `reasoning_content`，而 OpenAI-compatible 适配层未写回该扩展字段导致 400 的运行时兼容问题。
 - [2026-05-13-harness-submit-not-wired-audit-empty-problem.md](./2026-05/2026-05-13-harness-submit-not-wired-audit-empty-problem.md): 记录 Phase 6 审计页已交付但主输入提交仍走旧接口，导致正常用户工作流不会产生 harness audit run 的接线缺口；现已改为 submit 走 harness run + SSE。
 - [2026-05-12-harness-noop-draft-overwrite-problem.md](./2026-05/2026-05-12-harness-noop-draft-overwrite-problem.md): 记录 harness no-op/no-change 在 service 层仍写入或刷新 reviewing draft 的分层合同漂移问题。
 - [2026-05-12-harness-provenance-attribute-pollution-problem.md](./2026-05/2026-05-12-harness-provenance-attribute-pollution-problem.md): 记录 LLM 工具参数中的 raw input id 未校验/转义就进入 JMF provenance marker，可能污染 section 属性的安全边界问题。
