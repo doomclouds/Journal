@@ -2,7 +2,7 @@
 
 ## 2026-05
 
-- [2026-05-13-harness-submit-not-wired-audit-empty-problem.md](./2026-05/2026-05-13-harness-submit-not-wired-audit-empty-problem.md): 记录 Phase 6 审计页已交付但主输入提交仍走旧接口，导致正常用户工作流不会产生 harness audit run 的接线缺口。
+- [2026-05-13-harness-submit-not-wired-audit-empty-problem.md](./2026-05/2026-05-13-harness-submit-not-wired-audit-empty-problem.md): 记录 Phase 6 审计页已交付但主输入提交仍走旧接口，导致正常用户工作流不会产生 harness audit run 的接线缺口；现已改为 submit 走 harness run + SSE。
 - [2026-05-12-harness-noop-draft-overwrite-problem.md](./2026-05/2026-05-12-harness-noop-draft-overwrite-problem.md): 记录 harness no-op/no-change 在 service 层仍写入或刷新 reviewing draft 的分层合同漂移问题。
 - [2026-05-12-harness-provenance-attribute-pollution-problem.md](./2026-05/2026-05-12-harness-provenance-attribute-pollution-problem.md): 记录 LLM 工具参数中的 raw input id 未校验/转义就进入 JMF provenance marker，可能污染 section 属性的安全边界问题。
 - [2026-05-12-harness-sse-run-lifecycle-problem.md](./2026-05/2026-05-12-harness-sse-run-lifecycle-problem.md): 记录 harness SSE endpoint 同时承担执行和进度推送时，断线、重连、并发首连可能导致取消或重复执行 run 的生命周期问题。

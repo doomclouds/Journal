@@ -2,15 +2,16 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   activateAiSettings,
-  addTodayInput,
   confirmTodayDraft,
   getAiSettings,
   getHealth,
   getJournalAudit,
   getTodayEditor,
+  openHarnessRunEvents,
   regenerateTodayDraft,
   revealAiProviderApiKey,
   saveBlockDraft,
+  startHarnessRun,
   testAiProvider,
   type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
@@ -18,6 +19,7 @@ import {
   type AiSettingsView,
   type JournalBlockEditSection,
   type JournalHarnessAuditRun,
+  type JournalHarnessRunEvent,
   type HealthResponse,
   type TodayEditorState
 } from "./api";
@@ -61,11 +63,21 @@ function getRawInputTags(text: string): string[] {
 }
 
 const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补充或重新整理。";
+const terminalHarnessStatuses = new Set(["reviewing", "attention", "no-change", "failed", "interrupted"]);
+
+function isTerminalHarnessEvent(event: JournalHarnessRunEvent) {
+  return terminalHarnessStatuses.has(event.status)
+    || event.type === "run-completed"
+    || event.type === "run-failed"
+    || event.type === "run-already-completed"
+    || event.type === "run-interrupted";
+}
 
 export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
   const auditRequestIdRef = useRef(0);
+  const harnessEventsRef = useRef<EventSource | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
@@ -126,6 +138,12 @@ export default function App() {
       setValidationError("");
     }
   }, [hasLocalUnsavedChanges, validationError]);
+
+  useEffect(() => {
+    return () => {
+      harnessEventsRef.current?.close();
+    };
+  }, []);
 
   useEffect(() => {
     function handleNativeMenuCommand(command: NativeMenuCommand) {
@@ -250,20 +268,67 @@ export default function App() {
     setValidationError("");
     setIsSubmitting(true);
     try {
-      await addTodayInput(trimmedInput);
-      const next = await getTodayEditor();
-      if (requestId === requestIdRef.current) {
-        setEditor(next);
-        setInput("");
-        setApiError("");
-        setLoadState("ready");
+      const started = await startHarnessRun(trimmedInput);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
+      harnessEventsRef.current?.close();
+      let stream: EventSource | null = null;
+      const refreshAfterTerminalEvent = async () => {
+        stream?.close();
+        if (harnessEventsRef.current === stream) {
+          harnessEventsRef.current = null;
+        }
+
+        try {
+          const next = await getTodayEditor();
+          if (requestId === requestIdRef.current) {
+            setEditor(next);
+            setInput("");
+            setApiError("");
+            setLoadState("ready");
+          }
+        } catch (caught) {
+          if (requestId === requestIdRef.current) {
+            setApiError(getErrorMessage(caught));
+          }
+        } finally {
+          if (requestId === requestIdRef.current) {
+            setIsSubmitting(false);
+          }
+        }
+      };
+
+      stream = openHarnessRunEvents(
+        started.run.id,
+        event => {
+          if (requestId === requestIdRef.current && isTerminalHarnessEvent(event)) {
+            void refreshAfterTerminalEvent();
+          }
+        },
+        error => {
+          stream?.close();
+          if (harnessEventsRef.current === stream) {
+            harnessEventsRef.current = null;
+          }
+          if (requestId === requestIdRef.current) {
+            setApiError(error.message);
+            setIsSubmitting(false);
+          }
+        }
+      );
+      harnessEventsRef.current = stream;
+
+      if (terminalHarnessStatuses.has(started.run.status)) {
+        await refreshAfterTerminalEvent();
       }
     } catch (caught) {
       if (requestId === requestIdRef.current) {
         setApiError(getErrorMessage(caught));
       }
     } finally {
-      if (requestId === requestIdRef.current) {
+      if (requestId === requestIdRef.current && !harnessEventsRef.current) {
         setIsSubmitting(false);
       }
     }

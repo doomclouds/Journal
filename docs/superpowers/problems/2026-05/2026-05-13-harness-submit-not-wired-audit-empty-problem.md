@@ -27,6 +27,8 @@
 
 ## Fix
 
+当前修复已落地：
+
 - 将 `App.tsx` 的 `handleSubmit` 从 `addTodayInput` 切到 `startHarnessRun`。
 - `POST /journal/today/harness/runs` 返回 run 后，前端立即打开 `openHarnessRunEvents(run.id, ...)`。
 - SSE 完成、失败或已完成重连后刷新 `getTodayEditor()`，并让审计工作台可以读到新 run。

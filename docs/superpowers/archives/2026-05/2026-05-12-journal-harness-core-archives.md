@@ -16,6 +16,7 @@
 - Harness operation executor 落地 append、upsert、revise AI-generated section 和 no-op 约束，保护 `raw-inputs`、system section、只读 section 和用户已编辑内容不被删除、清空或替换。
 - Prompt split 已实现：历史 raw inputs、draft、entry 进入 protected context，当前输入作为 user message；Agent Framework planner 工具只收集计划，不产生副作用。
 - 新增 harness run API、SSE 事件流和 audit store；工具执行只写 `reviewing` / `attention` draft，不直接写 `entries/`。
+- 今日工作台底部输入提交已接入 harness run：先创建 run，再打开 SSE，终态事件后刷新 editor，因此正常用户工作流会产生审计记录。
 - 桌面端在现有三栏 command workspace 内新增 AI 审计工作台，支持按日期查看 harness run、工具调用、拒绝原因和运行摘要。
 - Task 7/8 已补 SSE disconnect/concurrent execution hardening、重复执行 gate、audit workbench dirty guard、stale guard 和 SSE parse handling。
 
@@ -69,4 +70,4 @@
 
 ## Notes
 
-- 本归档记录 Phase 6 第一阶段交付边界；旧 `POST /journal/today/draft/regenerate` 仍可保留为既有整篇整理路径；API/client 已具备 harness run 入口，当前 UI 交付范围是 AI 审计工作台入口。
+- 本归档记录 Phase 6 第一阶段交付边界；旧 `POST /journal/today/draft/regenerate` 仍可保留为既有整篇整理路径；今日输入主流程已使用 harness run，审计工作台负责查看这些 run 的工具调用和结果。

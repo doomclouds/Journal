@@ -15,6 +15,7 @@ import {
   testAiProvider,
   type AiProviderSaveRequest,
   type AiSettingsSaveRequest,
+  type JournalHarnessAuditRun,
   type JournalHarnessRunEvent,
   type JournalDraft,
   type TodayJournalState,
@@ -148,6 +149,21 @@ const reviewingToday: TodayJournalState = {
   draft: reviewingDraft
 };
 
+const queuedHarnessRun: JournalHarnessAuditRun = {
+  id: "run-1",
+  date: journalDate,
+  createdAt: "2026-05-08T09:30:00+08:00",
+  startedAt: null,
+  completedAt: null,
+  status: "queued",
+  providerId: "mock",
+  promptVersion: "journal-harness-v1",
+  currentRawInputId: "raw-1",
+  toolCalls: [],
+  errors: [],
+  summary: "Queued."
+};
+
 function processedToday(entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md"): TodayJournalState {
   return {
     ...reviewingToday,
@@ -259,6 +275,33 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
+function createEventSourceMock() {
+  const listeners = new Map<string, Array<(event: MessageEvent | Event) => void>>();
+  const close = vi.fn();
+  const EventSourceMock = vi.fn(function (_url: string) {
+    return {
+      addEventListener: (name: string, listener: (event: MessageEvent | Event) => void) => {
+        const existing = listeners.get(name) ?? [];
+        existing.push(listener);
+        listeners.set(name, existing);
+      },
+      close
+    } as unknown as EventSource;
+  });
+
+  vi.stubGlobal("EventSource", EventSourceMock);
+
+  return {
+    EventSourceMock,
+    close,
+    emit(name: string, event: JournalHarnessRunEvent) {
+      for (const listener of listeners.get(name) ?? []) {
+        listener({ data: JSON.stringify(event) } as MessageEvent);
+      }
+    }
+  };
+}
+
 function mockJsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
@@ -287,17 +330,18 @@ afterEach(() => {
 });
 describe("App", () => {
   test("prevents stale initial load race by disabling submit until editor state resolves", async () => {
+    const eventSource = createEventSourceMock();
     const healthDeferred = createDeferred<Response>();
     const editorDeferred = createDeferred<Response>();
     const aiSettingsDeferred = createDeferred<Response>();
-    const postInputDeferred = createDeferred<Response>();
+    const startHarnessDeferred = createDeferred<Response>();
     const refreshedEditorDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
       .mockReturnValueOnce(healthDeferred.promise)
       .mockReturnValueOnce(editorDeferred.promise)
       .mockReturnValueOnce(aiSettingsDeferred.promise)
-      .mockReturnValueOnce(postInputDeferred.promise)
+      .mockReturnValueOnce(startHarnessDeferred.promise)
       .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -339,7 +383,16 @@ describe("App", () => {
     expect(submitButton).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(4);
 
-    postInputDeferred.resolve(mockJsonResponse(emptyToday));
+    startHarnessDeferred.resolve(mockJsonResponse({ today: emptyToday, run: queuedHarnessRun }));
+    await waitFor(() =>
+      expect(eventSource.EventSourceMock).toHaveBeenCalledWith("http://localhost:5057/journal/harness/runs/run-1/events")
+    );
+    eventSource.emit("run-completed", {
+      type: "run-completed",
+      runId: "run-1",
+      status: "reviewing",
+      message: "done"
+    });
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
     await waitFor(() =>
@@ -1320,7 +1373,8 @@ describe("App", () => {
     expect(screen.getByRole("dialog", { name: "重新整理草稿" })).toBeInTheDocument();
   });
 
-  test("submits raw input and refreshes from today editor state", async () => {
+  test("submits raw input through harness run and refreshes from today editor state after SSE completion", async () => {
+    const eventSource = createEventSourceMock();
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       {
@@ -1334,7 +1388,7 @@ describe("App", () => {
         })
       },
       { body: aiSettings },
-      { body: emptyToday },
+      { body: { today: emptyToday, run: queuedHarnessRun } },
       { body: createEditorState() }
     ]);
 
@@ -1345,12 +1399,22 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
 
     await waitFor(() =>
+      expect(eventSource.EventSourceMock).toHaveBeenCalledWith("http://localhost:5057/journal/harness/runs/run-1/events")
+    );
+    eventSource.emit("run-completed", {
+      type: "run-completed",
+      runId: "run-1",
+      status: "reviewing",
+      message: "done"
+    });
+
+    await waitFor(() =>
       expect(screen.getAllByText("可保存").length).toBeGreaterThan(0)
     );
     expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
     expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/inputs", {
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/harness/runs", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -1361,7 +1425,8 @@ describe("App", () => {
   });
 
   test("disables input action while draft generation and editor refresh are pending", async () => {
-    const postInputDeferred = createDeferred<Response>();
+    const eventSource = createEventSourceMock();
+    const startHarnessDeferred = createDeferred<Response>();
     const refreshedEditorDeferred = createDeferred<Response>();
     const fetchMock = vi
       .fn()
@@ -1375,7 +1440,7 @@ describe("App", () => {
         today: emptyToday
       })))
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
-      .mockReturnValueOnce(postInputDeferred.promise)
+      .mockReturnValueOnce(startHarnessDeferred.promise)
       .mockReturnValueOnce(refreshedEditorDeferred.promise);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1390,10 +1455,18 @@ describe("App", () => {
 
     expect(submitButton).toBeDisabled();
 
-    postInputDeferred.resolve(mockJsonResponse(emptyToday));
-    await Promise.resolve();
+    startHarnessDeferred.resolve(mockJsonResponse({ today: emptyToday, run: queuedHarnessRun }));
+    await waitFor(() =>
+      expect(eventSource.EventSourceMock).toHaveBeenCalledWith("http://localhost:5057/journal/harness/runs/run-1/events")
+    );
     expect(submitButton).toBeDisabled();
 
+    eventSource.emit("run-completed", {
+      type: "run-completed",
+      runId: "run-1",
+      status: "reviewing",
+      message: "done"
+    });
     refreshedEditorDeferred.resolve(mockJsonResponse(createEditorState()));
 
     await waitFor(() =>

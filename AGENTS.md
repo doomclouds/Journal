@@ -72,6 +72,7 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - Environment variables override file settings for the active/effective LLM provider. On Windows, read environment values from Process first, then User, then Machine, so user-level API keys configured outside the current terminal are still picked up. File settings are the fallback and the only source whose API key can be revealed through the UI.
 - Provider activation should remain protected: failed health checks should not switch the active provider or persist a broken candidate.
 - Regenerating a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
+- The Today compose submit flow should use `POST /journal/today/harness/runs` plus the run SSE stream, so normal user input creates audit records.
 - Harness execution is also draft-only. `POST /journal/today/harness/runs` appends the current raw input and creates a run record; executing the run may write `reviewing` or `attention` draft, never `entries/`.
 - Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
 - Harness provenance is section-level. Do not claim item-level provenance, diff, or rollback unless those features are added.
