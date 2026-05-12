@@ -66,4 +66,4 @@
 
 ## Notes
 
-- 本归档记录 Phase 6 第一阶段交付边界；旧 `POST /journal/today/draft/regenerate` 仍可保留为既有整篇整理路径，但新用户工作流已具备 harness run 入口。
+- 本归档记录 Phase 6 第一阶段交付边界；旧 `POST /journal/today/draft/regenerate` 仍可保留为既有整篇整理路径；API/client 已具备 harness run 入口，当前 UI 交付范围是 AI 审计工作台入口。

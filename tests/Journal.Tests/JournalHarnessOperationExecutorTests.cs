@@ -22,7 +22,7 @@ public sealed class JournalHarnessOperationExecutorTests
             ["raw-2"],
             "用户要求补充 harness 信息。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.True(result.Validation.IsValid);
         Assert.Empty(result.Issues);
@@ -59,7 +59,7 @@ public sealed class JournalHarnessOperationExecutorTests
             ["raw-2"],
             "追加内容时保留已有 Markdown。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         var content = GetSection(result.Document, "today-focus").Content;
         Assert.StartsWith(existingContent, content, StringComparison.Ordinal);
@@ -83,7 +83,7 @@ public sealed class JournalHarnessOperationExecutorTests
             ["raw-2"],
             "模型想要重写。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.False(result.Validation.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "harness-revise-user-section");
@@ -95,7 +95,7 @@ public sealed class JournalHarnessOperationExecutorTests
     {
         var document = CreateDocument();
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [JournalHarnessOperation.NoOp("无可操作内容。")]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [JournalHarnessOperation.NoOp("无可操作内容。")], ["raw-current"]);
 
         Assert.True(result.Validation.IsValid);
         Assert.Empty(result.Issues);
@@ -112,7 +112,7 @@ public sealed class JournalHarnessOperationExecutorTests
         var document = CreateDocument();
         var operation = JournalHarnessOperation.Append(sectionId, "- AI 追加", ["raw-2"], "目标不可写。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.False(result.Validation.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "harness-target-readonly");
@@ -124,7 +124,7 @@ public sealed class JournalHarnessOperationExecutorTests
         var document = CreateDocument();
         var operation = JournalHarnessOperation.Upsert("inspiration", "- 新灵感", ["raw-2"], "新增灵感。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.True(result.Validation.IsValid);
         Assert.Empty(result.Issues);
@@ -143,7 +143,7 @@ public sealed class JournalHarnessOperationExecutorTests
         var document = CreateDocument();
         var operation = JournalHarnessOperation.Append("inspiration", "- 新灵感", ["raw-2"], "追加缺失 section。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.False(result.Validation.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "harness-target-missing");
@@ -166,7 +166,7 @@ public sealed class JournalHarnessOperationExecutorTests
             ["raw-2"],
             "修订 AI 内容。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.True(result.Validation.IsValid);
         Assert.Empty(result.Issues);
@@ -185,10 +185,34 @@ public sealed class JournalHarnessOperationExecutorTests
         var document = CreateDocument();
         var operation = new JournalHarnessOperation("delete", "today-focus", "- nope", ["raw-2"], "未知操作。");
 
-        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
 
         Assert.False(result.Validation.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "harness-unknown-operation");
+    }
+
+    [Fact]
+    public void Apply_FiltersProvenanceRawInputIdsToAllowedServerIds()
+    {
+        var document = CreateDocument([
+            Section("raw-inputs", "- raw"),
+            Section("yesterday-review", "- 昨天完成基础设计"),
+            Section(
+                "today-focus",
+                "- 用户已经调整今日计划",
+                new JmfSectionProvenance("user", "user", "user", "edit", ["raw-1"]))
+        ]);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "- AI 追加 harness 验证",
+            ["raw-2", "raw-evil", "raw-x\" --><script>alert(1)</script><!--"],
+            "用户要求补充 harness 信息。");
+
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
+
+        Assert.True(result.Validation.IsValid);
+        var section = GetSection(result.Document, "today-focus");
+        Assert.Equal(["raw-2"], section.Provenance.BasedOnRawInputIds);
     }
 
     private static JmfDocument CreateDocument(IReadOnlyList<JmfSection>? sections = null) =>

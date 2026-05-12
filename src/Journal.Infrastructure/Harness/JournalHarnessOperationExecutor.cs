@@ -12,10 +12,14 @@ public static class JournalHarnessOperationExecutor
 {
     public static JournalHarnessExecutionResult Apply(
         JmfDocument document,
-        IReadOnlyList<JournalHarnessOperation> operations)
+        IReadOnlyList<JournalHarnessOperation> operations,
+        IReadOnlyList<string> allowedRawInputIds)
     {
         var issues = new List<JmfValidationIssue>();
         var sections = document.Sections.ToList();
+        var allowedRawInputIdSet = allowedRawInputIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal);
         var changed = false;
 
         foreach (var operation in operations)
@@ -41,6 +45,7 @@ public static class JournalHarnessOperationExecutor
             }
 
             var index = sections.FindIndex(section => string.Equals(section.Id, operation.TargetSectionId, StringComparison.Ordinal));
+            var basedOnRawInputIds = FilterBasedOnRawInputIds(operation.BasedOnRawInputIds, allowedRawInputIdSet);
             if (operation.Kind == "upsert" && index < 0)
             {
                 sections.Add(new JmfSection(
@@ -49,7 +54,7 @@ public static class JournalHarnessOperationExecutor
                     operation.Content.Trim(),
                     definition.Kind,
                     definition.IsEditableInBlockMode,
-                    new JmfSectionProvenance("ai", "ai", "ai", "create", operation.BasedOnRawInputIds)));
+                    new JmfSectionProvenance("ai", "ai", "ai", "create", basedOnRawInputIds)));
                 changed = true;
                 continue;
             }
@@ -78,7 +83,7 @@ public static class JournalHarnessOperationExecutor
                         CreatedBy = "ai",
                         LastTouchedBy = "ai",
                         LastOperation = "revise",
-                        BasedOnRawInputIds = operation.BasedOnRawInputIds
+                        BasedOnRawInputIds = basedOnRawInputIds
                     }
                 };
                 changed = true;
@@ -88,7 +93,7 @@ public static class JournalHarnessOperationExecutor
             sections[index] = existing with
             {
                 Content = AppendContent(existing.Content, operation.Content),
-                Provenance = existing.Provenance.WithAiAppend(operation.BasedOnRawInputIds)
+                Provenance = existing.Provenance.WithAiAppend(basedOnRawInputIds)
             };
             changed = true;
         }
@@ -103,6 +108,21 @@ public static class JournalHarnessOperationExecutor
         string.Equals(section.Provenance.Origin, "ai", StringComparison.Ordinal)
         && string.Equals(section.Provenance.CreatedBy, "ai", StringComparison.Ordinal)
         && !string.Equals(section.Provenance.LastTouchedBy, "user", StringComparison.Ordinal);
+
+    private static IReadOnlyList<string> FilterBasedOnRawInputIds(
+        IReadOnlyList<string> rawInputIds,
+        HashSet<string> allowedRawInputIds)
+    {
+        if (rawInputIds.Count == 0 || allowedRawInputIds.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return rawInputIds
+            .Where(id => allowedRawInputIds.Contains(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
 
     private static string AppendContent(string existingContent, string newContent)
     {

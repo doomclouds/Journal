@@ -74,14 +74,14 @@ public static class JmfMarkdownComposer
             return;
         }
 
-        builder.Append(" origin=\"").Append(provenance.Origin).Append('"');
-        builder.Append(" created_by=\"").Append(provenance.CreatedBy).Append('"');
-        builder.Append(" last_touched_by=\"").Append(provenance.LastTouchedBy).Append('"');
-        builder.Append(" last_operation=\"").Append(provenance.LastOperation).Append('"');
+        builder.Append(" origin=\"").Append(EscapeAttributeValue(provenance.Origin)).Append('"');
+        builder.Append(" created_by=\"").Append(EscapeAttributeValue(provenance.CreatedBy)).Append('"');
+        builder.Append(" last_touched_by=\"").Append(EscapeAttributeValue(provenance.LastTouchedBy)).Append('"');
+        builder.Append(" last_operation=\"").Append(EscapeAttributeValue(provenance.LastOperation)).Append('"');
         if (provenance.BasedOnRawInputIds.Count > 0)
         {
             builder.Append(" based_on_raw_inputs=\"")
-                .Append(string.Join(' ', provenance.BasedOnRawInputIds))
+                .Append(EscapeAttributeValue(string.Join(' ', provenance.BasedOnRawInputIds)))
                 .Append('"');
         }
     }
@@ -90,6 +90,14 @@ public static class JmfMarkdownComposer
         content
             .Replace("<!--", "&lt;!--", StringComparison.Ordinal)
             .Replace("-->", "--&gt;", StringComparison.Ordinal);
+
+    private static string EscapeAttributeValue(string value) =>
+        NormalizeLineEndings(value)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("<", "&#60;", StringComparison.Ordinal)
+            .Replace(">", "&#62;", StringComparison.Ordinal);
 
     private static string NormalizeLineEndings(string value) =>
         value

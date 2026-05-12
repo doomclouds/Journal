@@ -207,18 +207,22 @@ public sealed class JournalHarnessService
                     return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
                 }
 
-                var execution = JournalHarnessOperationExecutor.Apply(baselineDocument, plan.Operations);
+                var allowedRawInputIds = inputs.Select(input => input.Id).ToArray();
+                var execution = JournalHarnessOperationExecutor.Apply(baselineDocument, plan.Operations, allowedRawInputIds);
                 var toolCalls = CreateToolCalls(plan.Operations, execution.Issues);
                 var sourceRawInputIds = inputs.Select(input => input.Id).ToArray();
                 if (execution.Validation.IsValid)
                 {
-                    var markdown = JmfMarkdownComposer.Compose(execution.Document);
                     var status = plan.Operations.Any(operation => !string.Equals(operation.Kind, "no-op", StringComparison.Ordinal))
                         ? "reviewing"
                         : "no-change";
-                    await _draftStore.WriteAsync(
-                        new JournalDraft(date, JournalStatus.Reviewing, markdown, sourceRawInputIds, Array.Empty<string>(), _clock.Now),
-                        cancellationToken);
+                    if (status == "reviewing")
+                    {
+                        var markdown = JmfMarkdownComposer.Compose(execution.Document);
+                        await _draftStore.WriteAsync(
+                            new JournalDraft(date, JournalStatus.Reviewing, markdown, sourceRawInputIds, Array.Empty<string>(), _clock.Now),
+                            cancellationToken);
+                    }
 
                     run = run with
                     {
@@ -233,7 +237,8 @@ public sealed class JournalHarnessService
                     };
                     await _auditStore.WriteAsync(run, cancellationToken);
                     Emit(emit, "run-completed", run, run.Summary);
-                    return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Reviewing, cancellationToken), run);
+                    var statusOverride = status == "reviewing" ? JournalStatus.Reviewing : (JournalStatus?)null;
+                    return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, statusOverride, cancellationToken), run);
                 }
 
                 var validationErrors = execution.Issues.Select(issue => issue.Message).ToArray();

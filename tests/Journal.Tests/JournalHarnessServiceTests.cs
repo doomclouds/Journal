@@ -127,6 +127,65 @@ public sealed class JournalHarnessServiceTests
     }
 
     [Fact]
+    public async Task ExecuteRunAsync_WhenNoOpHasNoBaseline_DoesNotWriteDraftAndCompletesNoChange()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success(
+                [JournalHarnessOperation.NoOp("当前输入不需要改写草稿。")],
+                "no-op",
+                TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("今天只是保留原始记录", "text", CancellationToken.None);
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+        var persisted = await new JournalHarnessAuditStore(paths).ReadAsync(started.Run.Date, started.Run.Id, CancellationToken.None);
+        var rawInputs = await new RawInputStore(paths).ReadAsync(started.Run.Date, CancellationToken.None);
+
+        Assert.Equal("no-change", result.Run.Status);
+        Assert.Equal("no-change", persisted!.Status);
+        Assert.Equal(JournalStatus.Empty, result.Today.Status);
+        Assert.Null(result.Today.Draft);
+        Assert.Single(rawInputs);
+        Assert.Equal(started.Run.CurrentRawInputId, rawInputs[0].Id);
+        Assert.Equal("今天只是保留原始记录", rawInputs[0].Text);
+        Assert.False(File.Exists(paths.DraftPath(result.Today.Date)));
+        Assert.False(File.Exists(paths.EntryPath(result.Today.Date)));
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_WhenNoOpHasExistingDraft_DoesNotOverwriteDraft()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var date = JournalDate.From(FixedDay);
+        await SeedExistingDraftAsync(paths, date);
+        var before = await new DraftStore(paths).ReadAsync(date, CancellationToken.None);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success(
+                [JournalHarnessOperation.NoOp("已有 draft 不需要改动。")],
+                "no-op",
+                TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("当前输入只做审计记录", "text", CancellationToken.None);
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+        var after = await new DraftStore(paths).ReadAsync(date, CancellationToken.None);
+
+        Assert.Equal("no-change", result.Run.Status);
+        Assert.NotNull(before);
+        Assert.NotNull(after);
+        Assert.Equal(before.Markdown, after.Markdown);
+        Assert.Equal(before.Status, after.Status);
+        Assert.Equal(before.UpdatedAt, after.UpdatedAt);
+        Assert.Equal(before.SourceRawInputIds, after.SourceRawInputIds);
+        Assert.Equal(before.Errors, after.Errors);
+        Assert.Equal(before.Markdown, result.Today.Draft!.Markdown);
+        Assert.False(File.Exists(paths.EntryPath(date)));
+    }
+
+    [Fact]
     public async Task ExecuteRunAsStreamAsync_WhenTwoStreamsStartQueuedRun_InvokesPlannerOnce()
     {
         using var workspace = TempWorkspace.Create();
@@ -200,7 +259,9 @@ public sealed class JournalHarnessServiceTests
             TimeSpan.FromSeconds(5));
 
         Assert.Equal(1, runtime.HarnessPlannerCallCount);
-        Assert.Equal("no-change", completed.Status);
+        Assert.True(
+            string.Equals("no-change", completed.Status, StringComparison.Ordinal),
+            $"Expected no-change but was {completed.Status}: {string.Join(" | ", completed.Errors)}");
         Assert.NotNull(completed.CompletedAt);
     }
 
@@ -235,6 +296,45 @@ public sealed class JournalHarnessServiceTests
         Assert.Contains("用户保留的今日重点", todayFocus.Content, StringComparison.Ordinal);
         Assert.Contains("AI 追加整理，不重复原始输入文本", todayFocus.Content, StringComparison.Ordinal);
         Assert.False(File.Exists(paths.EntryPath(date)));
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_FiltersPlannerRawInputIdsToCurrentServerRawInput()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "- AI 追加当前输入整理",
+            ["raw-current"],
+            "整理当前输入。");
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([operation], "append accepted", TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("当前 raw input 才允许进入 provenance", "text", CancellationToken.None);
+        runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
+            [
+                operation with
+                {
+                    BasedOnRawInputIds =
+                    [
+                        started.Run.CurrentRawInputId,
+                        "raw-does-not-exist",
+                        "raw-x\" --><script>alert(1)</script><!--"
+                    ]
+                }
+            ],
+            "append accepted",
+            TimeSpan.FromMilliseconds(17));
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        var todayFocus = GetSection(result.Today.Draft!.Markdown, "today-focus");
+        Assert.Equal([started.Run.CurrentRawInputId], todayFocus.Provenance.BasedOnRawInputIds);
+        Assert.Contains($"based_on_raw_inputs=\"{started.Run.CurrentRawInputId}\"", result.Today.Draft.Markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("raw-does-not-exist", result.Today.Draft.Markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script>", result.Today.Draft.Markdown, StringComparison.Ordinal);
+        Assert.False(File.Exists(paths.EntryPath(result.Today.Date)));
     }
 
     [Fact]
