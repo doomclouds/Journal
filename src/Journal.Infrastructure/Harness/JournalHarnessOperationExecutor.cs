@@ -106,20 +106,29 @@ public static class JournalHarnessOperationExecutor
 
     private static string AppendContent(string existingContent, string newContent)
     {
-        var existing = existingContent.Trim();
         var next = newContent.Trim();
 
-        if (existing.Length == 0)
+        if (existingContent.Length == 0)
         {
             return next;
         }
 
         if (next.Length == 0)
         {
-            return existing;
+            return existingContent;
         }
 
-        return $"{existing}\n\n{next}";
+        if (existingContent.EndsWith("\n\n", StringComparison.Ordinal))
+        {
+            return $"{existingContent}{next}";
+        }
+
+        if (existingContent.EndsWith('\n'))
+        {
+            return $"{existingContent}\n{next}";
+        }
+
+        return $"{existingContent}\n\n{next}";
     }
 
     private static JmfValidationIssue CreateIssue(string code, string message) =>

@@ -38,6 +38,35 @@ public sealed class JournalHarnessOperationExecutorTests
     }
 
     [Fact]
+    public void Apply_AppendsWithoutTrimmingExistingMarkdownContent()
+    {
+        var existingContent = string.Join(
+            "\n",
+            "    ```csharp",
+            "    var answer = 42;",
+            "    ```  ");
+        var document = CreateDocument([
+            Section("raw-inputs", "- raw"),
+            Section("yesterday-review", "- 昨天完成基础设计"),
+            Section(
+                "today-focus",
+                existingContent,
+                new JmfSectionProvenance("user", "user", "user", "edit", ["raw-1"]))
+        ]);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "  - AI 追加内容  ",
+            ["raw-2"],
+            "追加内容时保留已有 Markdown。");
+
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation]);
+
+        var content = GetSection(result.Document, "today-focus").Content;
+        Assert.StartsWith(existingContent, content, StringComparison.Ordinal);
+        Assert.Equal($"{existingContent}\n\n- AI 追加内容", content);
+    }
+
+    [Fact]
     public void Apply_RejectsReviseAiGeneratedSectionWhenSectionWasTouchedByUser()
     {
         var document = CreateDocument([
