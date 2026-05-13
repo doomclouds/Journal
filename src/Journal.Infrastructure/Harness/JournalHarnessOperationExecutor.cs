@@ -22,8 +22,16 @@ public static class JournalHarnessOperationExecutor
             .ToHashSet(StringComparer.Ordinal);
         var changed = false;
 
-        foreach (var operation in operations)
+        var skippedDuplicateIndexes = FindDuplicateOperationIndexesToSkip(operations);
+
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            if (skippedDuplicateIndexes.Contains(operationIndex))
+            {
+                continue;
+            }
+
+            var operation = operations[operationIndex];
             if (string.Equals(operation.Kind, "no-op", StringComparison.Ordinal))
             {
                 continue;
@@ -140,8 +148,104 @@ public static class JournalHarnessOperationExecutor
             lines.RemoveAt(0);
         }
 
-        return string.Join('\n', lines);
+        return string.Join('\n', lines.Select(NormalizeBulletLine));
     }
+
+    private static string NormalizeBulletLine(string line)
+    {
+        if (line.StartsWith("- ", StringComparison.Ordinal))
+        {
+            return line;
+        }
+
+        if (line.StartsWith("* ", StringComparison.Ordinal)
+            || line.StartsWith("• ", StringComparison.Ordinal))
+        {
+            return $"- {line[2..].Trim()}";
+        }
+
+        var orderedListMarker = line.IndexOf(". ", StringComparison.Ordinal);
+        if (orderedListMarker > 0
+            && orderedListMarker <= 3
+            && line[..orderedListMarker].All(char.IsDigit))
+        {
+            return $"- {line[(orderedListMarker + 2)..].Trim()}";
+        }
+
+        return $"- {line}";
+    }
+
+    private static HashSet<int> FindDuplicateOperationIndexesToSkip(IReadOnlyList<JournalHarnessOperation> operations)
+    {
+        var bestByContent = new Dictionary<string, (int Index, int Rank)>(StringComparer.Ordinal);
+        var skipped = new HashSet<int>();
+
+        for (var index = 0; index < operations.Count; index++)
+        {
+            var operation = operations[index];
+            if (operation.Kind is not ("append" or "upsert" or "revise-ai-generated-section")
+                || !JmfSectionCatalog.TryGet(operation.TargetSectionId, out var definition)
+                || string.Equals(definition.Id, "raw-inputs", StringComparison.Ordinal)
+                || !definition.IsEditableInBlockMode
+                || definition.Kind == JmfSectionKind.System)
+            {
+                continue;
+            }
+
+            var normalizedContent = NormalizeGeneratedContent(operation.Content, definition);
+            var key = CreateDuplicateKey(normalizedContent);
+            if (key.Length == 0)
+            {
+                continue;
+            }
+
+            var rank = GetSectionSpecificityRank(definition.Id);
+            if (!bestByContent.TryGetValue(key, out var currentBest))
+            {
+                bestByContent[key] = (index, rank);
+                continue;
+            }
+
+            if (rank > currentBest.Rank)
+            {
+                skipped.Add(currentBest.Index);
+                bestByContent[key] = (index, rank);
+            }
+            else
+            {
+                skipped.Add(index);
+            }
+        }
+
+        return skipped;
+    }
+
+    private static string CreateDuplicateKey(string normalizedContent)
+    {
+        var lines = normalizedContent
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.StartsWith("- ", StringComparison.Ordinal) ? line[2..] : line)
+            .Select(line => new string(line.Where(character => !char.IsWhiteSpace(character)).ToArray()));
+
+        return string.Join('|', lines);
+    }
+
+    private static int GetSectionSpecificityRank(string sectionId) =>
+        sectionId switch
+        {
+            "work" => 100,
+            "learning" => 95,
+            "health" => 95,
+            "relationship" => 95,
+            "money" => 95,
+            "gratitude" => 90,
+            "future-notes" => 85,
+            "inspiration" => 80,
+            "mood" => 75,
+            "yesterday-review" => 70,
+            "today-focus" => 50,
+            _ => 0
+        };
 
     private static bool IsSectionHeading(string line, JmfSectionDefinition definition)
     {

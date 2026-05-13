@@ -92,6 +92,70 @@ public sealed class JournalHarnessOperationExecutorTests
     }
 
     [Fact]
+    public void Apply_ConvertsAiParagraphContentToBulletItemWhenAppending()
+    {
+        var document = CreateDocument([
+            Section("raw-inputs", "- raw"),
+            Section("yesterday-review", "- 昨天完成基础设计"),
+            Section(
+                "today-focus",
+                "- 用户已经写好的计划",
+                new JmfSectionProvenance("user", "user", "user", "edit", ["raw-1"]))
+        ]);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "今天有个更重要的目标——继续看笔记软件，并处理 Harness 提示词优化的小问题。",
+            ["raw-2"],
+            "模型把条目写成了整段文本。");
+
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(
+            "- 用户已经写好的计划\n- 今天有个更重要的目标——继续看笔记软件，并处理 Harness 提示词优化的小问题。",
+            GetSection(result.Document, "today-focus").Content);
+    }
+
+    [Fact]
+    public void Apply_DeduplicatesSameFactAcrossCompetingSectionsAndKeepsMoreSpecificSection()
+    {
+        var document = CreateDocument([
+            Section("raw-inputs", "- raw"),
+            Section("yesterday-review", "- 昨天完成基础设计"),
+            Section(
+                "today-focus",
+                "- 用户已经写好的计划",
+                new JmfSectionProvenance("user", "user", "user", "edit", ["raw-1"])),
+            Section(
+                "work",
+                "- 已有工作事项",
+                new JmfSectionProvenance("user", "user", "user", "edit", ["raw-1"]))
+        ]);
+        var duplicatedFact = "今天处理 Harness 提示词优化的小问题。";
+        var operations = new[]
+        {
+            JournalHarnessOperation.Append(
+                "today-focus",
+                duplicatedFact,
+                ["raw-2"],
+                "模型把工作事项也放进今日重点。"),
+            JournalHarnessOperation.Append(
+                "work",
+                duplicatedFact,
+                ["raw-2"],
+                "这是具体开发排障事项。")
+        };
+
+        var result = JournalHarnessOperationExecutor.Apply(document, operations, ["raw-2"]);
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal("- 用户已经写好的计划", GetSection(result.Document, "today-focus").Content);
+        Assert.Equal(
+            "- 已有工作事项\n- 今天处理 Harness 提示词优化的小问题。",
+            GetSection(result.Document, "work").Content);
+    }
+
+    [Fact]
     public void Apply_StripsTargetSectionHeadingFromAiOperationContentWhenAppending()
     {
         var document = CreateDocument([

@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-14-harness-section-boundary-duplication-problem.md](./2026-05/2026-05-14-harness-section-boundary-duplication-problem.md): 记录 Harness Planner 缺少九宫格 section 语义边界时，同一事实会被重复写入 `today-focus` 与 `work` 等相近主题的分配问题。
 - [2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md](./2026-05/2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md): 记录 DeepSeek V4 thinking mode 在 Agent Framework tool call 后必须回传 `reasoning_content`，而 OpenAI-compatible 适配层未写回该扩展字段导致 400 的运行时兼容问题。
 - [2026-05-13-generated-draft-missing-ai-provenance-problem.md](./2026-05/2026-05-13-generated-draft-missing-ai-provenance-problem.md): 记录 AI 草稿生成入口漏写 section provenance，导致 harness 误把 AI 生成段落视为 unknown 并拒绝 revise 的来源边界问题。
 - [2026-05-13-harness-current-input-context-leak-problem.md](./2026-05/2026-05-13-harness-current-input-context-leak-problem.md): 记录 append-input 当前输入虽从 raw input 列表排除，却经派生 currentDraftMarkdown 泄漏回 protected context 的 Prompt 分层问题。

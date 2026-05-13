@@ -25,6 +25,9 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("## Writing Style", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("只能调用工具", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("不得在重新整理时新增 raw input", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("每条新增内容必须写成 Markdown bullet", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("同一事实只能进入一个最合适的 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("today-focus 与 work 的边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -77,6 +80,14 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains(catalog, item => item.GetProperty("id").GetString() == "raw-inputs");
         Assert.Contains(catalog, item => item.GetProperty("title").GetString() == "原始输入");
         Assert.Contains(catalog, item => item.TryGetProperty("isEditableInBlockMode", out _));
+        Assert.Contains(catalog, item =>
+            item.GetProperty("id").GetString() == "work"
+            && item.GetProperty("semanticHint").GetString()!.Contains("工作项目", StringComparison.Ordinal)
+            && item.GetProperty("avoidWhen").GetString()!.Contains("今日总体优先级", StringComparison.Ordinal));
+        Assert.Contains(catalog, item =>
+            item.GetProperty("id").GetString() == "today-focus"
+            && item.GetProperty("semanticHint").GetString()!.Contains("今天最重要的行动", StringComparison.Ordinal)
+            && item.GetProperty("avoidWhen").GetString()!.Contains("具体工作项目", StringComparison.Ordinal));
 
         var tools = root.GetProperty("availableTools").EnumerateArray().Select(item => item.GetString()).ToArray();
         Assert.Contains("appendJournalSection", tools);

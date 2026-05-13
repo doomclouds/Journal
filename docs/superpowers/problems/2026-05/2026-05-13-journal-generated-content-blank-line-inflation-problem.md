@@ -8,11 +8,12 @@
 
 ## Symptom
 
-AI harness 插入或创建 section 后，今日工作台阅读态出现明显的大块空白：同一 section 内的条目之间、AI 新插入内容和原有内容之间衔接很突兀。用户添加很多 raw inputs 后，`raw-inputs` / 今日材料区也会变得很长，挡住下面真正要看的日记正文。后续还观察到模型会把目标 section 标题（例如 `## 情绪状态`）放进工具 `content` 参数，导致 UI 里同一个标题出现两次。历史版本改用 Markdown 渲染后，又暴露出当前日记和 Today 阅读态仍按普通文本逐行渲染，导致同一份日记在不同入口视觉风格不一致。
+AI harness 插入或创建 section 后，今日工作台阅读态出现明显的大块空白：同一 section 内的条目之间、AI 新插入内容和原有内容之间衔接很突兀。用户添加很多 raw inputs 后，`raw-inputs` / 今日材料区也会变得很长，挡住下面真正要看的日记正文。后续还观察到模型会把目标 section 标题（例如 `## 情绪状态`）放进工具 `content` 参数，导致 UI 里同一个标题出现两次。历史版本改用 Markdown 渲染后，又暴露出当前日记和 Today 阅读态仍按普通文本逐行渲染，导致同一份日记在不同入口视觉风格不一致。2026-05-14 又观察到模型把新增内容作为整段 paragraph 传入工具参数，section 里没有形成一条一条的 bullet item。
 
 ## Trigger / Context
 
 - Harness tool call 的 `content` 参数包含多余空行，例如 `\n\n- item\n\n\n- item`。
+- Harness tool call 的 `content` 参数可能是一整段自然语言，而不是 `- item` 列表。
 - `JournalHarnessOperationExecutor` 原样保留 AI 新内容里的空行，只做整体 `Trim()`。
 - `AppendContent` 在已有 section 和 AI append 内容之间主动使用 `\n\n` 拼接，导致即使 AI 内容已规范化，仍会额外插入一个空白分隔行。
 - Harness tool call 的 `content` 参数可能包含目标 section 的 Markdown 标题，例如 `## 情绪状态\n\n- ...`。
@@ -35,6 +36,7 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 当前修复已落地：
 
 - 后端对 harness AI 生成的新 `content` 做行级规范化：统一换行、去掉空行、去掉每行首尾空白。
+- 后端把 harness AI 生成的新 `content` 规范为 Markdown bullet list；整段 paragraph、`* item`、`• item` 和短编号列表都会进入统一的 `- item` 形态。
 - 后端在规范化 AI 工具新内容时剥离与目标 section 匹配的 leading Markdown heading，例如 `## 情绪状态` 或 `## mood`，避免模型把 block 标题写入正文。
 - 仅规范化 AI 工具新内容，不裁剪用户已有 section 内容，避免破坏用户手写 Markdown。
 - 后端 append 拼接改为单换行，并压掉已有内容末尾的空白行，避免“修完 AI 内容后又由拼接器插入一行空白”。
@@ -58,6 +60,7 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 - Markdown section content 中可以看到连续空行。
 - Harness audit/tool call 中 `content` 第一行是目标 section 的 `## <title>`。
 - 最新 AI append 内容本身已经没有空行，但已有内容和追加内容之间仍出现一个空白行。
+- AI audit/tool call 中 `content` 是整段自然语言，没有 `- ` 前缀。
 - 历史版本预览比当前日记详情更像正式 Markdown，当前详情仍像搜索摘要卡片。
 - `JournalBlockCard.renderPreview` 对空行生成多个 `<p>`，列表项文本里保留 literal `- `。
 - 用户说“今日材料很长，挡住下面日记内容”。
@@ -87,5 +90,5 @@ AI harness 插入或创建 section 后，今日工作台阅读态出现明显的
 - Code or Test:
   - [JournalHarnessOperationExecutor.cs](../../../../src/Journal.Infrastructure/Harness/JournalHarnessOperationExecutor.cs)
   - [JournalBlockCard.tsx](../../../../apps/desktop/src/JournalBlockCard.tsx)
-  - [JournalHarnessOperationExecutorTests.cs](../../../../tests/Journal.Tests/JournalHarnessOperationExecutorTests.cs)
-  - [App.test.tsx](../../../../apps/desktop/src/App.test.tsx)
+- [JournalHarnessOperationExecutorTests.cs](../../../../tests/Journal.Tests/JournalHarnessOperationExecutorTests.cs)
+- [App.test.tsx](../../../../apps/desktop/src/App.test.tsx)
