@@ -910,6 +910,11 @@ public sealed class TodayJournalEndpointTests
         using var factory = CreateFactory(workspace.Root);
         using var client = factory.CreateClient();
 
+        using var appendResponse = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { text = "先记录一条已有输入", source = "text" });
+        appendResponse.EnsureSuccessStatusCode();
+
         using var response = await client.PostAsJsonAsync(
             "/journal/today/harness/runs",
             new { mode = "reorganize-existing" });
@@ -920,9 +925,25 @@ public sealed class TodayJournalEndpointTests
         var run = root.GetProperty("run");
 
         Assert.Equal("empty", root.GetProperty("today").GetProperty("status").GetString());
-        Assert.Empty(root.GetProperty("today").GetProperty("rawInputs").EnumerateArray());
+        Assert.Single(root.GetProperty("today").GetProperty("rawInputs").EnumerateArray());
         Assert.Equal("reorganize-existing", run.GetProperty("mode").GetString());
         Assert.Equal(JsonValueKind.Null, run.GetProperty("currentRawInputId").ValueKind);
+    }
+
+    [Fact]
+    public async Task PostHarnessRun_WithReorganizeExistingAndText_ReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { mode = "reorganize-existing", text = "不应该携带新输入", source = "text" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("text is not allowed", document.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]
