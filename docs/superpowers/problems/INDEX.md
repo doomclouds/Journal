@@ -8,6 +8,7 @@
 - [2026-05-13-history-index-cache-stale-sidecars-problem.md](./2026-05/2026-05-13-history-index-cache-stale-sidecars-problem.md): 记录可重建 SQLite/FTS 历史索引在 invalid JMF、raw-only 日期、rebuild sidecar 和非规范路径下容易保留旧缓存或漏索引的失败模式。
 - [2026-05-13-history-workbench-stale-selection-restore-mismatch-problem.md](./2026-05/2026-05-13-history-workbench-stale-selection-restore-mismatch-problem.md): 记录历史工作台 selected date 与旧 detail/version state 错配，可能拼出新日期加旧 versionId 恢复请求的前端竞态问题。
 - [2026-05-13-journal-generated-content-blank-line-inflation-problem.md](./2026-05/2026-05-13-journal-generated-content-blank-line-inflation-problem.md): 记录 AI 生成内容多余空行被后端原样写入、前端按段落放大，且今日材料默认展开过长导致正文阅读被遮挡的格式化体验问题。
+- [2026-05-13-journal-test-workspace-cleanup-file-lock-problem.md](./2026-05/2026-05-13-journal-test-workspace-cleanup-file-lock-problem.md): 记录 Windows 全量测试中 SQLite/WAL/SSE 后台句柄释放晚于 `TempWorkspace.Dispose`，导致临时目录删除偶发失败的测试稳定性问题。
 - [2026-05-12-harness-noop-draft-overwrite-problem.md](./2026-05/2026-05-12-harness-noop-draft-overwrite-problem.md): 记录 harness no-op/no-change 在 service 层仍写入或刷新 reviewing draft 的分层合同漂移问题。
 - [2026-05-12-harness-provenance-attribute-pollution-problem.md](./2026-05/2026-05-12-harness-provenance-attribute-pollution-problem.md): 记录 LLM 工具参数中的 raw input id 未校验/转义就进入 JMF provenance marker，可能污染 section 属性的安全边界问题。
 - [2026-05-12-harness-sse-run-lifecycle-problem.md](./2026-05/2026-05-12-harness-sse-run-lifecycle-problem.md): 记录 harness SSE endpoint 同时承担执行和进度推送时，断线、重连、并发首连可能导致取消或重复执行 run 的生命周期问题。
