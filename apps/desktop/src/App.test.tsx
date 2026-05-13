@@ -869,7 +869,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "历史与版本" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08/versions", undefined);
-    expect(screen.getByText("- 推进 Phase 4A 历史搜索")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "历史日记预览" })).getByText("推进 Phase 4A 历史搜索")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "待确认" }));
 
@@ -932,8 +932,9 @@ describe("App", () => {
     newestDetailDeferred.resolve(mockJsonResponse(historyDetail(newestDate, "- 最新日期详情")));
     newestVersionsDeferred.resolve(mockJsonResponse([]));
 
-    expect(await screen.findByText("- 最新日期详情")).toBeInTheDocument();
-    expect(screen.queryByText("- 旧日期详情")).not.toBeInTheDocument();
+    const historyPreview = screen.getByRole("region", { name: "历史日记预览" });
+    expect(await within(historyPreview).findByText("最新日期详情")).toBeInTheDocument();
+    expect(within(historyPreview).queryByText("旧日期详情")).not.toBeInTheDocument();
 
     await act(async () => {
       olderDetailDeferred.resolve(mockJsonResponse(historyDetail(olderDate, "- 旧日期详情")));
@@ -942,8 +943,8 @@ describe("App", () => {
       await olderVersionsDeferred.promise;
     });
 
-    expect(screen.getByText("- 最新日期详情")).toBeInTheDocument();
-    expect(screen.queryByText("- 旧日期详情")).not.toBeInTheDocument();
+    expect(within(historyPreview).getByText("最新日期详情")).toBeInTheDocument();
+    expect(within(historyPreview).queryByText("旧日期详情")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-09", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-10", undefined);
   });
@@ -979,14 +980,14 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
-    expect(await screen.findByText("- 推进 Phase 4A 历史搜索")).toBeInTheDocument();
+    expect(await within(screen.getByRole("region", { name: "历史日记预览" })).findByText("推进 Phase 4A 历史搜索")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "恢复为草稿" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /2026-05-09/ }));
 
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-09", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-09/versions", undefined);
-    expect(screen.queryByText("- 推进 Phase 4A 历史搜索")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "历史日记预览" })).queryByText("推进 Phase 4A 历史搜索")).not.toBeInTheDocument();
     const staleRestoreButton = screen.queryByRole("button", { name: "恢复为草稿" });
     if (staleRestoreButton) {
       fireEvent.click(staleRestoreButton);
@@ -1007,7 +1008,7 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockResolvedValueOnce(mockJsonResponse({ items: [historySummary] }))
-      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 详情内容需要被清空")))
       .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
       .mockReturnValueOnce(refreshHistoryDeferred.promise)
       .mockResolvedValue(mockJsonResponse(createEditorState()));
@@ -1016,7 +1017,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
-    expect(await screen.findByText("- 推进 Phase 4A 历史搜索")).toBeInTheDocument();
+    expect(await within(screen.getByRole("region", { name: "历史日记预览" })).findByText("详情内容需要被清空")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "恢复为草稿" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "刷新" }));
@@ -1024,7 +1025,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history?limit=50", undefined)
     );
-    expect(screen.queryByText("- 推进 Phase 4A 历史搜索")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "历史日记预览" })).queryByText("详情内容需要被清空")).not.toBeInTheDocument();
     const staleRestoreButton = screen.queryByRole("button", { name: "恢复为草稿" });
     if (staleRestoreButton) {
       fireEvent.click(staleRestoreButton);
@@ -1071,6 +1072,37 @@ describe("App", () => {
     );
     expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
     expect(screen.getByText("从历史版本恢复的草稿")).toBeInTheDocument();
+  });
+
+  test("opens selected history version detail before restore", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse({ items: [historySummary] }))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse({
+        version: historyVersion,
+        markdown: "# 旧版本\n\n- 指定版本内容"
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    fireEvent.click(await screen.findByRole("button", { name: "查看版本" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/history/2026-05-08/versions/version-2026-05-08T09-30-00%2B08-00",
+        undefined
+      )
+    );
+    const mainPreview = screen.getByRole("region", { name: "历史日记预览" });
+    expect(await within(mainPreview).findByRole("heading", { name: "旧版本" })).toBeInTheDocument();
+    expect(within(mainPreview).getByText("指定版本内容")).toBeInTheDocument();
   });
 
   test("blocks history workbench while inline block edits are dirty", async () => {
@@ -2102,7 +2134,7 @@ describe("JournalEditor", () => {
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
   });
 
-  test("reading preview collapses repeated blank lines from generated content", () => {
+  test("reading preview renders generated markdown lists with the shared markdown style", () => {
     const { container } = render(
       <JournalEditor
         editor={createEditorState({
@@ -2121,16 +2153,15 @@ describe("JournalEditor", () => {
       />
     );
 
-    const previewLines = [...container.querySelectorAll(".journal-block-readonly p")]
-      .map(line => line.textContent);
-
-    expect(previewLines).toEqual([
-      "- 今天可能较早下班",
-      "\u00a0",
-      "- 测试新整理的接口",
-      "\u00a0",
-      "- 检查 DeepSeek bug"
+    const readonlyPreview = container.querySelector(".journal-block-readonly");
+    expect(readonlyPreview).not.toBeNull();
+    expect(within(readonlyPreview as HTMLElement).getByRole("list")).toBeInTheDocument();
+    expect(within(readonlyPreview as HTMLElement).getAllByRole("listitem").map(item => item.textContent?.trim())).toEqual([
+      "今天可能较早下班",
+      "测试新整理的接口",
+      "检查 DeepSeek bug"
     ]);
+    expect(readonlyPreview).not.toHaveTextContent("- 今天可能较早下班");
   });
 
   test("selected block save only submits the inline block being edited", () => {

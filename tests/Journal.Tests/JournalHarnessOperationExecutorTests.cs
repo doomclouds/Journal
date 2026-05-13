@@ -92,6 +92,32 @@ public sealed class JournalHarnessOperationExecutorTests
     }
 
     [Fact]
+    public void Apply_StripsTargetSectionHeadingFromAiOperationContentWhenAppending()
+    {
+        var document = CreateDocument([
+            Section("raw-inputs", "- raw"),
+            Section("yesterday-review", "- 昨天完成基础设计"),
+            Section(
+                "mood",
+                "- 期待且略带疑惑",
+                new JmfSectionProvenance("mixed", "ai", "user", "edit", ["raw-1"])),
+            Section("today-focus", "- 今日重点")
+        ]);
+        var operation = JournalHarnessOperation.Append(
+            "mood",
+            "## 情绪状态\n\n- 开心且兴奋！日记架构基本完成，感觉未来可期",
+            ["raw-2"],
+            "模型把 section 标题一起放进了工具参数。");
+
+        var result = JournalHarnessOperationExecutor.Apply(document, [operation], ["raw-2"]);
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(
+            "- 期待且略带疑惑\n- 开心且兴奋！日记架构基本完成，感觉未来可期",
+            GetSection(result.Document, "mood").Content);
+    }
+
+    [Fact]
     public void Apply_NormalizesBlankLinesFromAiOperationContentWhenCreatingSection()
     {
         var document = CreateDocument();

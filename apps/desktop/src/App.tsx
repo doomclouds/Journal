@@ -8,6 +8,7 @@ import {
   getJournalAudit,
   getJournalHistory,
   getJournalHistoryEntry,
+  getJournalHistoryVersion,
   getJournalHistoryVersions,
   getTodayEditor,
   openHarnessRunEvents,
@@ -27,6 +28,7 @@ import {
   type JournalHarnessRunEvent,
   type JournalHistoryEntryDetail,
   type JournalHistoryEntrySummary,
+  type JournalVersionDetail,
   type HealthResponse,
   type TodayEditorState
 } from "./api";
@@ -109,6 +111,7 @@ export default function App() {
   const [historyDetail, setHistoryDetail] = useState<JournalHistoryEntryDetail | null>(null);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
   const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
+  const [historyVersionDetail, setHistoryVersionDetail] = useState<JournalVersionDetail | null>(null);
   const [historyError, setHistoryError] = useState("");
 
   useEffect(() => {
@@ -553,6 +556,7 @@ export default function App() {
     if (historyRequestId === historyRequestIdRef.current) {
       setHistoryDetail(detail);
       setHistoryVersions(versions);
+      setHistoryVersionDetail(null);
       setHistoryError("");
     }
   }
@@ -563,6 +567,7 @@ export default function App() {
     setHistoryError("");
     setHistoryDetail(null);
     setHistoryVersions([]);
+    setHistoryVersionDetail(null);
 
     try {
       const result = await getJournalHistory({ query, status, limit: 50 });
@@ -608,6 +613,7 @@ export default function App() {
     setHistorySelectedDate(date);
     setHistoryDetail(null);
     setHistoryVersions([]);
+    setHistoryVersionDetail(null);
     setHistoryError("");
 
     try {
@@ -619,15 +625,21 @@ export default function App() {
     }
   }
 
-  async function handleRestoreHistoryVersion(versionId: string) {
-    if (!historySelectedDate) {
-      return;
+  async function handleViewHistoryVersion(version: JournalEntryVersion) {
+    setHistoryError("");
+    try {
+      const detail = await getJournalHistoryVersion(version.date.isoDate, version.id);
+      setHistoryVersionDetail(detail);
+    } catch (caught) {
+      setHistoryError(getErrorMessage(caught));
     }
+  }
 
+  async function handleRestoreHistoryVersion(version: JournalEntryVersion) {
     setHistoryError("");
     setIsSubmitting(true);
     try {
-      const restored = await restoreJournalHistoryVersionDraft(historySelectedDate, versionId);
+      const restored = await restoreJournalHistoryVersionDraft(version.date.isoDate, version.id);
       setEditor(restored);
       setWorkspaceMode("today");
       setWorkbenchView("assistant");
@@ -686,6 +698,7 @@ export default function App() {
             detail={historyDetail}
             selectedDate={historySelectedDate}
             versions={historyVersions}
+            selectedVersionDetail={historyVersionDetail}
             error={historyError}
             onBack={() => setWorkspaceMode("today")}
             onQueryChange={value => {
@@ -698,7 +711,9 @@ export default function App() {
             }}
             onSelectDate={date => void handleHistorySelectDate(date)}
             onRefresh={() => void refreshHistory()}
-            onRestoreVersion={versionId => void handleRestoreHistoryVersion(versionId)}
+            onViewVersion={version => void handleViewHistoryVersion(version)}
+            onClearVersion={() => setHistoryVersionDetail(null)}
+            onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
           />
         ) : (
         <>

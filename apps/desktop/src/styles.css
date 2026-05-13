@@ -1851,6 +1851,30 @@ button:focus-visible {
   line-height: 1;
 }
 
+.journal-block-readonly .markdown-preview {
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
+}
+
+.journal-block-readonly .markdown-preview ul,
+.journal-block-readonly .markdown-preview ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.journal-block-readonly .markdown-preview p,
+.journal-block-readonly .markdown-preview li {
+  margin: 0;
+  color: #38362f;
+  font-size: 16px;
+  line-height: 1.95;
+}
+
 .raw-inputs-toggle {
   justify-self: start;
   min-height: 28px;
@@ -2789,6 +2813,14 @@ button:focus-visible {
 .history-version-card {
   display: grid;
   gap: 10px;
+}
+
+.history-version-main-preview .markdown-preview,
+.history-current-main-preview .markdown-preview {
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
 }
 
 @media (max-width: 1280px) {

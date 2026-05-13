@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HistoryWorkbench } from "./HistoryWorkbench";
 import type { JournalDate } from "./api";
@@ -51,7 +51,7 @@ describe("HistoryWorkbench", () => {
           date: historyDate,
           status: "processed",
           attentionReason: null,
-          markdown: "正式 Markdown",
+          markdown: "# 当前日记\n\n- Markdown 渲染出来的正式内容",
           sections: [{
             id: "today-focus",
             title: "今天想推进",
@@ -84,7 +84,10 @@ describe("HistoryWorkbench", () => {
 
     expect(screen.getByRole("heading", { name: "历史与版本" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /2026-05-13/ })).toBeInTheDocument();
-    expect(screen.getByText("- 测试新整理的接口")).toBeInTheDocument();
+    const mainPreview = screen.getByRole("region", { name: "历史日记预览" });
+    expect(within(mainPreview).getByRole("heading", { name: "当前日记" })).toBeInTheDocument();
+    expect(within(mainPreview).getByText("Markdown 渲染出来的正式内容")).toBeInTheDocument();
+    expect(within(mainPreview).queryByText("- 测试新整理的接口")).not.toBeInTheDocument();
     expect(screen.getByText("sha256:test")).toBeInTheDocument();
   });
 
@@ -121,7 +124,151 @@ describe("HistoryWorkbench", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "恢复为草稿" }));
 
-    expect(onRestoreVersion).toHaveBeenCalledWith("version-2026-05-13T07-11-14+08-00");
+    expect(onRestoreVersion).toHaveBeenCalledWith(expect.objectContaining({
+      id: "version-2026-05-13T07-11-14+08-00",
+      date: historyDate
+    }));
+  });
+
+  it("requests version detail and renders selected version markdown in the main paper", () => {
+    const onViewVersion = vi.fn();
+
+    render(
+      <HistoryWorkbench
+        isBusy={false}
+        query=""
+        status=""
+        entries={[{
+          date: historyDate,
+          status: "processed",
+          mood: "平静",
+          rawInputCount: 2,
+          versionCount: 1,
+          attentionReason: null,
+          hits: []
+        }]}
+        detail={{
+          date: historyDate,
+          status: "processed",
+          attentionReason: null,
+          markdown: "正式 Markdown",
+          sections: [{
+            id: "today-focus",
+            title: "今天想推进",
+            content: "当前正式日记不应显示",
+            kind: "required",
+            isEditableInBlockMode: true
+          }],
+          versions: []
+        }}
+        selectedDate="2026-05-13"
+        versions={[{
+          id: "version-2026-05-13T07-11-14+08-00",
+          date: historyDate,
+          createdAt: "2026-05-13T07:11:14+08:00",
+          reason: "confirm-draft",
+          sourceEntryPath: "entries/2026/05/2026-05-13.md",
+          markdownPath: ".journal/versions/2026/05/2026-05-13/version.md",
+          metaPath: ".journal/versions/2026/05/2026-05-13/version.meta.json",
+          contentHash: "sha256:test"
+        }]}
+        selectedVersionDetail={{
+          version: {
+            id: "version-2026-05-13T07-11-14+08-00",
+            date: historyDate,
+            createdAt: "2026-05-13T07:11:14+08:00",
+            reason: "confirm-draft",
+            sourceEntryPath: "entries/2026/05/2026-05-13.md",
+            markdownPath: ".journal/versions/2026/05/2026-05-13/version.md",
+            metaPath: ".journal/versions/2026/05/2026-05-13/version.meta.json",
+            contentHash: "sha256:test"
+          },
+          markdown: "# 旧版本\n\n- 指定版本内容"
+        }}
+        error=""
+        onBack={vi.fn()}
+        onQueryChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onRefresh={vi.fn()}
+        onViewVersion={onViewVersion}
+        onRestoreVersion={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看版本" }));
+
+    expect(onViewVersion).toHaveBeenCalledWith(expect.objectContaining({
+      id: "version-2026-05-13T07-11-14+08-00",
+      date: historyDate
+    }));
+    const mainPreview = screen.getByRole("region", { name: "历史日记预览" });
+    expect(within(mainPreview).getByRole("heading", { name: "旧版本" })).toBeInTheDocument();
+    expect(within(mainPreview).getByText("指定版本内容")).toBeInTheDocument();
+    expect(within(mainPreview).queryByText("当前正式日记不应显示")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("所选版本内容")).not.toBeInTheDocument();
+  });
+
+  it("returns the main paper from selected version to current entry detail", () => {
+    const onClearVersion = vi.fn();
+
+    render(
+      <HistoryWorkbench
+        isBusy={false}
+        query=""
+        status=""
+        entries={[{
+          date: historyDate,
+          status: "processed",
+          mood: "平静",
+          rawInputCount: 2,
+          versionCount: 1,
+          attentionReason: null,
+          hits: []
+        }]}
+        detail={{
+          date: historyDate,
+          status: "processed",
+          attentionReason: null,
+          markdown: "正式 Markdown",
+          sections: [{
+            id: "today-focus",
+            title: "今天想推进",
+            content: "当前正式日记内容",
+            kind: "required",
+            isEditableInBlockMode: true
+          }],
+          versions: []
+        }}
+        selectedDate="2026-05-13"
+        versions={[]}
+        selectedVersionDetail={{
+          version: {
+            id: "version-2026-05-13T07-11-14+08-00",
+            date: historyDate,
+            createdAt: "2026-05-13T07:11:14+08:00",
+            reason: "confirm-draft",
+            sourceEntryPath: "entries/2026/05/2026-05-13.md",
+            markdownPath: ".journal/versions/2026/05/2026-05-13/version.md",
+            metaPath: ".journal/versions/2026/05/2026-05-13/version.meta.json",
+            contentHash: "sha256:test"
+          },
+          markdown: "# 旧版本\n\n- 指定版本内容"
+        }}
+        error=""
+        onBack={vi.fn()}
+        onQueryChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onRefresh={vi.fn()}
+        onClearVersion={onClearVersion}
+        onRestoreVersion={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看当前日记" }));
+
+    expect(onClearVersion).toHaveBeenCalled();
   });
 
   it("does not render stale detail or restore actions from another selected date", () => {

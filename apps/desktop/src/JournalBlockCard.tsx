@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { JmfSection } from "./api";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { getSectionDisplayTitle, getSectionKindLabel } from "./todayWorkbenchView";
 
 type JournalBlockCardProps = {
@@ -13,47 +14,12 @@ type JournalBlockCardProps = {
   onSave: () => void;
 };
 
-function createPreviewLines(value: string) {
-  const rawLines = value.length > 0 ? value.split(/\r?\n/) : ["这一段还没有内容。"];
-  const lines: string[] = [];
-  let previousWasBlank = false;
-
-  for (const line of rawLines) {
-    const isBlank = line.trim().length === 0;
-    if (isBlank) {
-      if (lines.length === 0 || previousWasBlank) {
-        continue;
-      }
-
-      lines.push("");
-      previousWasBlank = true;
-      continue;
-    }
-
-    lines.push(line);
-    previousWasBlank = false;
-  }
-
-  while (lines.length > 0 && lines[lines.length - 1].trim().length === 0) {
-    lines.pop();
-  }
-
-  return lines.length > 0 ? lines : ["这一段还没有内容。"];
-}
-
-function renderPreview(sectionId: string, value: string) {
-  const lines = createPreviewLines(value);
+function renderPreview(value: string) {
+  const previewMarkdown = value.trim().length > 0 ? value : "这一段还没有内容。";
 
   return (
     <div className="journal-block-readonly">
-      {lines.map((line, index) => (
-        <p
-          key={`${sectionId}-${index}`}
-          className={line.length === 0 ? "blank-line" : undefined}
-        >
-          {line || "\u00a0"}
-        </p>
-      ))}
+      <MarkdownPreview markdown={previewMarkdown} />
     </div>
   );
 }
@@ -92,7 +58,7 @@ export function JournalBlockCard({
         </button>
       ) : null}
 
-      {shouldShowPreview && renderPreview(section.id, value)}
+      {shouldShowPreview && renderPreview(value)}
 
       {section.isEditableInBlockMode && !isEditing ? (
         <button type="button" className="edit-chip" aria-label={`编辑 ${displayTitle}`} disabled={disabled} onClick={onEdit}>

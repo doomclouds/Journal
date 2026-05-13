@@ -46,7 +46,7 @@ public static class JournalHarnessOperationExecutor
 
             var index = sections.FindIndex(section => string.Equals(section.Id, operation.TargetSectionId, StringComparison.Ordinal));
             var basedOnRawInputIds = FilterBasedOnRawInputIds(operation.BasedOnRawInputIds, allowedRawInputIdSet);
-            var normalizedContent = NormalizeGeneratedContent(operation.Content);
+            var normalizedContent = NormalizeGeneratedContent(operation.Content, definition);
             if (operation.Kind == "upsert" && index < 0)
             {
                 sections.Add(new JmfSection(
@@ -125,16 +125,34 @@ public static class JournalHarnessOperationExecutor
             .ToArray();
     }
 
-    private static string NormalizeGeneratedContent(string content)
+    private static string NormalizeGeneratedContent(string content, JmfSectionDefinition definition)
     {
         var lines = content
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace("\r", "\n", StringComparison.Ordinal)
             .Split('\n', StringSplitOptions.None)
             .Select(line => line.Trim())
-            .Where(line => line.Length > 0);
+            .Where(line => line.Length > 0)
+            .ToList();
+
+        while (lines.Count > 0 && IsSectionHeading(lines[0], definition))
+        {
+            lines.RemoveAt(0);
+        }
 
         return string.Join('\n', lines);
+    }
+
+    private static bool IsSectionHeading(string line, JmfSectionDefinition definition)
+    {
+        var heading = line.TrimStart('#').Trim();
+        if (heading.Length == line.Length)
+        {
+            return false;
+        }
+
+        return string.Equals(heading, definition.Title, StringComparison.Ordinal)
+            || string.Equals(heading, definition.Id, StringComparison.Ordinal);
     }
 
     private static string AppendContent(string existingContent, string newContent)

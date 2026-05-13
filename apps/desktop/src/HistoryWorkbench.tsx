@@ -1,5 +1,6 @@
-import { ArrowLeft, RefreshCw, RotateCcw, Search } from "lucide-react";
-import type { JournalEntryVersion, JournalHistoryEntryDetail, JournalHistoryEntrySummary } from "./api";
+import { ArrowLeft, Eye, RefreshCw, RotateCcw, Search } from "lucide-react";
+import type { JournalEntryVersion, JournalHistoryEntryDetail, JournalHistoryEntrySummary, JournalVersionDetail } from "./api";
+import { MarkdownPreview } from "./MarkdownPreview";
 
 type HistoryWorkbenchProps = {
   isBusy: boolean;
@@ -9,13 +10,16 @@ type HistoryWorkbenchProps = {
   detail: JournalHistoryEntryDetail | null;
   selectedDate: string;
   versions: JournalEntryVersion[];
+  selectedVersionDetail?: JournalVersionDetail | null;
   error: string;
   onBack: () => void;
   onQueryChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   onSelectDate: (date: string) => void;
   onRefresh: () => void;
-  onRestoreVersion: (versionId: string) => void;
+  onViewVersion?: (version: JournalEntryVersion) => void;
+  onClearVersion?: () => void;
+  onRestoreVersion: (version: JournalEntryVersion) => void;
 };
 
 const statusOptions = [
@@ -66,18 +70,26 @@ export function HistoryWorkbench({
   detail,
   selectedDate,
   versions,
+  selectedVersionDetail = null,
   error,
   onBack,
   onQueryChange,
   onStatusChange,
   onSelectDate,
   onRefresh,
+  onViewVersion,
+  onClearVersion,
   onRestoreVersion
 }: HistoryWorkbenchProps) {
   const selected = entries.find(entry => entry.date.isoDate === selectedDate) ?? null;
   const matchingDetail = detail?.date.isoDate === selectedDate ? detail : null;
   const matchingVersions = versions.filter(version => version.date.isoDate === selectedDate);
+  const matchingVersionDetail = selectedVersionDetail?.version.date.isoDate === selectedDate
+    ? selectedVersionDetail
+    : null;
+  const currentDetailMarkdown = matchingDetail?.markdown?.trim() ?? "";
   const previewSections = matchingDetail?.sections ?? [];
+  const isShowingVersion = matchingVersionDetail !== null;
 
   return (
     <>
@@ -146,6 +158,12 @@ export function HistoryWorkbench({
             <h2>历史与版本</h2>
           </div>
           <div className="history-stage-actions">
+            {isShowingVersion ? (
+              <button type="button" className="secondary-action secondary" onClick={onClearVersion}>
+                <Eye size={15} aria-hidden="true" />
+                查看当前日记
+              </button>
+            ) : null}
             <button type="button" className="secondary-action secondary" onClick={onRefresh} disabled={isBusy}>
               <RefreshCw size={15} aria-hidden="true" />
               刷新
@@ -163,32 +181,52 @@ export function HistoryWorkbench({
             {selected ? (
               <>
                 <header className="history-document-head">
-                  <p className="kicker">Local History</p>
+                  <p className="kicker">{isShowingVersion ? "Version Snapshot" : "Local History"}</p>
                   <h1>{selected.date.isoDate}</h1>
                   <p>
-                    <span>{getStatusLabel(matchingDetail?.status ?? selected.status)}</span>
-                    <span>{selected.rawInputCount} 条材料</span>
-                    <span>{matchingVersions.length || selected.versionCount} 个版本</span>
+                    {matchingVersionDetail ? (
+                      <>
+                        <span>历史版本</span>
+                        <span>{formatHistoryTime(matchingVersionDetail.version.createdAt)}</span>
+                        <span>{matchingVersionDetail.version.reason}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{getStatusLabel(matchingDetail?.status ?? selected.status)}</span>
+                        <span>{selected.rawInputCount} 条材料</span>
+                        <span>{matchingVersions.length || selected.versionCount} 个版本</span>
+                      </>
+                    )}
                   </p>
                 </header>
 
-                {matchingDetail?.attentionReason ?? selected.attentionReason ? (
+                {!matchingVersionDetail && (matchingDetail?.attentionReason ?? selected.attentionReason) ? (
                   <p className="attention-copy">{matchingDetail?.attentionReason ?? selected.attentionReason}</p>
                 ) : null}
 
-                <div className="history-hit-list">
-                  {previewSections.length > 0 ? previewSections.map(section => (
-                    <section key={section.id} className="history-hit">
-                      <span>{section.title}</span>
-                      <p>{section.content}</p>
-                    </section>
-                  )) : selected.hits.map(hit => (
-                    <section key={`${hit.sourceType}-${hit.sectionId ?? hit.rawInputId ?? hit.title}`} className="history-hit">
-                      <span>{hit.sourceType === "raw-input" ? "原始材料" : hit.title}</span>
-                      <p>{hit.snippet}</p>
-                    </section>
-                  ))}
-                </div>
+                {matchingVersionDetail ? (
+                  <section className="history-version-main-preview" aria-label="历史版本内容">
+                    <MarkdownPreview markdown={matchingVersionDetail.markdown} />
+                  </section>
+                ) : currentDetailMarkdown ? (
+                  <section className="history-current-main-preview" aria-label="当前日记内容">
+                    <MarkdownPreview markdown={currentDetailMarkdown} />
+                  </section>
+                ) : (
+                  <div className="history-hit-list">
+                    {previewSections.length > 0 ? previewSections.map(section => (
+                      <section key={section.id} className="history-hit">
+                        <span>{section.title}</span>
+                        <p>{section.content}</p>
+                      </section>
+                    )) : selected.hits.map(hit => (
+                      <section key={`${hit.sourceType}-${hit.sectionId ?? hit.rawInputId ?? hit.title}`} className="history-hit">
+                        <span>{hit.sourceType === "raw-input" ? "原始材料" : hit.title}</span>
+                        <p>{hit.snippet}</p>
+                      </section>
+                    ))}
+                  </div>
+                )}
               </>
             ) : (
               <section className="empty-paper audit-empty-state">
@@ -224,7 +262,16 @@ export function HistoryWorkbench({
               <button
                 type="button"
                 className="assistant-inline-action"
-                onClick={() => onRestoreVersion(version.id)}
+                onClick={() => onViewVersion?.(version)}
+                disabled={isBusy}
+              >
+                <Eye size={14} aria-hidden="true" />
+                查看版本
+              </button>
+              <button
+                type="button"
+                className="assistant-inline-action"
+                onClick={() => onRestoreVersion(version)}
                 disabled={isBusy}
               >
                 <RotateCcw size={14} aria-hidden="true" />
@@ -232,6 +279,7 @@ export function HistoryWorkbench({
               </button>
             </section>
           ))}
+
         </div>
       </aside>
     </>
