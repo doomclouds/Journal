@@ -7,6 +7,8 @@ namespace Journal.Infrastructure.Storage;
 public sealed class JournalIndexStore
 {
     private const int SchemaVersion = 1;
+    private const int SearchHitsPerDateLimit = 5;
+    private const int LikeSnippetMaxLength = 240;
     private readonly LocalJournalPaths _paths;
 
     public JournalIndexStore(LocalJournalPaths paths)
@@ -586,7 +588,7 @@ public sealed class JournalIndexStore
                        section_fts.section_id AS section_id,
                        NULL AS raw_input_id,
                        section_fts.title AS title,
-                       section_fts.content AS snippet
+                       snippet(section_fts, 3, '[', ']', '...', 12) AS snippet
                 FROM section_fts
                 INNER JOIN entries e ON e.date = section_fts.date
                 WHERE section_fts MATCH $query
@@ -603,7 +605,7 @@ public sealed class JournalIndexStore
                        NULL AS section_id,
                        raw_input_fts.raw_input_id AS raw_input_id,
                        raw_input_fts.source AS title,
-                       raw_input_fts.text AS snippet
+                       snippet(raw_input_fts, 3, '[', ']', '...', 12) AS snippet
                 FROM raw_input_fts
                 INNER JOIN entries e ON e.date = raw_input_fts.date
                 WHERE raw_input_fts MATCH $query
@@ -611,6 +613,14 @@ public sealed class JournalIndexStore
                   AND ($from IS NULL OR e.date >= $from)
                   AND ($to IS NULL OR e.date <= $to)
                   AND ($cursor IS NULL OR e.date < $cursor)
+            ),
+            ranked_hits AS (
+                SELECT h.*,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY h.date
+                           ORDER BY h.source_type, h.section_id, h.raw_input_id
+                       ) AS hit_rank
+                FROM hits h
             )
             SELECT h.date,
                    h.status,
@@ -623,45 +633,15 @@ public sealed class JournalIndexStore
                    h.snippet,
                    (SELECT COUNT(*) FROM raw_inputs r WHERE r.date = h.date) AS raw_input_count,
                    (SELECT COUNT(*) FROM entry_versions v WHERE v.date = h.date) AS version_count
-            FROM hits h
+            FROM ranked_hits h
+            WHERE h.hit_rank <= $hitLimit
             ORDER BY h.date DESC, h.source_type, h.section_id, h.raw_input_id;
             """;
         AddSearchParameters(command, query, limit);
         command.Parameters.AddWithValue("$query", BuildFtsLiteralQuery(normalizedQuery));
+        command.Parameters.AddWithValue("$hitLimit", SearchHitsPerDateLimit);
 
-        var grouped = new Dictionary<string, MutableSummary>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var date = reader.GetString(0);
-            if (!grouped.TryGetValue(date, out var summary))
-            {
-                if (grouped.Count >= limit)
-                {
-                    break;
-                }
-
-                summary = new MutableSummary(
-                    JournalDate.Parse(date),
-                    reader.GetString(1),
-                    GetNullableString(reader, 2),
-                    reader.GetInt32(9),
-                    reader.GetInt32(10),
-                    GetNullableString(reader, 3));
-                grouped.Add(date, summary);
-            }
-
-            summary.Hits.Add(new JournalHistoryHit(
-                reader.GetString(4),
-                GetNullableString(reader, 5),
-                GetNullableString(reader, 6),
-                reader.GetString(7),
-                reader.GetString(8)));
-        }
-
-        return grouped.Values
-            .Select(summary => summary.ToImmutable())
-            .ToArray();
+        return await ReadGroupedHitsAsync(command, limit, cancellationToken);
     }
 
     private static async Task<IReadOnlyList<JournalHistoryEntrySummary>> SearchLikeAsync(
@@ -682,7 +662,11 @@ public sealed class JournalIndexStore
                        s.section_id AS section_id,
                        NULL AS raw_input_id,
                        s.title AS title,
-                       s.content AS snippet
+                       CASE
+                           WHEN length(s.content) > $snippetMaxLength
+                           THEN substr(s.content, 1, $snippetMaxLength - 3) || '...'
+                           ELSE s.content
+                       END AS snippet
                 FROM entry_sections s
                 INNER JOIN entries e ON e.date = s.date
                 WHERE (s.title LIKE $like ESCAPE '\' OR s.content LIKE $like ESCAPE '\')
@@ -699,7 +683,11 @@ public sealed class JournalIndexStore
                        NULL AS section_id,
                        r.id AS raw_input_id,
                        r.source AS title,
-                       r.text AS snippet
+                       CASE
+                           WHEN length(r.text) > $snippetMaxLength
+                           THEN substr(r.text, 1, $snippetMaxLength - 3) || '...'
+                           ELSE r.text
+                       END AS snippet
                 FROM raw_inputs r
                 INNER JOIN entries e ON e.date = r.date
                 WHERE r.text LIKE $like ESCAPE '\'
@@ -724,6 +712,7 @@ public sealed class JournalIndexStore
             """;
         AddSearchParameters(command, query, limit);
         command.Parameters.AddWithValue("$like", $"%{EscapeLike(normalizedQuery)}%");
+        command.Parameters.AddWithValue("$snippetMaxLength", LikeSnippetMaxLength);
 
         return await ReadGroupedHitsAsync(command, limit, cancellationToken);
     }
@@ -753,6 +742,11 @@ public sealed class JournalIndexStore
                     reader.GetInt32(10),
                     GetNullableString(reader, 3));
                 grouped.Add(date, summary);
+            }
+
+            if (summary.Hits.Count >= SearchHitsPerDateLimit)
+            {
+                continue;
             }
 
             summary.Hits.Add(new JournalHistoryHit(

@@ -113,6 +113,91 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
+    public async Task SearchAsync_ReturnsBoundedFtsSnippetsWithHighlightMarkers()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var longSectionContent = string.Join(
+            ' ',
+            Enumerable.Range(1, 40).Select(index => $"section-prefix-{index}"))
+            + " DeepSeek "
+            + string.Join(' ', Enumerable.Range(1, 40).Select(index => $"section-suffix-{index}"));
+        var longRawInputText = string.Join(
+            ' ',
+            Enumerable.Range(1, 40).Select(index => $"raw-prefix-{index}"))
+            + " DeepSeek "
+            + string.Join(' ', Enumerable.Range(1, 40).Select(index => $"raw-suffix-{index}"));
+
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date),
+            [new JournalIndexedSection(date, "today-focus", "今日重点", 10, longSectionContent)],
+            CancellationToken.None);
+        await store.UpsertRawInputAsync(
+            new JournalIndexedRawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", longRawInputText),
+            CancellationToken.None);
+
+        var result = await store.SearchAsync(
+            new JournalHistoryQuery("DeepSeek", null, null, null, null, 20),
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        var sectionHit = Assert.Single(item.Hits, hit => hit.SourceType == "section");
+        var rawHit = Assert.Single(item.Hits, hit => hit.SourceType == "raw-input");
+        Assert.Contains("[DeepSeek]", sectionHit.Snippet, StringComparison.Ordinal);
+        Assert.Contains("[DeepSeek]", rawHit.Snippet, StringComparison.Ordinal);
+        Assert.True(sectionHit.Snippet.Length < longSectionContent.Length / 2);
+        Assert.True(rawHit.Snippet.Length < longRawInputText.Length / 2);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LimitsFtsHitsPerDateToFive()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var sections = Enumerable.Range(1, 8)
+            .Select(index => new JournalIndexedSection(date, $"section-{index:00}", $"Section {index}", index, $"DeepSeek hit {index}"))
+            .ToArray();
+
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(CreateEntry(date), sections, CancellationToken.None);
+
+        var result = await store.SearchAsync(
+            new JournalHistoryQuery("DeepSeek", null, null, null, null, 20),
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(5, item.Hits.Count);
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReturnsBoundedLikeFallbackSnippets()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var longContent = "整理 " + string.Join(' ', Enumerable.Range(1, 120).Select(index => $"fallback-tail-{index}"));
+
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date),
+            [new JournalIndexedSection(date, "today-focus", "今日重点", 10, longContent)],
+            CancellationToken.None);
+
+        var result = await store.SearchAsync(
+            new JournalHistoryQuery("整理", null, null, null, null, 20),
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        var hit = Assert.Single(item.Hits);
+        Assert.Contains("整理", hit.Snippet, StringComparison.Ordinal);
+        Assert.True(hit.Snippet.Length <= 240);
+        Assert.True(hit.Snippet.Length < longContent.Length);
+    }
+
+    [Fact]
     public async Task ReadSummaryAsync_ReturnsCounts()
     {
         using var workspace = TempWorkspace.Create();
