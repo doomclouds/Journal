@@ -18,6 +18,9 @@ import {
   type JournalHarnessAuditRun,
   type JournalHarnessRunEvent,
   type JournalDraft,
+  type JournalEntryVersion,
+  type JournalHistoryEntryDetail,
+  type JournalHistoryEntrySummary,
   type TodayJournalState,
   type TodayEditorState
 } from "./api";
@@ -163,6 +166,50 @@ const queuedHarnessRun: JournalHarnessAuditRun = {
   errors: [],
   summary: "Queued."
 };
+
+const historySummary: JournalHistoryEntrySummary = {
+  date: journalDate,
+  status: "processed",
+  mood: "平静",
+  rawInputCount: 1,
+  versionCount: 1,
+  attentionReason: null,
+  hits: [{
+    sourceType: "section",
+    sectionId: "today-focus",
+    rawInputId: null,
+    title: "今日重点",
+    snippet: "推进 Phase 4A 历史搜索"
+  }]
+};
+
+const historyVersion: JournalEntryVersion = {
+  id: "version-2026-05-08T09-30-00+08-00",
+  date: journalDate,
+  createdAt: "2026-05-08T09:30:00+08:00",
+  reason: "confirm-draft",
+  sourceEntryPath: "entries/2026/05/2026-05-08.md",
+  markdownPath: ".journal/versions/2026/05/2026-05-08/version.md",
+  metaPath: ".journal/versions/2026/05/2026-05-08/version.meta.json",
+  contentHash: "sha256:history"
+};
+
+function historyDetail(date = journalDate, content = "- 推进 Phase 4A 历史搜索"): JournalHistoryEntryDetail {
+  return {
+    date,
+    status: "processed",
+    attentionReason: null,
+    markdown: `# ${date.isoDate}\n\n${content}`,
+    sections: [{
+      id: "today-focus",
+      title: "今日重点",
+      content,
+      kind: "required",
+      isEditableInBlockMode: true
+    }],
+    versions: []
+  };
+}
 
 function processedToday(entryPath = "C:\\Journal\\entries\\2026\\05\\2026-05-08.md"): TodayJournalState {
   return {
@@ -796,6 +843,156 @@ describe("App", () => {
     expect(screen.queryByText("appendOlderAuditSection")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-09", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-10", undefined);
+  });
+
+  test("opens history workbench from Today Assistant and returns to today", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse({ items: [historySummary] }))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history?limit=50", undefined)
+    );
+    expect(await screen.findByRole("heading", { name: "历史与版本" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08/versions", undefined);
+    expect(screen.getByText("- 推进 Phase 4A 历史搜索")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回今日" }));
+
+    expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
+  });
+
+  test("keeps newest selected history date when detail requests resolve out of order", async () => {
+    const olderDate = {
+      ...journalDate,
+      value: "2026-05-09",
+      isoDate: "2026-05-09",
+      monthDay: "05-09",
+      markdownFileName: "2026-05-09.md"
+    };
+    const newestDate = {
+      ...journalDate,
+      value: "2026-05-10",
+      isoDate: "2026-05-10",
+      monthDay: "05-10",
+      markdownFileName: "2026-05-10.md"
+    };
+    const olderDetailDeferred = createDeferred<Response>();
+    const olderVersionsDeferred = createDeferred<Response>();
+    const newestDetailDeferred = createDeferred<Response>();
+    const newestVersionsDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse({
+        items: [
+          historySummary,
+          { ...historySummary, date: olderDate, hits: [{ ...historySummary.hits[0], snippet: "旧日期摘要" }] },
+          { ...historySummary, date: newestDate, hits: [{ ...historySummary.hits[0], snippet: "新日期摘要" }] }
+        ]
+      }))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockReturnValueOnce(olderDetailDeferred.promise)
+      .mockReturnValueOnce(olderVersionsDeferred.promise)
+      .mockReturnValueOnce(newestDetailDeferred.promise)
+      .mockReturnValueOnce(newestVersionsDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    expect(await screen.findByRole("button", { name: /2026-05-09/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /2026-05-09/ }));
+    fireEvent.click(screen.getByRole("button", { name: /2026-05-10/ }));
+
+    newestDetailDeferred.resolve(mockJsonResponse(historyDetail(newestDate, "- 最新日期详情")));
+    newestVersionsDeferred.resolve(mockJsonResponse([]));
+
+    expect(await screen.findByText("- 最新日期详情")).toBeInTheDocument();
+    expect(screen.queryByText("- 旧日期详情")).not.toBeInTheDocument();
+
+    await act(async () => {
+      olderDetailDeferred.resolve(mockJsonResponse(historyDetail(olderDate, "- 旧日期详情")));
+      olderVersionsDeferred.resolve(mockJsonResponse([]));
+      await olderDetailDeferred.promise;
+      await olderVersionsDeferred.promise;
+    });
+
+    expect(screen.getByText("- 最新日期详情")).toBeInTheDocument();
+    expect(screen.queryByText("- 旧日期详情")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-09", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-10", undefined);
+  });
+
+  test("restores selected history version to draft and returns to today editor", async () => {
+    const restoredEditor = createEditorState({
+      sections: [{
+        id: "today-focus",
+        title: "今日重点",
+        content: "从历史版本恢复的草稿",
+        kind: "required",
+        isEditableInBlockMode: true
+      }]
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse({ items: [historySummary] }))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse(restoredEditor));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    fireEvent.click(await screen.findByRole("button", { name: "恢复为草稿" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/history/2026-05-08/versions/version-2026-05-08T09-30-00%2B08-00/restore-draft",
+        { method: "POST" }
+      )
+    );
+    expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
+    expect(screen.getByText("从历史版本恢复的草稿")).toBeInTheDocument();
+  });
+
+  test("blocks history workbench while inline block edits are dirty", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+      target: { value: "还没保存的历史前编辑" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "查看历史" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
+    expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的历史前编辑");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/history?limit=50", undefined);
   });
 
   test("uses the top status dot for API health instead of exposing an API text pill", async () => {
