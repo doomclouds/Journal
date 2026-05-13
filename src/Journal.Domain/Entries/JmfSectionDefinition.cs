@@ -5,4 +5,6 @@ public sealed record JmfSectionDefinition(
     string Title,
     int Order,
     JmfSectionKind Kind,
-    bool IsEditableInBlockMode);
+    bool IsEditableInBlockMode,
+    string SemanticHint,
+    string AvoidWhen);
