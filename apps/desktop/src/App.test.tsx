@@ -948,6 +948,57 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-10", undefined);
   });
 
+  test("clears stale history detail and version actions while a new selected date is loading", async () => {
+    const nextDate = {
+      ...journalDate,
+      value: "2026-05-09",
+      isoDate: "2026-05-09",
+      monthDay: "05-09",
+      markdownFileName: "2026-05-09.md"
+    };
+    const nextDetailDeferred = createDeferred<Response>();
+    const nextVersionsDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse({
+        items: [
+          historySummary,
+          { ...historySummary, date: nextDate, hits: [{ ...historySummary.hits[0], snippet: "新日期摘要" }] }
+        ]
+      }))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockReturnValueOnce(nextDetailDeferred.promise)
+      .mockReturnValueOnce(nextVersionsDeferred.promise)
+      .mockResolvedValue(mockJsonResponse(createEditorState()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    expect(await screen.findByText("- 推进 Phase 4A 历史搜索")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "恢复为草稿" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /2026-05-09/ }));
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-09", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-09/versions", undefined);
+    expect(screen.queryByText("- 推进 Phase 4A 历史搜索")).not.toBeInTheDocument();
+    const staleRestoreButton = screen.queryByRole("button", { name: "恢复为草稿" });
+    if (staleRestoreButton) {
+      fireEvent.click(staleRestoreButton);
+    }
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "http://localhost:5057/journal/history/2026-05-09/versions/version-2026-05-08T09-30-00%2B08-00/restore-draft",
+      { method: "POST" }
+    );
+    expect(staleRestoreButton).not.toBeInTheDocument();
+  });
+
   test("restores selected history version to draft and returns to today editor", async () => {
     const restoredEditor = createEditorState({
       sections: [{

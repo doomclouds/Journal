@@ -574,10 +574,10 @@ export default function App() {
         : result.items[0]?.date.isoDate ?? "";
       setHistoryEntries(result.items);
       setHistorySelectedDate(selectedDate);
+      setHistoryDetail(null);
+      setHistoryVersions([]);
 
       if (!selectedDate) {
-        setHistoryDetail(null);
-        setHistoryVersions([]);
         return;
       }
 
@@ -606,6 +606,8 @@ export default function App() {
     const historyRequestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = historyRequestId;
     setHistorySelectedDate(date);
+    setHistoryDetail(null);
+    setHistoryVersions([]);
     setHistoryError("");
 
     try {

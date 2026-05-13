@@ -74,8 +74,10 @@ export function HistoryWorkbench({
   onRefresh,
   onRestoreVersion
 }: HistoryWorkbenchProps) {
-  const selected = entries.find(entry => entry.date.isoDate === selectedDate) ?? entries[0] ?? null;
-  const previewSections = detail?.sections ?? [];
+  const selected = entries.find(entry => entry.date.isoDate === selectedDate) ?? null;
+  const matchingDetail = detail?.date.isoDate === selectedDate ? detail : null;
+  const matchingVersions = versions.filter(version => version.date.isoDate === selectedDate);
+  const previewSections = matchingDetail?.sections ?? [];
 
   return (
     <>
@@ -164,14 +166,14 @@ export function HistoryWorkbench({
                   <p className="kicker">Local History</p>
                   <h1>{selected.date.isoDate}</h1>
                   <p>
-                    <span>{getStatusLabel(detail?.status ?? selected.status)}</span>
+                    <span>{getStatusLabel(matchingDetail?.status ?? selected.status)}</span>
                     <span>{selected.rawInputCount} 条材料</span>
-                    <span>{versions.length || selected.versionCount} 个版本</span>
+                    <span>{matchingVersions.length || selected.versionCount} 个版本</span>
                   </p>
                 </header>
 
-                {detail?.attentionReason ?? selected.attentionReason ? (
-                  <p className="attention-copy">{detail?.attentionReason ?? selected.attentionReason}</p>
+                {matchingDetail?.attentionReason ?? selected.attentionReason ? (
+                  <p className="attention-copy">{matchingDetail?.attentionReason ?? selected.attentionReason}</p>
                 ) : null}
 
                 <div className="history-hit-list">
@@ -204,15 +206,15 @@ export function HistoryWorkbench({
             <p className="assistant-eyebrow">Versions</p>
             <h2>版本快照</h2>
           </div>
-          <span className="assistant-time">{versions.length} 个</span>
+          <span className="assistant-time">{matchingVersions.length} 个</span>
         </div>
 
         <div className="assistant-body">
-          {versions.length === 0 ? (
+          {matchingVersions.length === 0 ? (
             <section className="assistant-card">
               <p className="muted">这一天还没有覆盖前快照。</p>
             </section>
-          ) : versions.map(version => (
+          ) : matchingVersions.map(version => (
             <section className="assistant-card history-version-card" key={version.id}>
               <div className="assistant-card-head">
                 <h3>{formatHistoryTime(version.createdAt)}</h3>

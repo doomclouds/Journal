@@ -12,6 +12,15 @@ const historyDate: JournalDate = {
   markdownFileName: "2026-05-13.md"
 };
 
+const otherHistoryDate: JournalDate = {
+  value: "2026-05-14",
+  year: "2026",
+  month: "05",
+  isoDate: "2026-05-14",
+  monthDay: "05-14",
+  markdownFileName: "2026-05-14.md"
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -113,6 +122,70 @@ describe("HistoryWorkbench", () => {
     fireEvent.click(screen.getByRole("button", { name: "恢复为草稿" }));
 
     expect(onRestoreVersion).toHaveBeenCalledWith("version-2026-05-13T07-11-14+08-00");
+  });
+
+  it("does not render stale detail or restore actions from another selected date", () => {
+    const onRestoreVersion = vi.fn();
+
+    render(
+      <HistoryWorkbench
+        isBusy={false}
+        query=""
+        status=""
+        entries={[{
+          date: otherHistoryDate,
+          status: "processed",
+          mood: "专注",
+          rawInputCount: 1,
+          versionCount: 0,
+          attentionReason: null,
+          hits: [{
+            sourceType: "section",
+            sectionId: "today-focus",
+            rawInputId: null,
+            title: "今日重点",
+            snippet: "新日期摘要"
+          }]
+        }]}
+        detail={{
+          date: historyDate,
+          status: "processed",
+          attentionReason: null,
+          markdown: "旧日期 Markdown",
+          sections: [{
+            id: "today-focus",
+            title: "今天想推进",
+            content: "旧日期详情不应显示",
+            kind: "required",
+            isEditableInBlockMode: true
+          }],
+          versions: []
+        }}
+        selectedDate="2026-05-14"
+        versions={[{
+          id: "version-2026-05-13T07-11-14+08-00",
+          date: historyDate,
+          createdAt: "2026-05-13T07:11:14+08:00",
+          reason: "confirm-draft",
+          sourceEntryPath: "entries/2026/05/2026-05-13.md",
+          markdownPath: ".journal/versions/2026/05/2026-05-13/version.md",
+          metaPath: ".journal/versions/2026/05/2026-05-13/version.meta.json",
+          contentHash: "sha256:old-version"
+        }]}
+        error=""
+        onBack={vi.fn()}
+        onQueryChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onRefresh={vi.fn()}
+        onRestoreVersion={onRestoreVersion}
+      />
+    );
+
+    expect(screen.queryByText("旧日期详情不应显示")).not.toBeInTheDocument();
+    expect(screen.queryByText("sha256:old-version")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "恢复为草稿" })).not.toBeInTheDocument();
+    expect(onRestoreVersion).not.toHaveBeenCalled();
   });
 
   it("requests reviewing history when the pending confirmation filter is selected", () => {
