@@ -17,7 +17,30 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
-    public async Task SearchAsync_UsesTrigramFtsForChineseSubstring()
+    public async Task SearchAsync_UsesTrigramFtsForSectionContent()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date),
+            [new JournalIndexedSection(date, "today-focus", "今日重点", 10, "- Review DeepSeek adapter notes")],
+            CancellationToken.None);
+
+        var result = await store.SearchAsync(
+            new JournalHistoryQuery("DeepSeek", null, null, null, null, 20),
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(date, item.Date);
+        var hit = Assert.Single(item.Hits);
+        Assert.Equal("section", hit.SourceType);
+        Assert.Equal("today-focus", hit.SectionId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_UsesLikeFallbackForShortChineseQuery()
     {
         using var workspace = TempWorkspace.Create();
         var store = CreateStore(workspace.Root);
