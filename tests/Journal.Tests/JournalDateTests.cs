@@ -17,6 +17,30 @@ public sealed class JournalDateTests
     }
 
     [Fact]
+    public void Parse_ReturnsJournalDateFromIsoDate()
+    {
+        var date = JournalDate.Parse("2026-05-13");
+
+        Assert.Equal(new DateOnly(2026, 5, 13), date.Value);
+        Assert.Equal("2026-05-13", date.IsoDate);
+    }
+
+    [Theory]
+    [InlineData("2026-05-13", true)]
+    [InlineData("2026/05/13", false)]
+    [InlineData("", false)]
+    public void TryParse_AcceptsOnlyIsoDate(string value, bool expected)
+    {
+        var parsed = JournalDate.TryParse(value, out var date);
+
+        Assert.Equal(expected, parsed);
+        if (expected)
+        {
+            Assert.Equal("2026-05-13", date.IsoDate);
+        }
+    }
+
+    [Fact]
     public void EntryModels_AcceptStringRawInputIds()
     {
         var date = JournalDate.From(new DateOnly(2026, 5, 8));

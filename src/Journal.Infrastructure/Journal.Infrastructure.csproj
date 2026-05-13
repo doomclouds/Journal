@@ -3,6 +3,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Agents.AI" Version="1.5.0" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.5.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
     <PackageReference Include="OpenAI" Version="2.10.0" />
     <ProjectReference Include="..\Journal.Domain\Journal.Domain.csproj" />
   </ItemGroup>
