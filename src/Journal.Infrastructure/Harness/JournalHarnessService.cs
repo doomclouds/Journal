@@ -240,17 +240,20 @@ public sealed class JournalHarnessService
             {
                 var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
                 var provider = ResolveProvider(settings);
-                var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
+                var allInputs = await _rawInputStore.ReadAsync(date, cancellationToken);
                 var draft = await _draftStore.ReadAsync(date, cancellationToken);
                 var entry = await _entryStore.ReadAsync(date, cancellationToken);
-                var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, inputs, now);
-                var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, inputs);
+                var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, allInputs, now);
+                var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, allInputs);
                 var authoritativeBaselineMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
+                var promptContextInputs = GetPromptContextInputs(run, allInputs);
+                var promptBaselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, promptContextInputs);
+                var promptBaselineMarkdown = JmfMarkdownComposer.Compose(promptBaselineDocument);
                 var prompt = BuildPromptForRun(
                     run,
                     date,
-                    inputs,
-                    authoritativeBaselineMarkdown,
+                    allInputs,
+                    promptBaselineMarkdown,
                     entry?.Markdown ?? string.Empty);
 
                 Emit(emit, "planner-started", run, "Planner started.");
@@ -262,7 +265,7 @@ public sealed class JournalHarnessService
                         run,
                         date,
                         authoritativeBaselineMarkdown,
-                        inputs,
+                        allInputs,
                         errors,
                         "Planner failed.",
                         cancellationToken);
@@ -270,10 +273,10 @@ public sealed class JournalHarnessService
                     return new JournalHarnessRunExecutionResult(await BuildStateAsync(date, JournalStatus.Attention, cancellationToken), run);
                 }
 
-                var allowedRawInputIds = inputs.Select(input => input.Id).ToArray();
+                var allowedRawInputIds = allInputs.Select(input => input.Id).ToArray();
                 var execution = JournalHarnessOperationExecutor.Apply(baselineDocument, plan.Operations, allowedRawInputIds);
                 var toolCalls = CreateToolCalls(plan.Operations, execution.Issues);
-                var sourceRawInputIds = inputs.Select(input => input.Id).ToArray();
+                var sourceRawInputIds = allInputs.Select(input => input.Id).ToArray();
                 if (execution.Validation.IsValid)
                 {
                     var status = plan.Operations.Any(operation => !string.Equals(operation.Kind, "no-op", StringComparison.Ordinal))
@@ -401,6 +404,25 @@ public sealed class JournalHarnessService
             currentInput,
             authoritativeBaselineMarkdown,
             confirmedEntryMarkdown);
+    }
+
+    private static IReadOnlyList<RawInput> GetPromptContextInputs(
+        JournalHarnessAuditRun run,
+        IReadOnlyList<RawInput> inputs)
+    {
+        if (!string.Equals(run.Mode, JournalHarnessPrompt.AppendInputMode, StringComparison.Ordinal))
+        {
+            return inputs;
+        }
+
+        if (string.IsNullOrWhiteSpace(run.CurrentRawInputId))
+        {
+            throw new InvalidOperationException("current raw input does not exist.");
+        }
+
+        return inputs
+            .Where(input => !string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
+            .ToArray();
     }
 
     private async Task<TodayJournalState> BuildStateAsync(

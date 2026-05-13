@@ -407,7 +407,9 @@ public sealed class JournalHarnessServiceTests
             historicalRawInputs,
             input => string.Equals(input.GetProperty("id").GetString(), started.Run.CurrentRawInputId, StringComparison.Ordinal));
         Assert.Contains("当前输入只应该出现在 user message", runtime.LastHarnessPlannerRequest.UserMessage, StringComparison.Ordinal);
-        Assert.Contains("当前输入只应该出现在 user message", context.RootElement.GetProperty("currentDraftMarkdown").GetString(), StringComparison.Ordinal);
+        var currentDraftMarkdown = context.RootElement.GetProperty("currentDraftMarkdown").GetString();
+        Assert.Contains("旧 raw input 已在 draft 里", currentDraftMarkdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("当前输入只应该出现在 user message", currentDraftMarkdown, StringComparison.Ordinal);
         var rawInputs = GetSection(result.Today.Draft!.Markdown, "raw-inputs");
         Assert.Contains("旧 raw input 已在 draft 里", rawInputs.Content, StringComparison.Ordinal);
         Assert.Contains("当前输入只应该出现在 user message", rawInputs.Content, StringComparison.Ordinal);
