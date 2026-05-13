@@ -52,6 +52,7 @@ public sealed class JournalVersionStore : IJournalVersionStore
         var trimmedReason = reason.Trim();
         var contentHash = ComputeContentHash(markdown);
         var baseId = CreateVersionId(createdAt);
+        LocalJournalPaths.EnsureParentDirectory(_paths.VersionMarkdownPath(date, baseId));
 
         for (var attempt = 0; attempt < MaxCreateAttempts; attempt++)
         {
@@ -73,7 +74,6 @@ public sealed class JournalVersionStore : IJournalVersionStore
             var markdownCreated = false;
             try
             {
-                LocalJournalPaths.EnsureParentDirectory(markdownPath);
                 await _writeNewTextFileAsync(markdownPath, markdown, cancellationToken);
                 markdownCreated = true;
             }

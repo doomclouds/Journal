@@ -49,6 +49,29 @@ public sealed class JournalVersionStoreTests
     }
 
     [Fact]
+    public async Task CreateSnapshotAsync_BlockedVersionDirectoryRethrowsDirectoryIOException()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var store = new JournalVersionStore(paths);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var blockedYearPath = Path.Combine(workspace.Root, ".journal", "versions", date.Year);
+        LocalJournalPaths.EnsureParentDirectory(blockedYearPath);
+        await File.WriteAllTextAsync(blockedYearPath, "blocks version directory");
+
+        var exception = await Assert.ThrowsAsync<IOException>(() => store.CreateSnapshotAsync(
+            date,
+            "markdown",
+            "entry.md",
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T07:11:14+08:00"),
+            CancellationToken.None));
+
+        Assert.DoesNotContain("Could not create a unique journal version snapshot", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(paths.VersionDirectory(date)));
+    }
+
+    [Fact]
     public async Task CreateSnapshotAsync_MetadataPathCollisionDeletesMarkdownAndRetries()
     {
         using var workspace = TempWorkspace.Create();
