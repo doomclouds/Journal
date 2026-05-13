@@ -58,7 +58,9 @@
 - `src/Journal.Api/Program.cs`  
   Register new services and add history/index endpoints.
 - `src/Journal.Domain/Entries/JournalStatus.cs`  
-  Add `Missing` only if the existing enum lacks it during implementation.
+  Add `Missing` for indexed formal-entry file loss.
+- `src/Journal.Domain/Entries/JournalDate.cs`
+  Add `Parse` / `TryParse` helpers so index code does not invent local date parsing.
 
 ### Frontend Create
 
@@ -101,14 +103,24 @@ Workers are not alone in the codebase. Each worker must avoid reverting edits ma
 
 If a worker hits a non-trivial implementation problem, the worker reports symptom, root cause, fix, affected files, and verification evidence in its final handoff. The parent agent decides whether it belongs in `docs/superpowers/problems/` or `docs/superpowers/inbox/`, writes or updates that asset, and updates the relevant index. Workers do not independently scatter problem archives.
 
+## Plan Precision Rules
+
+- A task may not say only "write tests named X". It must include the assertions that define the behavior.
+- A task may not reference helper methods that were not introduced in an earlier task.
+- Optional wording such as "if this becomes hard to read" is forbidden in execution tasks. Add the helper explicitly or leave it out.
+- If a worker discovers an implementation snippet cannot compile, the worker must stop that task and report the mismatch to the parent agent before improvising a new architecture.
+
 ---
 
 ## Task 1: Add Storage Paths And SQLite Package
 
 **Files:**
 - Modify: `src/Journal.Infrastructure/Journal.Infrastructure.csproj`
+- Modify: `src/Journal.Domain/Entries/JournalDate.cs`
+- Modify: `src/Journal.Domain/Entries/JournalStatus.cs`
 - Modify: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`
 - Modify: `tests/Journal.Tests/LocalJournalStorageTests.cs`
+- Modify: `tests/Journal.Tests/JournalDateTests.cs`
 
 - [ ] **Step 1: Add failing path tests**
 
@@ -152,6 +164,42 @@ public void IndexPaths_AreUnderHiddenJournalIndexDirectory()
     Assert.Equal(Path.Combine(@"C:\JournalTest", ".journal", "index", "journal.db"), paths.IndexPath());
     Assert.Equal(Path.Combine(@"C:\JournalTest", ".journal", "index", "backups"), paths.IndexBackupDirectory());
 }
+
+[Fact]
+public void EntryRootDirectory_PointsAtEntriesRoot()
+{
+    var paths = new LocalJournalPaths(new JournalStorageOptions(@"C:\JournalTest"));
+
+    Assert.Equal(Path.Combine(@"C:\JournalTest", "entries"), paths.EntryRootDirectory());
+}
+```
+
+Add tests to `tests/Journal.Tests/JournalDateTests.cs`:
+
+```csharp
+[Fact]
+public void Parse_ReturnsJournalDateFromIsoDate()
+{
+    var date = JournalDate.Parse("2026-05-13");
+
+    Assert.Equal(new DateOnly(2026, 5, 13), date.Value);
+    Assert.Equal("2026-05-13", date.IsoDate);
+}
+
+[Theory]
+[InlineData("2026-05-13", true)]
+[InlineData("2026/05/13", false)]
+[InlineData("", false)]
+public void TryParse_AcceptsOnlyIsoDate(string value, bool expected)
+{
+    var parsed = JournalDate.TryParse(value, out var date);
+
+    Assert.Equal(expected, parsed);
+    if (expected)
+    {
+        Assert.Equal("2026-05-13", date.IsoDate);
+    }
+}
 ```
 
 - [ ] **Step 2: Run path tests and verify they fail**
@@ -162,7 +210,7 @@ Run:
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter LocalJournalStorageTests
 ```
 
-Expected: fail because `VersionDirectory`, `VersionMarkdownPath`, `VersionMetaPath`, `IsValidVersionId`, `IndexDirectory`, `IndexPath`, and `IndexBackupDirectory` do not exist.
+Expected: fail because `VersionDirectory`, `VersionMarkdownPath`, `VersionMetaPath`, `IsValidVersionId`, `EntryRootDirectory`, `IndexDirectory`, `IndexPath`, `IndexBackupDirectory`, `JournalDate.Parse`, and `JournalDate.TryParse` do not exist.
 
 - [ ] **Step 3: Add package**
 
@@ -179,6 +227,9 @@ Expected: `src/Journal.Infrastructure/Journal.Infrastructure.csproj` gains a `Pa
 Add to `LocalJournalPaths`:
 
 ```csharp
+public string EntryRootDirectory() =>
+    Path.Combine(_rootDirectory, "entries");
+
 public string VersionDirectory(JournalDate date) =>
     Path.Combine(_rootDirectory, ".journal", "versions", date.Year, date.Month, date.IsoDate);
 
@@ -210,6 +261,68 @@ public static bool IsValidVersionId(string? versionId) =>
         || character == '+');
 ```
 
+Add to `JournalDate`:
+
+```csharp
+using System.Globalization;
+
+namespace Journal.Domain.Entries;
+
+public readonly record struct JournalDate(DateOnly Value)
+{
+    public static JournalDate From(DateOnly value) => new(value);
+
+    public static JournalDate Parse(string value) =>
+        TryParse(value, out var date)
+            ? date
+            : throw new FormatException("Journal date must use yyyy-MM-dd.");
+
+    public static bool TryParse(string? value, out JournalDate date)
+    {
+        if (DateOnly.TryParseExact(
+            value,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed))
+        {
+            date = From(parsed);
+            return true;
+        }
+
+        date = default;
+        return false;
+    }
+
+    public string Year => Value.ToString("yyyy", CultureInfo.InvariantCulture);
+
+    public string Month => Value.ToString("MM", CultureInfo.InvariantCulture);
+
+    public string IsoDate => Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    public string MonthDay => Value.ToString("MM-dd", CultureInfo.InvariantCulture);
+
+    public string MarkdownFileName => $"{IsoDate}.md";
+
+    public override string ToString() => IsoDate;
+}
+```
+
+Add `Missing` to `JournalStatus`:
+
+```csharp
+public enum JournalStatus
+{
+    Empty,
+    Draft,
+    Reviewing,
+    Processed,
+    Updated,
+    Attention,
+    Missing
+}
+```
+
 - [ ] **Step 5: Run path tests**
 
 Run:
@@ -223,7 +336,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add src/Journal.Infrastructure/Journal.Infrastructure.csproj src/Journal.Infrastructure/Storage/LocalJournalPaths.cs tests/Journal.Tests/LocalJournalStorageTests.cs
+git add src/Journal.Infrastructure/Journal.Infrastructure.csproj src/Journal.Domain/Entries/JournalDate.cs src/Journal.Domain/Entries/JournalStatus.cs src/Journal.Infrastructure/Storage/LocalJournalPaths.cs tests/Journal.Tests/LocalJournalStorageTests.cs tests/Journal.Tests/JournalDateTests.cs
 git commit -m "feat: add history storage paths"
 ```
 
@@ -564,7 +677,7 @@ public sealed class JournalIndexStoreTests
             ],
             CancellationToken.None);
 
-        var result = await store.SearchAsync(new JournalHistoryQuery("整理", null, null, null, 20), CancellationToken.None);
+        var result = await store.SearchAsync(new JournalHistoryQuery("整理", null, null, null, null, 20), CancellationToken.None);
 
         var item = Assert.Single(result.Items);
         Assert.Equal("2026-05-13", item.Date.IsoDate);
@@ -637,6 +750,7 @@ public sealed record JournalHistoryQuery(
     string? Status,
     DateOnly? From,
     DateOnly? To,
+    string? Cursor,
     int Limit);
 
 public sealed record JournalHistorySearchResult(IReadOnlyList<JournalHistoryEntrySummary> Items);
@@ -772,6 +886,9 @@ public sealed class JournalIndexStore(LocalJournalPaths paths)
                 SELECT e.date, e.status, e.mood, e.attention_reason, 0 AS raw_count, 0 AS version_count
                 FROM entries e
                 WHERE ($status IS NULL OR e.status = $status)
+                  AND ($from IS NULL OR e.date >= $from)
+                  AND ($to IS NULL OR e.date <= $to)
+                  AND ($cursor IS NULL OR e.date < $cursor)
                 ORDER BY e.date DESC
                 LIMIT $limit;
                 """
@@ -779,12 +896,19 @@ public sealed class JournalIndexStore(LocalJournalPaths paths)
                 SELECT DISTINCT e.date, e.status, e.mood, e.attention_reason, 0 AS raw_count, 0 AS version_count
                 FROM entries e
                 JOIN section_fts f ON f.date = e.date
-                WHERE section_fts MATCH $query AND ($status IS NULL OR e.status = $status)
+                WHERE section_fts MATCH $query
+                  AND ($status IS NULL OR e.status = $status)
+                  AND ($from IS NULL OR e.date >= $from)
+                  AND ($to IS NULL OR e.date <= $to)
+                  AND ($cursor IS NULL OR e.date < $cursor)
                 ORDER BY e.date DESC
                 LIMIT $limit;
                 """;
         command.Parameters.AddWithValue("$query", query.Query ?? string.Empty);
         command.Parameters.AddWithValue("$status", (object?)query.Status ?? DBNull.Value);
+        command.Parameters.AddWithValue("$from", (object?)query.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? DBNull.Value);
+        command.Parameters.AddWithValue("$to", (object?)query.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? DBNull.Value);
+        command.Parameters.AddWithValue("$cursor", (object?)query.Cursor ?? DBNull.Value);
         command.Parameters.AddWithValue("$limit", limit);
 
         var items = new List<JournalHistoryEntrySummary>();
@@ -804,6 +928,12 @@ public sealed class JournalIndexStore(LocalJournalPaths paths)
 
         return new JournalHistorySearchResult(items);
     }
+
+    // Both empty-query and FTS-query SQL must include:
+    // ($status IS NULL OR e.status = $status)
+    // AND ($from IS NULL OR e.date >= $from)
+    // AND ($to IS NULL OR e.date <= $to)
+    // AND ($cursor IS NULL OR e.date < $cursor)
 
     private SqliteConnection OpenConnection()
     {
@@ -967,32 +1097,162 @@ git commit -m "feat: add journal history index schema"
 
 - [ ] **Step 1: Add failing indexing tests**
 
-Create `tests/Journal.Tests/JournalIndexingServiceTests.cs` with tests named:
+Create `tests/Journal.Tests/JournalIndexingServiceTests.cs`:
 
 ```csharp
-[Fact]
-public async Task IndexEntryAsync_IndexesValidJmfSectionsAndMetadata()
+using Journal.Domain.Entries;
+using Journal.Infrastructure.Jmf;
+using Journal.Infrastructure.Storage;
 
-[Fact]
-public async Task ScanAsync_MarksMissingEntryWithoutDeletingIndexRow()
+namespace Journal.Tests;
 
-[Fact]
-public async Task ScanAsync_ReindexesExternallyChangedValidMarkdown()
+public sealed class JournalIndexingServiceTests
+{
+    [Fact]
+    public async Task IndexEntryAsync_IndexesValidJmfSectionsAndMetadata()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateSubject(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var markdown = CreateMarkdown(date, "测试新整理的接口");
+        var entryPath = paths.EntryPath(date);
+        LocalJournalPaths.EnsureParentDirectory(entryPath);
+        await File.WriteAllTextAsync(entryPath, markdown);
 
-[Fact]
-public async Task ScanAsync_MarksInvalidExternallyChangedMarkdownAsAttention()
+        await service.IndexEntryAsync(
+            date,
+            markdown,
+            entryPath,
+            "processed",
+            DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"),
+            CancellationToken.None);
 
-[Fact]
-public async Task SyncRawInputsAsync_IndexesRawInputJsonlIntoFts()
-```
+        var result = await indexStore.SearchAsync(new JournalHistoryQuery("整理", null, null, null, null, 20), CancellationToken.None);
 
-Use existing renderer/parser fixtures from `MockAiAndJmfTests` and raw input writing style from `RawInputStore` tests. Each test should:
+        var item = Assert.Single(result.Items);
+        Assert.Equal("processed", item.Status);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "section" && hit.SectionId == "today-focus");
+    }
 
-```csharp
-using var workspace = TempWorkspace.Create();
-var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
-var indexStore = new JournalIndexStore(paths);
-var service = new JournalIndexingService(paths, indexStore);
+    [Fact]
+    public async Task ScanAsync_MarksMissingEntryWithoutDeletingIndexRow()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateSubject(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var entryPath = paths.EntryPath(date);
+        var markdown = CreateMarkdown(date, "今天先把接口保存");
+        LocalJournalPaths.EnsureParentDirectory(entryPath);
+        await File.WriteAllTextAsync(entryPath, markdown);
+        await service.IndexEntryAsync(date, markdown, entryPath, "processed", DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"), CancellationToken.None);
+        File.Delete(entryPath);
+
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T10:00:00+08:00"), CancellationToken.None);
+
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal("missing", summary.Status);
+        Assert.Equal("entry_file_missing", summary.AttentionReason);
+    }
+
+    [Fact]
+    public async Task ScanAsync_ReindexesExternallyChangedValidMarkdown()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateSubject(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var entryPath = paths.EntryPath(date);
+        LocalJournalPaths.EnsureParentDirectory(entryPath);
+        await File.WriteAllTextAsync(entryPath, CreateMarkdown(date, "旧内容"));
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"), CancellationToken.None);
+
+        await File.WriteAllTextAsync(entryPath, CreateMarkdown(date, "外部手工修改后的新内容"));
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T10:00:00+08:00"), CancellationToken.None);
+
+        var result = await indexStore.SearchAsync(new JournalHistoryQuery("手工修改", null, null, null, null, 20), CancellationToken.None);
+        Assert.Single(result.Items);
+    }
+
+    [Fact]
+    public async Task ScanAsync_MarksInvalidExternallyChangedMarkdownAsAttention()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateSubject(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var entryPath = paths.EntryPath(date);
+        LocalJournalPaths.EnsureParentDirectory(entryPath);
+        await File.WriteAllTextAsync(entryPath, CreateMarkdown(date, "合法内容"));
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"), CancellationToken.None);
+
+        await File.WriteAllTextAsync(entryPath, "# broken markdown without JMF markers");
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T10:00:00+08:00"), CancellationToken.None);
+
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal("attention", summary.Status);
+        Assert.Equal("invalid_jmf", summary.AttentionReason);
+    }
+
+    [Fact]
+    public async Task SyncRawInputsAsync_IndexesRawInputJsonlIntoFts()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (_, indexStore, service) = CreateSubject(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+
+        await service.SyncRawInputsAsync(
+            date,
+            [
+                new RawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "原始材料里提到了 DeepSeek reason content")
+            ],
+            CancellationToken.None);
+
+        var result = await indexStore.SearchAsync(new JournalHistoryQuery("DeepSeek", null, null, null, null, 20), CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+    }
+
+    private static (LocalJournalPaths Paths, JournalIndexStore IndexStore, JournalIndexingService Service) CreateSubject(string root)
+    {
+        var paths = new LocalJournalPaths(new JournalStorageOptions(root));
+        var indexStore = new JournalIndexStore(paths);
+        return (paths, indexStore, new JournalIndexingService(paths, indexStore));
+    }
+
+    private static string CreateMarkdown(JournalDate date, string todayFocus)
+    {
+        var aiJson = new JournalAiJson(
+            "journal-entry-json-v1",
+            date.IsoDate,
+            date.MonthDay,
+            "reviewing",
+            ["#Journal"],
+            ["接口整理"],
+            "平静",
+            ["今天记录一条原始材料"],
+            ["昨天完成接口整理"],
+            [todayFocus],
+            ["继续观察"]);
+
+        return JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse($"{date.IsoDate}T09:00:00+08:00"));
+    }
+
+    private sealed class TempWorkspace : IDisposable
+    {
+        public string Root { get; } = Path.Combine(Path.GetTempPath(), "journal-indexing-service-tests", Guid.NewGuid().ToString("N"));
+
+        public static TempWorkspace Create() => new();
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Root))
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+        }
+    }
+}
 ```
 
 - [ ] **Step 2: Run indexing tests and verify they fail**
@@ -1029,9 +1289,110 @@ public Task UpsertVersionAsync(
 public Task<JournalHistoryEntrySummary?> ReadSummaryAsync(
     JournalDate date,
     CancellationToken cancellationToken);
+
+public Task BackupAndResetAsync(
+    DateTimeOffset now,
+    string reason,
+    CancellationToken cancellationToken);
 ```
 
-`UpsertRawInputAsync` must write both `raw_inputs` and `raw_input_fts`.
+`UpsertRawInputAsync` must write both `raw_inputs` and `raw_input_fts` in one transaction:
+
+```csharp
+INSERT INTO raw_inputs(id, date, created_at_utc, source, text)
+VALUES ($id, $date, $createdAtUtc, $source, $text)
+ON CONFLICT(id) DO UPDATE SET
+    date = excluded.date,
+    created_at_utc = excluded.created_at_utc,
+    source = excluded.source,
+    text = excluded.text;
+
+DELETE FROM raw_input_fts WHERE raw_input_id = $id;
+
+INSERT INTO raw_input_fts(raw_input_id, date, source, text)
+VALUES ($id, $date, $source, $text);
+```
+
+`MarkEntryStatusAsync` must preserve existing `entries` row content and only change:
+
+```sql
+UPDATE entries
+SET status = $status,
+    attention_reason = $attentionReason,
+    indexed_at_utc = $indexedAtUtc
+WHERE date = $date;
+```
+
+`ReadSummaryAsync` must return `null` when there is no row, and must include raw input count and version count:
+
+```sql
+SELECT
+    e.date,
+    e.status,
+    e.mood,
+    e.attention_reason,
+    (SELECT COUNT(*) FROM raw_inputs r WHERE r.date = e.date) AS raw_count,
+    (SELECT COUNT(*) FROM entry_versions v WHERE v.date = e.date) AS version_count
+FROM entries e
+WHERE e.date = $date;
+```
+
+Update `SearchAsync` so query mode searches both `section_fts` and `raw_input_fts`, then groups hits by `entry/date`. Raw-input hits must use:
+
+```sql
+SELECT raw_input_id, snippet(raw_input_fts, 3, '[', ']', '...', 12)
+FROM raw_input_fts
+WHERE raw_input_fts MATCH $query AND date = $date
+LIMIT 5;
+```
+
+`BackupAndResetAsync` must:
+
+1. Close all local connections before moving the database.
+2. Create `.journal/index/backups/`.
+3. Move `journal.db` to `journal-{yyyyMMddHHmmss}-{reason}.db` when it exists.
+4. Delete WAL/SHM sidecar files if present.
+5. Call `EnsureReadyAsync` to create a clean schema.
+
+Add tests to `JournalIndexStoreTests`:
+
+```csharp
+[Fact]
+public async Task BackupAndResetAsync_MovesExistingDatabaseToBackupDirectory()
+{
+    using var workspace = TempWorkspace.Create();
+    var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+    var store = new JournalIndexStore(paths);
+
+    await store.EnsureReadyAsync(CancellationToken.None);
+    Assert.True(File.Exists(paths.IndexPath()));
+
+    await store.BackupAndResetAsync(
+        DateTimeOffset.Parse("2026-05-13T10:00:00+08:00"),
+        "schema",
+        CancellationToken.None);
+
+    Assert.True(File.Exists(paths.IndexPath()));
+    Assert.Contains(Directory.EnumerateFiles(paths.IndexBackupDirectory()), path => Path.GetFileName(path).Contains("schema", StringComparison.Ordinal));
+    Assert.Equal("1", await store.ReadMetaAsync("schema_version", CancellationToken.None));
+}
+
+[Fact]
+public async Task EnsureReadyAsync_WhenSchemaVersionIsIncompatible_BacksUpAndRebuilds()
+{
+    using var workspace = TempWorkspace.Create();
+    var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+    var store = new JournalIndexStore(paths);
+
+    await store.EnsureReadyAsync(CancellationToken.None);
+    await store.SetMetaAsync("schema_version", "999", CancellationToken.None);
+
+    await store.EnsureReadyAsync(CancellationToken.None);
+
+    Assert.Equal("1", await store.ReadMetaAsync("schema_version", CancellationToken.None));
+    Assert.NotEmpty(Directory.EnumerateFiles(paths.IndexBackupDirectory()));
+}
+```
 
 - [ ] **Step 4: Implement `JournalIndexingService`**
 
@@ -1094,14 +1455,16 @@ public sealed class JournalIndexingService(LocalJournalPaths paths, JournalIndex
     {
         await indexStore.EnsureReadyAsync(cancellationToken);
 
-        foreach (var entryPath in Directory.Exists(Path.Combine(Path.GetDirectoryName(paths.EntryPath(JournalDate.From(DateOnly.FromDateTime(now.DateTime)))!)!, ".."))
-            ? Directory.EnumerateFiles(Path.Combine(Path.GetDirectoryName(paths.EntryPath(JournalDate.From(DateOnly.FromDateTime(now.DateTime)))!)!, ".."), "*.md", SearchOption.AllDirectories)
-            : Array.Empty<string>())
+        var entriesRoot = paths.EntryRootDirectory();
+        var entryPaths = Directory.Exists(entriesRoot)
+            ? Directory.EnumerateFiles(entriesRoot, "*.md", SearchOption.AllDirectories)
+            : Array.Empty<string>();
+
+        foreach (var entryPath in entryPaths)
         {
             var fileName = Path.GetFileNameWithoutExtension(entryPath);
-            if (DateOnly.TryParse(fileName, out var parsedDate))
+            if (JournalDate.TryParse(fileName, out var date))
             {
-                var date = JournalDate.From(parsedDate);
                 var markdown = await File.ReadAllTextAsync(entryPath, Encoding.UTF8, cancellationToken);
                 await IndexEntryAsync(date, markdown, entryPath, "processed", now, cancellationToken);
             }
@@ -1137,6 +1500,12 @@ public sealed class JournalIndexingService(LocalJournalPaths paths, JournalIndex
         await indexStore.UpsertVersionAsync(version, cancellationToken);
     }
 
+    public async Task RebuildAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await indexStore.BackupAndResetAsync(now, "rebuild", cancellationToken);
+        await ScanAsync(now, cancellationToken);
+    }
+
     private static string ComputeSha256(string content)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
@@ -1144,8 +1513,6 @@ public sealed class JournalIndexingService(LocalJournalPaths paths, JournalIndex
     }
 }
 ```
-
-During implementation, replace the `ScanAsync` entries-root expression with a clean `LocalJournalPaths.EntryRootDirectory()` helper if the expression becomes hard to read. Add a focused path test if that helper is introduced.
 
 - [ ] **Step 5: Run indexing tests**
 
@@ -1357,7 +1724,7 @@ git commit -m "feat: snapshot formal entry writes"
 
 - [ ] **Step 1: Add failing service tests**
 
-Create `tests/Journal.Tests/JournalHistoryServiceTests.cs` with tests:
+Create `tests/Journal.Tests/JournalHistoryServiceTests.cs` with these behaviors:
 
 ```csharp
 [Fact]
@@ -1368,6 +1735,16 @@ public async Task GetEntryAsync_ReturnsMetadataSectionsAndVersions()
 
 [Fact]
 public async Task RestoreVersionAsDraftAsync_WritesReviewingDraftOnly()
+```
+
+`GetEntryAsync_ReturnsMetadataSectionsAndVersions` must create a formal entry, create one version snapshot, call `GetEntryAsync(date)`, and assert:
+
+```csharp
+Assert.NotNull(detail);
+Assert.Equal("2026-05-13", detail.Date.IsoDate);
+Assert.Contains("测试历史详情", detail.Markdown, StringComparison.Ordinal);
+Assert.Contains(detail.Sections, section => section.Id == "today-focus");
+Assert.Single(detail.Versions);
 ```
 
 The restore test must assert:
@@ -1412,6 +1789,7 @@ Create `src/Journal.Infrastructure/Today/JournalHistoryService.cs`:
 ```csharp
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Clock;
+using Journal.Infrastructure.Jmf;
 using Journal.Infrastructure.Storage;
 
 namespace Journal.Infrastructure.Today;
@@ -1428,6 +1806,7 @@ public sealed class JournalHistoryService(
     JournalIndexStore indexStore,
     JournalIndexingService indexingService,
     IJournalVersionStore versionStore,
+    EntryStore entryStore,
     DraftStore draftStore,
     TodayJournalService todayService,
     IJournalClock clock)
@@ -1438,6 +1817,36 @@ public sealed class JournalHistoryService(
     {
         await indexingService.ScanAsync(clock.Now, cancellationToken);
         return await indexStore.SearchAsync(query, cancellationToken);
+    }
+
+    public async Task<JournalHistoryEntryDetail?> GetEntryAsync(
+        JournalDate date,
+        CancellationToken cancellationToken)
+    {
+        await indexingService.ScanAsync(clock.Now, cancellationToken);
+        var summary = await indexStore.ReadSummaryAsync(date, cancellationToken);
+        var entry = await entryStore.ReadAsync(date, cancellationToken);
+        if (summary is null && entry is null)
+        {
+            return null;
+        }
+
+        var markdown = entry?.Markdown;
+        var sections = Array.Empty<JmfSection>();
+        if (!string.IsNullOrWhiteSpace(markdown))
+        {
+            var parseResult = JmfMarkdownParser.Parse(markdown);
+            sections = parseResult.Document.Sections.ToArray();
+        }
+
+        var versions = await versionStore.ReadByDateAsync(date, cancellationToken);
+        return new JournalHistoryEntryDetail(
+            date,
+            summary?.Status ?? "missing",
+            summary?.AttentionReason,
+            markdown,
+            sections,
+            versions);
     }
 
     public async Task<IReadOnlyList<JournalEntryVersion>> ReadVersionsAsync(
@@ -1473,8 +1882,6 @@ public sealed class JournalHistoryService(
 }
 ```
 
-During implementation, add missing `using Journal.Infrastructure.Jmf;` if `JmfSection` is not in scope, or move `JournalHistoryEntryDetail` to `JournalHistoryModels.cs` if API serialization needs the record in the domain layer.
-
 - [ ] **Step 5: Register service and map endpoints**
 
 Add registration:
@@ -1491,6 +1898,7 @@ app.MapGet("/journal/history", async Task<IResult> (
     string? status,
     string? from,
     string? to,
+    string? cursor,
     int? limit,
     JournalHistoryService service,
     CancellationToken cancellationToken) =>
@@ -1500,9 +1908,26 @@ app.MapGet("/journal/history", async Task<IResult> (
         string.IsNullOrWhiteSpace(status) ? null : status,
         DateOnly.TryParse(from, out var fromDate) ? fromDate : null,
         DateOnly.TryParse(to, out var toDate) ? toDate : null,
+        string.IsNullOrWhiteSpace(cursor) ? null : cursor,
         limit.GetValueOrDefault(50));
 
     return Results.Ok(await service.SearchAsync(request, cancellationToken));
+});
+
+app.MapGet("/journal/history/{date}", async Task<IResult> (
+    string date,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseJournalDate(date, out var journalDate))
+    {
+        return Results.BadRequest(new { error = "date must use yyyy-MM-dd" });
+    }
+
+    var detail = await service.GetEntryAsync(journalDate, cancellationToken);
+    return detail is null
+        ? Results.NotFound(new { error = "journal entry was not found" })
+        : Results.Ok(detail);
 });
 
 app.MapGet("/journal/history/{date}/versions", async Task<IResult> (
@@ -1562,6 +1987,15 @@ app.MapPost("/journal/index/scan", async (
     CancellationToken cancellationToken) =>
 {
     await service.ScanAsync(clock.Now, cancellationToken);
+    return Results.Ok(new { status = "ok" });
+});
+
+app.MapPost("/journal/index/rebuild", async (
+    JournalIndexingService service,
+    IJournalClock clock,
+    CancellationToken cancellationToken) =>
+{
+    await service.RebuildAsync(clock.Now, cancellationToken);
     return Results.Ok(new { status = "ok" });
 });
 ```
@@ -1637,6 +2071,15 @@ export type JournalVersionDetail = {
   version: JournalEntryVersion;
   markdown: string;
 };
+
+export type JournalHistoryEntryDetail = {
+  date: JournalDate;
+  status: JournalStatus | "missing";
+  attentionReason: string | null;
+  markdown: string | null;
+  sections: JmfSection[];
+  versions: JournalEntryVersion[];
+};
 ```
 
 Add API functions:
@@ -1645,14 +2088,24 @@ Add API functions:
 export function getJournalHistory(params: {
   query?: string;
   status?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
   limit?: number;
 }): Promise<JournalHistorySearchResult> {
   const search = new URLSearchParams();
   if (params.query) search.set("query", params.query);
   if (params.status) search.set("status", params.status);
+  if (params.from) search.set("from", params.from);
+  if (params.to) search.set("to", params.to);
+  if (params.cursor) search.set("cursor", params.cursor);
   if (params.limit) search.set("limit", String(params.limit));
   const suffix = search.toString();
   return requestJson<JournalHistorySearchResult>(`/journal/history${suffix ? `?${suffix}` : ""}`);
+}
+
+export function getJournalHistoryEntry(date: string): Promise<JournalHistoryEntryDetail> {
+  return requestJson<JournalHistoryEntryDetail>(`/journal/history/${encodeURIComponent(date)}`);
 }
 
 export function getJournalHistoryVersions(date: string): Promise<JournalEntryVersion[]> {
@@ -1699,6 +2152,14 @@ describe("HistoryWorkbench", () => {
           attentionReason: null,
           hits: [{ sourceType: "section", sectionId: "today-focus", rawInputId: null, title: "今天想推进", snippet: "测试新[整理]的接口" }]
         }]}
+        detail={{
+          date: { value: "2026-05-13", year: "2026", month: "05", isoDate: "2026-05-13", monthDay: "05-13", markdownFileName: "2026-05-13.md" },
+          status: "processed",
+          attentionReason: null,
+          markdown: "正式 Markdown",
+          sections: [{ id: "today-focus", title: "今天想推进", content: "- 测试新整理的接口", kind: "required", isEditableInBlockMode: true }],
+          versions: []
+        }}
         selectedDate="2026-05-13"
         versions={[]}
         error=""
@@ -1726,6 +2187,7 @@ describe("HistoryWorkbench", () => {
         query=""
         status=""
         entries={[]}
+        detail={null}
         selectedDate="2026-05-13"
         versions={[{
           id: "version-2026-05-13T07-11-14+08-00",
@@ -1770,13 +2232,14 @@ Create `apps/desktop/src/HistoryWorkbench.tsx`:
 
 ```tsx
 import { ArrowLeft, RefreshCw, RotateCcw, Search } from "lucide-react";
-import type { JournalEntryVersion, JournalHistoryEntrySummary } from "./api";
+import type { JournalEntryVersion, JournalHistoryEntryDetail, JournalHistoryEntrySummary } from "./api";
 
 type HistoryWorkbenchProps = {
   isBusy: boolean;
   query: string;
   status: string;
   entries: JournalHistoryEntrySummary[];
+  detail: JournalHistoryEntryDetail | null;
   selectedDate: string;
   versions: JournalEntryVersion[];
   error: string;
@@ -1801,6 +2264,7 @@ export function HistoryWorkbench({
   query,
   status,
   entries,
+  detail,
   selectedDate,
   versions,
   error,
@@ -1812,6 +2276,7 @@ export function HistoryWorkbench({
   onRestoreVersion
 }: HistoryWorkbenchProps) {
   const selected = entries.find(entry => entry.date.isoDate === selectedDate) ?? entries[0] ?? null;
+  const previewSections = detail?.sections ?? [];
 
   return (
     <>
@@ -1880,7 +2345,12 @@ export function HistoryWorkbench({
               </div>
               {selected.attentionReason ? <p className="attention-copy">{selected.attentionReason}</p> : null}
               <div className="history-hit-list">
-                {selected.hits.map(hit => (
+                {previewSections.length > 0 ? previewSections.map(section => (
+                  <section key={section.id} className="history-hit">
+                    <span>{section.title}</span>
+                    <p>{section.content}</p>
+                  </section>
+                )) : selected.hits.map(hit => (
                   <section key={`${hit.sourceType}-${hit.sectionId ?? hit.rawInputId ?? hit.title}`} className="history-hit">
                     <span>{hit.sourceType === "raw-input" ? "原始材料" : hit.title}</span>
                     <p>{hit.snippet}</p>
@@ -1933,9 +2403,11 @@ Modify imports:
 ```ts
 import {
   getJournalHistory,
+  getJournalHistoryEntry,
   getJournalHistoryVersions,
   restoreJournalHistoryVersionDraft,
   type JournalEntryVersion,
+  type JournalHistoryEntryDetail,
   type JournalHistoryEntrySummary
 } from "./api";
 import { HistoryWorkbench } from "./HistoryWorkbench";
@@ -1948,6 +2420,7 @@ const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit" | "history"
 const [historyQuery, setHistoryQuery] = useState("");
 const [historyStatus, setHistoryStatus] = useState("");
 const [historyEntries, setHistoryEntries] = useState<JournalHistoryEntrySummary[]>([]);
+const [historyDetail, setHistoryDetail] = useState<JournalHistoryEntryDetail | null>(null);
 const [historySelectedDate, setHistorySelectedDate] = useState("");
 const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
 const [historyError, setHistoryError] = useState("");
@@ -1970,7 +2443,12 @@ async function refreshHistory(query = historyQuery, status = historyStatus) {
     setHistorySelectedDate(selectedDate);
     setHistoryError("");
     if (selectedDate) {
-      setHistoryVersions(await getJournalHistoryVersions(selectedDate));
+      const [detail, versions] = await Promise.all([
+        getJournalHistoryEntry(selectedDate),
+        getJournalHistoryVersions(selectedDate)
+      ]);
+      setHistoryDetail(detail);
+      setHistoryVersions(versions);
     }
   } catch (caught) {
     setHistoryError(getErrorMessage(caught));
@@ -1979,7 +2457,12 @@ async function refreshHistory(query = historyQuery, status = historyStatus) {
 
 async function handleHistorySelectDate(date: string) {
   setHistorySelectedDate(date);
-  setHistoryVersions(await getJournalHistoryVersions(date));
+  const [detail, versions] = await Promise.all([
+    getJournalHistoryEntry(date),
+    getJournalHistoryVersions(date)
+  ]);
+  setHistoryDetail(detail);
+  setHistoryVersions(versions);
 }
 
 async function handleRestoreHistoryVersion(versionId: string) {
@@ -2017,6 +2500,7 @@ Render history in the workspace branch:
     query={historyQuery}
     status={historyStatus}
     entries={historyEntries}
+    detail={historyDetail}
     selectedDate={historySelectedDate}
     versions={historyVersions}
     error={historyError}
@@ -2312,9 +2796,13 @@ Expected: branch is clean and ahead of `origin/main` by the implementation commi
 - [ ] Spec 4.2 version path is covered by Tasks 1 and 2.
 - [ ] Spec 4.3 external change detection is covered by Task 4.
 - [ ] Spec 4.4 SQLite segmented schema is covered by Task 3.
+- [ ] Spec 4.4 schema-version backup/rebuild is covered by Tasks 3 and 4.
 - [ ] Spec 4.5 FTS5 trigram and grouped search are covered by Tasks 3, 4, and 6.
 - [ ] Spec 4.6 no Today startup full scan is covered by Task 6 service boundary.
 - [ ] Spec 5 actual UI placement is covered by Task 7: assistant entry plus workspace mode.
-- [ ] Spec 6 APIs are covered by Task 6.
+- [ ] Spec 5 center preview is covered by Task 7 through `getJournalHistoryEntry` and `detail.sections`.
+- [ ] Spec 6 history, version, restore, scan, and rebuild APIs are covered by Task 6.
 - [ ] Spec 8 snapshot/index/restore errors are covered by Tasks 5 and 6.
+- [ ] Spec 9 backend/frontend testing requirements are covered by Tasks 3 through 8.
+- [ ] Spec 10 acceptance criteria are covered by Tasks 2 through 8.
 - [ ] Full verification and docs are covered by Task 8.
