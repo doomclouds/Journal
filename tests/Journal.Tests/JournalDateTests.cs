@@ -29,7 +29,8 @@ public sealed class JournalDateTests
     [InlineData("2026-05-13", true)]
     [InlineData("2026/05/13", false)]
     [InlineData("", false)]
-    public void TryParse_AcceptsOnlyIsoDate(string value, bool expected)
+    [InlineData(null, false)]
+    public void TryParse_AcceptsOnlyIsoDate(string? value, bool expected)
     {
         var parsed = JournalDate.TryParse(value, out var date);
 
