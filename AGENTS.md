@@ -200,5 +200,59 @@ Scripts provide evidence, not final authority. Use the output to reduce misses a
 - Create or update an archive only for completed or accepted requirement threads.
 - Use `both` only when a completed requirement also produced stable reusable debugging knowledge.
 
+### Completion Gates
+
+Requirement archives and problem archives are separate gates:
+
+- Requirement archiving records what was delivered. Run it when a coherent requirement, phase, feature, or accepted design-to-implementation thread is complete and verified.
+- Problem archiving records reusable failure knowledge. Run it after the current task has been implemented, spec-reviewed, code-quality-reviewed, and verified, before starting the next task or when the overall task is ending.
+
+For meaningful development work, the main agent must run a problem-archiving gate after:
+
+- implementation is complete enough to review as a unit
+- spec alignment has been checked against `docs/superpowers/specs/` and `docs/superpowers/plans/`
+- code quality review has checked correctness, maintainability, test coverage, and integration risks
+- verification commands or targeted manual checks have produced concrete evidence
+
+This gate belongs at task boundaries, not inside every small edit. Use it before moving from one planned task to the next, before merge/PR/cleanup when applicable, or before the final response when no next task remains.
+
+### Problem Archiving Ownership
+
+Only the main agent should execute the problem-archiving gate. Subagents may report candidate lessons, suspicious behavior, failed approaches, review findings, or tool quirks, but they should not write or promote problem/inbox/archive assets unless the main agent explicitly delegates that asset-writing task.
+
+During the gate, the main agent should collect candidates from:
+
+- implementation issues and debugging paths
+- failed or flaky tests
+- spec review mismatches
+- code quality review findings
+- provider, tool, MCP, SSE, SQLite, filesystem, encoding, or Windows-specific runtime quirks
+- subagent reports and unresolved observations
+
+### Inbox-First Problem Routing
+
+When a signal is potentially reusable but not mature enough for a formal problem asset, prefer `inbox` over dropping it.
+
+Use `inbox` for:
+
+- a fix that worked but whose root cause is not yet stable
+- a suspicious behavior that may recur but has limited evidence
+- a review finding that indicates a possible class of mistakes
+- an environment/tool/provider quirk that affected the work but was not fully diagnosed
+- a requirement or workflow ambiguity that may need later promotion
+- a "could archive or could skip" lesson that future agents might realistically search for
+
+Use `none` only when the signal is clearly mechanical, one-off, already covered, or unlikely to help future work. If choosing `none` after meaningful development, state the concrete reason in the final handoff.
+
+### Problem Gate Output
+
+At the end of the gate, report the route decision compactly:
+
+- `none`: no asset, with the concrete reason
+- `inbox`: new or updated inbox note, with validation evidence
+- `update-existing`: updated archive/problem/inbox asset, with validation evidence
+- `new-problem`: formal problem asset, with validation evidence
+- `archive` or `both`: only when the route also includes completed requirement history
+
 Before final close-out on meaningful work, confirm whether any new or updated asset is needed.
 <!-- asset-compounding-guidance:end -->
