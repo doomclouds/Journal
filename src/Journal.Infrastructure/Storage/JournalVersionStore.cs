@@ -8,6 +8,8 @@ namespace Journal.Infrastructure.Storage;
 
 public sealed class JournalVersionStore : IJournalVersionStore
 {
+    private const int MaxCreateAttempts = 1000;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -38,25 +40,47 @@ public sealed class JournalVersionStore : IJournalVersionStore
             throw new ArgumentException("Reason must not be blank.", nameof(reason));
         }
 
-        var id = CreateVersionId(createdAt);
-        var markdownPath = _paths.VersionMarkdownPath(date, id);
-        var metaPath = _paths.VersionMetaPath(date, id);
+        var trimmedReason = reason.Trim();
         var contentHash = ComputeContentHash(markdown);
-        var version = new JournalEntryVersion(
-            id,
-            date,
-            createdAt,
-            reason,
-            sourceEntryPath,
-            markdownPath,
-            metaPath,
-            contentHash);
+        var baseId = CreateVersionId(createdAt);
 
-        LocalJournalPaths.EnsureParentDirectory(markdownPath);
-        await File.WriteAllTextAsync(markdownPath, markdown, Encoding.UTF8, cancellationToken);
-        await File.WriteAllTextAsync(metaPath, JsonSerializer.Serialize(VersionMeta.From(version), JsonOptions), Encoding.UTF8, cancellationToken);
+        for (var attempt = 0; attempt < MaxCreateAttempts; attempt++)
+        {
+            var id = attempt == 0
+                ? baseId
+                : $"{baseId}-{attempt:000}";
+            var markdownPath = _paths.VersionMarkdownPath(date, id);
+            var metaPath = _paths.VersionMetaPath(date, id);
+            var version = new JournalEntryVersion(
+                id,
+                date,
+                createdAt,
+                trimmedReason,
+                sourceEntryPath,
+                markdownPath,
+                metaPath,
+                contentHash);
 
-        return version;
+            var markdownCreated = false;
+            try
+            {
+                LocalJournalPaths.EnsureParentDirectory(markdownPath);
+                await WriteNewTextFileAsync(markdownPath, markdown, cancellationToken);
+                markdownCreated = true;
+                await WriteNewTextFileAsync(metaPath, JsonSerializer.Serialize(VersionMeta.From(version), JsonOptions), cancellationToken);
+
+                return version;
+            }
+            catch (IOException) when (File.Exists(markdownPath) || File.Exists(metaPath))
+            {
+                if (markdownCreated)
+                {
+                    TryDelete(markdownPath);
+                }
+            }
+        }
+
+        throw new IOException($"Could not create a unique journal version snapshot for {date.IsoDate}.");
     }
 
     public async Task<IReadOnlyList<JournalEntryVersion>> ReadByDateAsync(
@@ -106,14 +130,24 @@ public sealed class JournalVersionStore : IJournalVersionStore
         var metaJson = await File.ReadAllTextAsync(metaPath, Encoding.UTF8, cancellationToken);
         var meta = JsonSerializer.Deserialize<VersionMeta>(metaJson, JsonOptions)
             ?? throw new InvalidOperationException($"Invalid version metadata in {metaPath}.");
-        var markdown = await File.ReadAllTextAsync(markdownPath, Encoding.UTF8, cancellationToken);
+        var version = meta.ToVersion();
+        if (version.Id != versionId || version.Date != date)
+        {
+            return null;
+        }
 
-        return (meta.ToVersion(), markdown);
+        var markdown = await File.ReadAllTextAsync(markdownPath, Encoding.UTF8, cancellationToken);
+        if (!string.Equals(ComputeContentHash(markdown), version.ContentHash, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return (version, markdown);
     }
 
     private static string CreateVersionId(DateTimeOffset createdAt) =>
         "version-" + createdAt
-            .ToString("yyyy-MM-ddTHH-mm-sszzz", CultureInfo.InvariantCulture)
+            .ToString("yyyy-MM-ddTHH-mm-ss-fffffffzzz", CultureInfo.InvariantCulture)
             .Replace(':', '-');
 
     private static string ComputeContentHash(string markdown)
@@ -121,6 +155,33 @@ public sealed class JournalVersionStore : IJournalVersionStore
         var bytes = Encoding.UTF8.GetBytes(markdown);
         var hash = SHA256.HashData(bytes);
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static async Task WriteNewTextFileAsync(
+        string path,
+        string contents,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        await using var writer = new StreamWriter(stream, Encoding.UTF8);
+        await writer.WriteAsync(contents.AsMemory(), cancellationToken);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private sealed record VersionMeta(
