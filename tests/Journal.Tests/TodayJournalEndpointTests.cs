@@ -904,6 +904,28 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PostHarnessRun_WithReorganizeExisting_DoesNotAppendRawInput()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { mode = "reorganize-existing" });
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+        var run = root.GetProperty("run");
+
+        Assert.Equal("empty", root.GetProperty("today").GetProperty("status").GetString());
+        Assert.Empty(root.GetProperty("today").GetProperty("rawInputs").EnumerateArray());
+        Assert.Equal("reorganize-existing", run.GetProperty("mode").GetString());
+        Assert.Equal(JsonValueKind.Null, run.GetProperty("currentRawInputId").ValueKind);
+    }
+
+    [Fact]
     public async Task PostTodayHarnessRun_WithBlankTextReturnsBadRequest()
     {
         using var workspace = TempWorkspace.Create();
@@ -917,6 +939,38 @@ public sealed class TodayJournalEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
         Assert.Equal("text is required", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PostHarnessRun_WithBlankAppendInput_ReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { mode = "append-input", text = "   ", source = "text" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("text is required", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PostHarnessRun_WithUnknownMode_ReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/today/harness/runs",
+            new { mode = "rewrite-everything", text = "今天试一个未知 mode", source = "text" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("mode is invalid", document.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]
