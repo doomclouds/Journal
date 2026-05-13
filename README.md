@@ -165,7 +165,7 @@ PUT http://localhost:5057/journal/today/editor/source
 - `GET /settings/ai/{providerId}/api-key` 只用于用户点击“小眼睛”时查看文件配置的 key，不暴露环境变量来源的 key。
 - `PUT /settings/ai` 保存配置草稿；`POST /settings/ai/test` 可以携带 candidate 测试当前表单内容，不必先写入配置文件。
 - `POST /settings/ai/activate` 执行“测试通过后启用”，测试失败时不写入 active provider，避免把不可用模型设成当前 LLM。
-- `POST /journal/today/draft/regenerate` 用于按指定 LLM 重新整理今日草稿；当前触发入口在今日工作台，不在设置页直接发起重生成。
+- `POST /journal/today/draft/regenerate` 保留为旧的整篇草稿重生成兼容接口；今日工作台的用户输入和重新整理入口统一走 Harness Run。
 - 真实 LLM 输出仍只能返回 `JournalAiJson`，并继续经过服务端校验、`raw-inputs` 保护和 JMF renderer 后才会进入 `reviewing` 或 `attention` draft。
 - 顶部状态与配置面板统一使用 `LLM` 术语；设置页提供 Provider 状态、来源、连接测试、受保护启用、Key 隐藏/查看、错误提示和可操作下一步。
 - 真实 LLM 失败会进入 `attention` draft，不会静默回退或覆盖正式 entry。
@@ -174,11 +174,13 @@ PUT http://localhost:5057/journal/today/editor/source
 
 ## 阶段 6：LLM Harness Core
 
-Harness Core 将 LLM 从“整篇生成器”收束为受控工具调用：当前输入作为 user message，历史 raw inputs、当前 draft 和正式 entry 作为 protected context，模型不能直接写 Markdown 或正式 entry。
+Harness Core 将 LLM 从“整篇生成器”收束为受控工具调用：稳定的 Markdown system instructions 描述 planner 方法论和安全边界，动态 journal context 提供历史 raw inputs、当前 draft、正式 entry、section catalog 和工具约束；当前用户输入只作为本次 user message 参与决策，模型不能直接写 Markdown 或正式 entry。
 
 阶段 6 已交付：
 
-- 今日工作台底部输入提交已接入 `POST /journal/today/harness/runs`，并通过 SSE 等待 harness run 完成后刷新日记纸面。
+- 今日工作台底部输入提交和“重新整理”都已接入 `POST /journal/today/harness/runs`，并通过 SSE 等待 harness run 完成后刷新日记纸面。
+- `append-input` run 会持久化当前输入，供后续运行作为历史 raw input；但本次 planner prompt 中当前输入只出现在 user message，不会混入历史 raw inputs context。
+- `reorganize-existing` run 不追加 raw input，而是使用固定服务端 user message，让模型基于已有 raw inputs、当前 draft 和正式 entry 重新协调九宫格内容分布。
 - LLM 只能调用 append / upsert / revise AI section / no-op 工具，工具调用先被收集为计划，再由服务端执行。
 - 用户内容只能被追加，不能被删除、清空或替换；`raw-inputs` 仍由服务端原始输入生成和保护。
 - `appendJournalSection`、`upsertJournalSection`、`reviseAiGeneratedSection` 和 `noOp` 映射到 JMF operation executor，并经过 JMF validation。

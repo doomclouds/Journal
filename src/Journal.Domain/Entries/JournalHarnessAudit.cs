@@ -7,9 +7,10 @@ public sealed record JournalHarnessAuditRun(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     string Status,
+    string Mode,
     string ProviderId,
     string PromptVersion,
-    string CurrentRawInputId,
+    string? CurrentRawInputId,
     IReadOnlyList<JournalHarnessAuditToolCall> ToolCalls,
     IReadOnlyList<string> Errors,
     string Summary);

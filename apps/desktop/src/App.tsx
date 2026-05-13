@@ -12,11 +12,11 @@ import {
   getJournalHistoryVersions,
   getTodayEditor,
   openHarnessRunEvents,
-  regenerateTodayDraft,
   revealAiProviderApiKey,
   restoreJournalHistoryVersionDraft,
   saveBlockDraft,
-  startHarnessRun,
+  startAppendHarnessRun,
+  startReorganizeHarnessRun,
   testAiProvider,
   type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
@@ -30,6 +30,7 @@ import {
   type JournalHistoryEntrySummary,
   type JournalVersionDetail,
   type HealthResponse,
+  type StartHarnessRunResponse,
   type TodayEditorState
 } from "./api";
 import { AuditWorkbench } from "./AuditWorkbench";
@@ -266,35 +267,30 @@ export default function App() {
     setIsRegenerateConfirmOpen(false);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    resetPendingRegenerateDraft();
-
-    if (hasLocalUnsavedChanges) {
-      setValidationError(localUnsavedChangeMessage);
-      return;
-    }
-
-    const trimmedInput = input.trim();
-
-    if (!trimmedInput) {
-      setValidationError("请输入一段今天的自然语言内容。");
-      return;
-    }
-
+  async function runHarnessAndRefresh(
+    startRun: () => Promise<StartHarnessRunResponse>,
+    options: { clearInputAfterRefresh: boolean }
+  ) {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setValidationError("");
     setIsSubmitting(true);
     try {
-      const started = await startHarnessRun(trimmedInput);
+      const started = await startRun();
       if (requestId !== requestIdRef.current) {
         return;
       }
 
       harnessEventsRef.current?.close();
+      harnessEventsRef.current = null;
       let stream: EventSource | null = null;
+      let didRefresh = false;
       const refreshAfterTerminalEvent = async () => {
+        if (didRefresh) {
+          return;
+        }
+
+        didRefresh = true;
         stream?.close();
         if (harnessEventsRef.current === stream) {
           harnessEventsRef.current = null;
@@ -304,7 +300,9 @@ export default function App() {
           const next = await getTodayEditor();
           if (requestId === requestIdRef.current) {
             setEditor(next);
-            setInput("");
+            if (options.clearInputAfterRefresh) {
+              setInput("");
+            }
             setApiError("");
             setLoadState("ready");
           }
@@ -351,6 +349,28 @@ export default function App() {
         setIsSubmitting(false);
       }
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetPendingRegenerateDraft();
+
+    if (hasLocalUnsavedChanges) {
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
+    const trimmedInput = input.trim();
+
+    if (!trimmedInput) {
+      setValidationError("请输入一段今天的自然语言内容。");
+      return;
+    }
+
+    await runHarnessAndRefresh(
+      () => startAppendHarnessRun(trimmedInput),
+      { clearInputAfterRefresh: true }
+    );
   }
 
   async function handleConfirm() {
@@ -437,50 +457,18 @@ export default function App() {
     return await revealAiProviderApiKey(providerId);
   }
 
-  async function handleRegenerateDraft(providerId?: string) {
+  async function handleRegenerateDraft() {
     if (hasLocalUnsavedChanges) {
       resetPendingRegenerateDraft();
       setValidationError(localUnsavedChangeMessage);
       return;
     }
 
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
     resetPendingRegenerateDraft();
-    setValidationError("");
-    setIsSubmitting(true);
-    try {
-      await regenerateTodayDraft(providerId);
-      if (requestId === requestIdRef.current) {
-        const nextEditor = await getTodayEditor();
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-
-        setEditor(nextEditor);
-        setApiError("");
-        setLoadState("ready");
-
-        try {
-          const nextAiSettings = await getAiSettings();
-          if (requestId === requestIdRef.current) {
-            setAiSettings(nextAiSettings);
-          }
-        } catch (caught) {
-          if (requestId === requestIdRef.current) {
-            setApiError(getErrorMessage(caught));
-          }
-        }
-      }
-    } catch (caught) {
-      if (requestId === requestIdRef.current) {
-        setApiError(getErrorMessage(caught));
-      }
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setIsSubmitting(false);
-      }
-    }
+    await runHarnessAndRefresh(
+      () => startReorganizeHarnessRun(),
+      { clearInputAfterRefresh: false }
+    );
   }
 
   async function handleRegenerateCurrentDraft() {

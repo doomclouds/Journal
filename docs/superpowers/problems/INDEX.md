@@ -4,6 +4,7 @@
 
 - [2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md](./2026-05/2026-05-13-deepseek-thinking-tool-call-reasoning-content-problem.md): 记录 DeepSeek V4 thinking mode 在 Agent Framework tool call 后必须回传 `reasoning_content`，而 OpenAI-compatible 适配层未写回该扩展字段导致 400 的运行时兼容问题。
 - [2026-05-13-generated-draft-missing-ai-provenance-problem.md](./2026-05/2026-05-13-generated-draft-missing-ai-provenance-problem.md): 记录 AI 草稿生成入口漏写 section provenance，导致 harness 误把 AI 生成段落视为 unknown 并拒绝 revise 的来源边界问题。
+- [2026-05-13-harness-current-input-context-leak-problem.md](./2026-05/2026-05-13-harness-current-input-context-leak-problem.md): 记录 append-input 当前输入虽从 raw input 列表排除，却经派生 currentDraftMarkdown 泄漏回 protected context 的 Prompt 分层问题。
 - [2026-05-13-harness-submit-not-wired-audit-empty-problem.md](./2026-05/2026-05-13-harness-submit-not-wired-audit-empty-problem.md): 记录 Phase 6 审计页已交付但主输入提交仍走旧接口，导致正常用户工作流不会产生 harness audit run 的接线缺口；现已改为 submit 走 harness run + SSE。
 - [2026-05-13-history-index-cache-stale-sidecars-problem.md](./2026-05/2026-05-13-history-index-cache-stale-sidecars-problem.md): 记录可重建 SQLite/FTS 历史索引在 invalid JMF、raw-only 日期、rebuild sidecar 和非规范路径下容易保留旧缓存或漏索引的失败模式。
 - [2026-05-13-history-workbench-stale-selection-restore-mismatch-problem.md](./2026-05/2026-05-13-history-workbench-stale-selection-restore-mismatch-problem.md): 记录历史工作台 selected date 与旧 detail/version state 错配，可能拼出新日期加旧 versionId 恢复请求的前端竞态问题。

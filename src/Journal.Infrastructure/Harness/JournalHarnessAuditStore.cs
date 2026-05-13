@@ -47,7 +47,7 @@ public sealed class JournalHarnessAuditStore
             var json = await File.ReadAllTextAsync(path, cancellationToken);
             var run = JsonSerializer.Deserialize<JournalHarnessAuditRun>(json, JsonOptions)
                 ?? throw new InvalidOperationException($"Invalid harness audit run in {path}.");
-            runs.Add(run);
+            runs.Add(Normalize(run));
         }
 
         return runs
@@ -73,7 +73,13 @@ public sealed class JournalHarnessAuditStore
         }
 
         var json = await File.ReadAllTextAsync(path, cancellationToken);
-        return JsonSerializer.Deserialize<JournalHarnessAuditRun>(json, JsonOptions)
+        var run = JsonSerializer.Deserialize<JournalHarnessAuditRun>(json, JsonOptions)
             ?? throw new InvalidOperationException($"Invalid harness audit run in {path}.");
+        return Normalize(run);
     }
+
+    private static JournalHarnessAuditRun Normalize(JournalHarnessAuditRun run) =>
+        string.IsNullOrWhiteSpace(run.Mode)
+            ? run with { Mode = JournalHarnessPrompt.AppendInputMode }
+            : run;
 }

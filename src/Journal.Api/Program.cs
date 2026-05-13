@@ -181,20 +181,44 @@ app.MapPost("/journal/today/harness/runs", async (
     JournalHarnessService service,
     CancellationToken cancellationToken) =>
 {
-    if (string.IsNullOrWhiteSpace(request.Text))
+    var mode = string.IsNullOrWhiteSpace(request.Mode)
+        ? JournalHarnessPrompt.AppendInputMode
+        : request.Mode.Trim();
+
+    if (string.Equals(mode, JournalHarnessPrompt.AppendInputMode, StringComparison.Ordinal))
     {
-        return Results.BadRequest(new { error = "text is required" });
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            return Results.BadRequest(new { error = "text is required" });
+        }
+
+        try
+        {
+            var result = await service.StartTodayRunAsync(
+                JournalHarnessRunStartRequest.AppendInput(request.Text, request.Source ?? "text"),
+                cancellationToken);
+            return Results.Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new { error = exception.Message });
+        }
     }
 
-    try
+    if (string.Equals(mode, JournalHarnessPrompt.ReorganizeExistingMode, StringComparison.Ordinal))
     {
-        var result = await service.StartTodayRunAsync(request.Text, request.Source ?? "text", cancellationToken);
+        if (!string.IsNullOrWhiteSpace(request.Text))
+        {
+            return Results.BadRequest(new { error = "text is not allowed" });
+        }
+
+        var result = await service.StartTodayRunAsync(
+            JournalHarnessRunStartRequest.ReorganizeExisting(),
+            cancellationToken);
         return Results.Ok(result);
     }
-    catch (ArgumentException exception)
-    {
-        return Results.BadRequest(new { error = exception.Message });
-    }
+
+    return Results.BadRequest(new { error = "mode is invalid" });
 });
 
 app.MapGet("/journal/harness/runs/{runId}", async Task<IResult> (
@@ -517,7 +541,7 @@ public partial class Program
 
 public sealed record AddTodayInputRequest(string Text, string? Source);
 
-public sealed record HarnessRunRequest(string Text, string? Source);
+public sealed record HarnessRunRequest(string? Text, string? Source, string? Mode);
 
 public sealed record HarnessRunEventView(
     string Type,
