@@ -157,7 +157,13 @@ public sealed class TodayJournalService
             "confirm-draft",
             cancellationToken);
 
-        await _draftStore.WriteAsync(draft with { Status = result.Status, UpdatedAt = now }, cancellationToken);
+        var errors = string.IsNullOrWhiteSpace(result.IndexWarning)
+            ? draft.Errors
+            : draft.Errors.Concat([$"Index warning: {result.IndexWarning.Trim()}"]).ToArray();
+
+        await _draftStore.WriteAsync(
+            draft with { Status = result.Status, Errors = errors, UpdatedAt = now },
+            cancellationToken);
 
         return await BuildStateAsync(date, result.Status, cancellationToken);
     }

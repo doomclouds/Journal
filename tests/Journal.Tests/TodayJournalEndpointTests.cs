@@ -104,6 +104,34 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PostTodayDraftConfirm_WhenIndexFails_ReturnsProcessedAndVisibleWarning()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+
+        using var inputResponse = await client.PostAsJsonAsync(
+            "/journal/today/inputs",
+            new { text = "今天确认 draft，索引失败也要让 API 看见 #Journal", source = "text" });
+        inputResponse.EnsureSuccessStatusCode();
+        Directory.CreateDirectory(paths.IndexPath());
+
+        using var response = await client.PostAsync("/journal/today/draft/confirm", content: null);
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal("processed", root.GetProperty("status").GetString());
+        Assert.True(File.Exists(paths.EntryPath(date)));
+        Assert.Contains(
+            root.GetProperty("errors").EnumerateArray(),
+            error => error.GetString()!.StartsWith("Index warning:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task PostTodayDraftConfirm_WithoutDraft_ReturnsConflict()
     {
         using var workspace = TempWorkspace.Create();
