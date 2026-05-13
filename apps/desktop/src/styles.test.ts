@@ -67,7 +67,7 @@ describe("Today workbench productized CSS contract", () => {
       blocks.push(css.slice(match.index, end));
     }
 
-    return blocks.join("\n");
+    return blocks.join("\n").replace(/\r\n/g, "\n");
   }
 
   test("defines command surface shell regions", () => {
