@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-13-phase-4a-local-history-search-archives.md](./2026-05/2026-05-13-phase-4a-local-history-search-archives.md): 归档 Journal 阶段 4A 的覆盖前版本快照、可重建 SQLite/FTS5 历史索引、History API 和历史与版本工作台。
 - [2026-05-12-journal-harness-core-archives.md](./2026-05/2026-05-12-journal-harness-core-archives.md): 归档 Journal 阶段 6 的 Harness Core、受控 LLM 工具调用、draft-only 执行、section provenance 和 AI 审计工作台。
 - [2026-05-10-ai-provider-integration-archives.md](./2026-05/2026-05-10-ai-provider-integration-archives.md): 归档 Journal 阶段 5 的真实 LLM Provider 接入、OpenAI-compatible runtime、配置面板、健康检查和重新整理草稿闭环。
 - [2026-05-10-llm-settings-ux-polish-archives.md](./2026-05/2026-05-10-llm-settings-ux-polish-archives.md): 归档 LLM 设置面板的安全 Key 展示、候选配置测试、受保护保存启用、模态弹窗、图标动作和高级参数提示体验。
