@@ -257,11 +257,21 @@ app.MapGet("/journal/history", async Task<IResult> (
     JournalHistoryService service,
     CancellationToken cancellationToken) =>
 {
+    if (!TryParseOptionalJournalDate(from, out var fromDate))
+    {
+        return Results.BadRequest(new { error = "from must use yyyy-MM-dd" });
+    }
+
+    if (!TryParseOptionalJournalDate(to, out var toDate))
+    {
+        return Results.BadRequest(new { error = "to must use yyyy-MM-dd" });
+    }
+
     var request = new JournalHistoryQuery(
         query,
         string.IsNullOrWhiteSpace(status) ? null : status,
-        DateOnly.TryParse(from, out var fromDate) ? fromDate : null,
-        DateOnly.TryParse(to, out var toDate) ? toDate : null,
+        fromDate,
+        toDate,
         string.IsNullOrWhiteSpace(cursor) ? null : cursor,
         limit.GetValueOrDefault(50));
 
@@ -328,6 +338,10 @@ app.MapPost("/journal/history/{date}/versions/{versionId}/restore-draft", async 
     try
     {
         return Results.Ok(await service.RestoreVersionAsDraftAsync(journalDate, versionId, cancellationToken));
+    }
+    catch (JournalHistoryRestoreConflictException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
     }
     catch (InvalidOperationException exception)
     {
@@ -447,6 +461,29 @@ static bool TryParseJournalDate(string? value, out JournalDate date)
     }
 
     date = default!;
+    return false;
+}
+
+static bool TryParseOptionalJournalDate(string? value, out DateOnly? date)
+{
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        date = null;
+        return true;
+    }
+
+    if (DateOnly.TryParseExact(
+        value,
+        "yyyy-MM-dd",
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.None,
+        out var parsed))
+    {
+        date = parsed;
+        return true;
+    }
+
+    date = null;
     return false;
 }
 

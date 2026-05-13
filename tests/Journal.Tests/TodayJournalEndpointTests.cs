@@ -305,6 +305,22 @@ public sealed class TodayJournalEndpointTests
         Assert.Contains(items, item => item.GetProperty("date").GetProperty("isoDate").GetString() == "2026-05-08");
     }
 
+    [Theory]
+    [InlineData("/journal/history?from=not-a-date", "from must use yyyy-MM-dd")]
+    [InlineData("/journal/history?to=2026-99-99", "to must use yyyy-MM-dd")]
+    public async Task GetJournalHistory_WithInvalidDateFilterReturnsBadRequest(string url, string expectedError)
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(expectedError, document.RootElement.GetProperty("error").GetString());
+    }
+
     [Fact]
     public async Task GetJournalHistoryDate_ReturnsEntryDetail()
     {
@@ -349,6 +365,28 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task GetJournalHistoryVersion_ReturnsVersionAndMarkdown()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+        await WriteEntryAsync(paths, date, CreateMarkdown(date, "current formal entry"));
+        var version = await CreateVersionAsync(paths, date, "历史版本详情 API");
+
+        using var response = await client.GetAsync($"/journal/history/2026-05-08/versions/{version.Id}");
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+
+        Assert.Equal(version.Id, root.GetProperty("version").GetProperty("id").GetString());
+        Assert.Equal("2026-05-08", root.GetProperty("version").GetProperty("date").GetProperty("isoDate").GetString());
+        Assert.Contains("历史版本详情 API", root.GetProperty("markdown").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PostJournalHistoryVersionRestoreDraft_WritesDraftAndReturnsTodayEditor()
     {
         using var workspace = TempWorkspace.Create();
@@ -371,6 +409,31 @@ public sealed class TodayJournalEndpointTests
             "restored version API",
             await File.ReadAllTextAsync(paths.EntryPath(date), Encoding.UTF8),
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PostJournalHistoryVersionRestoreDraft_WhenVersionDateIsNotTodayReturnsConflict()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var otherDate = JournalDate.From(FixedDay.AddDays(-1));
+        await WriteEntryAsync(paths, otherDate, CreateMarkdown(otherDate, "older formal entry"));
+        var version = await CreateVersionAsync(paths, otherDate, "older restored version API");
+
+        using var response = await client.PostAsync(
+            $"/journal/history/2026-05-07/versions/{version.Id}/restore-draft",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Contains(
+            "Only today's journal versions can be restored",
+            document.RootElement.GetProperty("error").GetString(),
+            StringComparison.Ordinal);
+        Assert.False(File.Exists(paths.DraftPath(otherDate)));
+        Assert.False(File.Exists(paths.DraftPath(JournalDate.From(FixedDay))));
     }
 
     [Fact]
@@ -397,6 +460,65 @@ public sealed class TodayJournalEndpointTests
         using var response = await client.PostAsync("/journal/history/2026-05-08/versions/missing/restore-draft", content: null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostJournalIndexScan_MakesNewEntrySearchable()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+        await WriteEntryAsync(paths, date, CreateMarkdown(date, "索引扫描 endpoint 可搜索"));
+
+        using var response = await client.PostAsync("/journal/index/scan", content: null);
+        response.EnsureSuccessStatusCode();
+
+        var result = await new JournalIndexStore(paths).SearchAsync(
+            new JournalHistoryQuery("索引扫描", null, null, null, null, 20),
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(date, item.Date);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "section");
+    }
+
+    [Fact]
+    public async Task PostJournalIndexRebuild_RestoresSearchAndVersionCountFromFiles()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+        await WriteEntryAsync(paths, date, CreateMarkdown(date, "索引重建 markdown 可搜索"));
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput("raw-1", date, FixedNow, "text", "索引重建 raw input 可搜索"),
+            CancellationToken.None);
+        await CreateVersionAsync(paths, date, "索引重建 version file");
+
+        await new JournalIndexStore(paths).EnsureReadyAsync(CancellationToken.None);
+        Directory.Delete(paths.IndexDirectory(), recursive: true);
+        using var response = await client.PostAsync("/journal/index/rebuild", content: null);
+        response.EnsureSuccessStatusCode();
+
+        var store = new JournalIndexStore(paths);
+        var markdownResult = await store.SearchAsync(
+            new JournalHistoryQuery("markdown 可搜索", null, null, null, null, 20),
+            CancellationToken.None);
+        var rawResult = await store.SearchAsync(
+            new JournalHistoryQuery("raw input", null, null, null, null, 20),
+            CancellationToken.None);
+        var summary = await store.ReadSummaryAsync(date, CancellationToken.None);
+
+        Assert.Contains(markdownResult.Items, item => item.Date == date);
+        Assert.Contains(
+            rawResult.Items,
+            item => item.Date == date && item.Hits.Any(hit => hit.SourceType == "raw-input"));
+        Assert.NotNull(summary);
+        Assert.Equal(1, summary.VersionCount);
+        Assert.Equal(1, summary.RawInputCount);
     }
 
     [Fact]

@@ -13,6 +13,8 @@ public sealed record JournalHistoryEntryDetail(
     IReadOnlyList<JmfSection> Sections,
     IReadOnlyList<JournalEntryVersion> Versions);
 
+public sealed class JournalHistoryRestoreConflictException(string message) : Exception(message);
+
 public sealed class JournalHistoryService(
     JournalIndexStore indexStore,
     JournalIndexingService indexingService,
@@ -76,6 +78,12 @@ public sealed class JournalHistoryService(
         string versionId,
         CancellationToken cancellationToken)
     {
+        if (date != JournalDate.From(clock.Today))
+        {
+            throw new JournalHistoryRestoreConflictException(
+                "Only today's journal versions can be restored as a draft. Historical date-aware editing is not available yet.");
+        }
+
         var snapshot = await versionStore.ReadAsync(date, versionId, cancellationToken)
             ?? throw new InvalidOperationException("version was not found.");
 

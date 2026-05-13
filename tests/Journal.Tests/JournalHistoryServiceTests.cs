@@ -76,6 +76,29 @@ public sealed class JournalHistoryServiceTests
         Assert.False((await File.ReadAllTextAsync(paths.EntryPath(Date), Encoding.UTF8)).Contains("restored version", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RestoreVersionAsDraftAsync_WhenVersionDateIsNotToday_ThrowsAndDoesNotWriteDraft()
+    {
+        using var workspace = TempWorkspace.Create();
+        var otherDate = JournalDate.From(FixedDay.AddDays(-1));
+        var (paths, service) = CreateSubject(workspace.Root);
+        await new EntryStore(paths).WriteAsync(otherDate, CreateMarkdown(otherDate, "older formal entry"), FixedNow, CancellationToken.None);
+        var version = await new JournalVersionStore(paths).CreateSnapshotAsync(
+            otherDate,
+            CreateMarkdown(otherDate, "older restored version"),
+            paths.EntryPath(otherDate),
+            "test",
+            FixedNow.AddMinutes(1),
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<JournalHistoryRestoreConflictException>(
+            () => service.RestoreVersionAsDraftAsync(otherDate, version.Id, CancellationToken.None));
+
+        Assert.Contains("Only today's journal versions can be restored", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(paths.DraftPath(otherDate)));
+        Assert.False(File.Exists(paths.DraftPath(Date)));
+    }
+
     private static (LocalJournalPaths Paths, JournalHistoryService Service) CreateSubject(string root)
     {
         var paths = new LocalJournalPaths(new JournalStorageOptions(root));
