@@ -11,7 +11,9 @@ import {
   revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
+  startAppendHarnessRun,
   startHarnessRun,
+  startReorganizeHarnessRun,
   testAiProvider,
   type AiProviderSaveRequest,
   type AiSettingsSaveRequest,
@@ -159,6 +161,7 @@ const queuedHarnessRun: JournalHarnessAuditRun = {
   startedAt: null,
   completedAt: null,
   status: "queued",
+  mode: "append-input",
   providerId: "mock",
   promptVersion: "journal-harness-v1",
   currentRawInputId: "raw-1",
@@ -1436,14 +1439,24 @@ describe("App", () => {
     expect(screen.queryByLabelText("LLM：DeepSeek")).not.toBeInTheDocument();
   });
 
-  test("regenerates draft after confirmation prompt", async () => {
+  test("reorganizes draft through harness run after confirmation prompt", async () => {
+    const eventSource = createEventSourceMock();
     const fetchMock = mockFetchSequence([
       { body: healthResponse },
       { body: createEditorState() },
       { body: aiSettings },
-      { body: reviewingToday },
-      { body: createEditorState() },
-      { body: aiSettings }
+      {
+        body: {
+          today: reviewingToday,
+          run: {
+            ...queuedHarnessRun,
+            id: "run-reorganize",
+            mode: "reorganize-existing",
+            currentRawInputId: null
+          }
+        }
+      },
+      { body: createEditorState() }
     ]);
 
     render(<App />);
@@ -1454,18 +1467,34 @@ describe("App", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "确认重新整理" }));
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
+      expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/harness/runs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ providerId: null })
+        body: JSON.stringify({ mode: "reorganize-existing" })
       })
     );
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined));
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
+
+    await waitFor(() =>
+      expect(eventSource.EventSourceMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/harness/runs/run-reorganize/events"
+      )
+    );
+    eventSource.emit("run-completed", {
+      type: "run-completed",
+      runId: "run-reorganize",
+      status: "reviewing",
+      message: "done"
+    });
+
+    await waitFor(() => expect(screen.getByText("推进 Phase 3")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/editor", undefined);
   });
 
-  test("keeps regenerated editor refresh when LLM settings refresh fails", async () => {
+  test("keeps reorganized editor refresh when LLM settings refresh fails", async () => {
+    const eventSource = createEventSourceMock();
     const refreshedEditor = createEditorState({
       markdown: editorMarkdown.replace("推进 Phase 3", "重新生成后的重点"),
       sections: [
@@ -1482,9 +1511,18 @@ describe("App", () => {
       { body: healthResponse },
       { body: createEditorState() },
       { body: aiSettings },
-      { body: reviewingToday },
-      { body: refreshedEditor },
-      { ok: false, status: 500, body: { error: "settings refresh failed" } }
+      {
+        body: {
+          today: reviewingToday,
+          run: {
+            ...queuedHarnessRun,
+            id: "run-reorganize",
+            mode: "reorganize-existing",
+            currentRawInputId: null
+          }
+        }
+      },
+      { body: refreshedEditor }
     ]);
 
     render(<App />);
@@ -1492,9 +1530,20 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "重新整理" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "重新整理草稿" })).getByRole("button", { name: "确认重新整理" }));
 
+    await waitFor(() =>
+      expect(eventSource.EventSourceMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/harness/runs/run-reorganize/events"
+      )
+    );
+    eventSource.emit("run-completed", {
+      type: "run-completed",
+      runId: "run-reorganize",
+      status: "reviewing",
+      message: "done"
+    });
+
     await waitFor(() => expect(screen.getByText("重新生成后的重点")).toBeInTheDocument());
-    expect(screen.getByRole("alert")).toHaveTextContent("settings refresh failed");
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
   });
 
   test("shows regenerate draft action on today page instead of LLM settings panel", async () => {
@@ -1513,11 +1562,18 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("regenerates draft from today page after confirmation", async () => {
+  test("reorganizes draft from today page after confirmation", async () => {
+    createEventSourceMock();
     const fetchMock = createInitialFetchMock()
-      .mockResolvedValueOnce(mockJsonResponse(reviewingToday))
-      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
-      .mockResolvedValueOnce(mockJsonResponse(aiSettings));
+      .mockResolvedValueOnce(mockJsonResponse({
+        today: reviewingToday,
+        run: {
+          ...queuedHarnessRun,
+          id: "run-reorganize",
+          mode: "reorganize-existing",
+          currentRawInputId: null
+        }
+      }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -1528,13 +1584,14 @@ describe("App", () => {
 
     fireEvent.click(within(screen.getByRole("dialog", { name: "重新整理草稿" })).getByRole("button", { name: "确认重新整理" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", {
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/harness/runs", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ providerId: null })
+      body: JSON.stringify({ mode: "reorganize-existing" })
     }));
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
   });
 
   test("resets regenerate confirmation after raw input changes", async () => {
@@ -1746,7 +1803,7 @@ describe("App", () => {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ text: "今天完成 Phase 2 API 连接", source: "text" })
+      body: JSON.stringify({ mode: "append-input", text: "今天完成 Phase 2 API 连接", source: "text" })
     });
     expect(fetchMock).toHaveBeenNthCalledWith(5, "http://localhost:5057/journal/today/editor", undefined);
   });
@@ -3137,7 +3194,7 @@ describe("editor API client", () => {
     });
   });
 
-  test("startHarnessRun posts text to harness run endpoint", async () => {
+  test("startHarnessRun posts typed append request to harness run endpoint", async () => {
     const run = {
       id: "run-1",
       date: journalDate,
@@ -3155,14 +3212,51 @@ describe("editor API client", () => {
     const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({ today: reviewingToday, run }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await startHarnessRun("今天继续整理 harness");
+    await startHarnessRun({ mode: "append-input", text: "今天继续整理 harness", source: "text" });
 
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/harness/runs", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ text: "今天继续整理 harness", source: "text" })
+      body: JSON.stringify({ mode: "append-input", text: "今天继续整理 harness", source: "text" })
+    });
+  });
+
+  test("startAppendHarnessRun posts append input request with default source", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({ today: reviewingToday, run: queuedHarnessRun }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startAppendHarnessRun("今天继续整理 harness");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/harness/runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ mode: "append-input", text: "今天继续整理 harness", source: "text" })
+    });
+  });
+
+  test("startReorganizeHarnessRun posts reorganize existing request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({
+      today: reviewingToday,
+      run: {
+        ...queuedHarnessRun,
+        mode: "reorganize-existing",
+        currentRawInputId: null
+      }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startReorganizeHarnessRun();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/today/harness/runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ mode: "reorganize-existing" })
     });
   });
 

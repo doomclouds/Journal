@@ -183,6 +183,8 @@ export type JournalHarnessRunStatus =
   | "failed"
   | "interrupted";
 
+export type JournalHarnessRunMode = "append-input" | "reorganize-existing";
+
 export type JournalHarnessAuditToolCall = {
   id: string;
   name: string;
@@ -201,9 +203,10 @@ export type JournalHarnessAuditRun = {
   startedAt: string | null;
   completedAt: string | null;
   status: JournalHarnessRunStatus;
+  mode: JournalHarnessRunMode;
   providerId: string;
   promptVersion: string;
-  currentRawInputId: string;
+  currentRawInputId: string | null;
   toolCalls: JournalHarnessAuditToolCall[];
   errors: string[];
   summary: string;
@@ -220,6 +223,18 @@ export type StartHarnessRunResponse = {
   today: TodayJournalState;
   run: JournalHarnessAuditRun;
 };
+
+export type StartAppendHarnessRunRequest = {
+  mode: "append-input";
+  text: string;
+  source?: string;
+};
+
+export type StartReorganizeHarnessRunRequest = {
+  mode: "reorganize-existing";
+};
+
+export type StartHarnessRunRequest = StartAppendHarnessRunRequest | StartReorganizeHarnessRunRequest;
 
 export type JournalHistoryHit = {
   sourceType: "section" | "raw-input";
@@ -352,14 +367,22 @@ export function addTodayInput(text: string, source = "text"): Promise<TodayJourn
   });
 }
 
-export function startHarnessRun(text: string, source = "text"): Promise<StartHarnessRunResponse> {
+export function startHarnessRun(request: StartHarnessRunRequest): Promise<StartHarnessRunResponse> {
   return requestJson<StartHarnessRunResponse>("/journal/today/harness/runs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ text, source })
+    body: JSON.stringify(request.mode === "append-input" ? { ...request, source: request.source ?? "text" } : request)
   });
+}
+
+export function startAppendHarnessRun(text: string, source = "text"): Promise<StartHarnessRunResponse> {
+  return startHarnessRun({ mode: "append-input", text, source });
+}
+
+export function startReorganizeHarnessRun(): Promise<StartHarnessRunResponse> {
+  return startHarnessRun({ mode: "reorganize-existing" });
 }
 
 export function openHarnessRunEvents(
