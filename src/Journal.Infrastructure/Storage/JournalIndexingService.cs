@@ -34,15 +34,10 @@ public sealed class JournalIndexingService
         var validation = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
         if (!validation.IsValid)
         {
-            if (await _indexStore.ReadSummaryAsync(date, cancellationToken) is null)
-            {
-                await _indexStore.UpsertEntryAsync(
-                    CreateMinimalAttentionEntry(date, markdown, entryPath, indexedAt),
-                    [],
-                    cancellationToken);
-            }
-
-            await _indexStore.MarkEntryStatusAsync(date, "attention", InvalidJmfReason, indexedAt, cancellationToken);
+            await _indexStore.UpsertEntryAsync(
+                CreateMinimalAttentionEntry(date, markdown, entryPath, indexedAt),
+                [],
+                cancellationToken);
             return;
         }
 
@@ -71,6 +66,11 @@ public sealed class JournalIndexingService
                 cancellationToken.ThrowIfCancellationRequested();
                 var fileName = Path.GetFileNameWithoutExtension(entryPath);
                 if (!JournalDate.TryParse(fileName, out var date))
+                {
+                    continue;
+                }
+
+                if (!IsCanonicalEntryPath(entryPath, date))
                 {
                     continue;
                 }
@@ -290,4 +290,16 @@ public sealed class JournalIndexingService
         var sample = JournalDate.From(new DateOnly(2000, 1, 1));
         return Path.GetFullPath(Path.Combine(_paths.VersionDirectory(sample), "..", "..", ".."));
     }
+
+    private bool IsCanonicalEntryPath(string entryPath, JournalDate date)
+    {
+        var actualPath = Path.GetFullPath(entryPath);
+        var expectedPath = Path.GetFullPath(_paths.EntryPath(date));
+        return string.Equals(actualPath, expectedPath, PathComparison);
+    }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 }

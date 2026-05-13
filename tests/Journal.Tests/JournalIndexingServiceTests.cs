@@ -88,6 +88,79 @@ public sealed class JournalIndexingServiceTests
     }
 
     [Fact]
+    public async Task ScanAsync_InvalidMarkdownClearsStaleSectionFts()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var now = DateTimeOffset.Parse("2026-05-13T01:00:00+00:00");
+        await WriteEntryAsync(paths, date, CreateMarkdown(date, "旧关键词仍在旧索引里"));
+        await service.ScanAsync(now, CancellationToken.None);
+        var before = await indexStore.SearchAsync(new JournalHistoryQuery("旧关键词", null, null, null, null, 20), CancellationToken.None);
+        Assert.Contains(before.Items, item => item.Date == date && item.Hits.Any(hit => hit.SourceType == "section"));
+        await WriteEntryAsync(paths, date, "# broken markdown without JMF markers");
+
+        await service.ScanAsync(now.AddMinutes(5), CancellationToken.None);
+
+        var after = await indexStore.SearchAsync(new JournalHistoryQuery("旧关键词", null, null, null, null, 20), CancellationToken.None);
+        Assert.DoesNotContain(after.Items, item => item.Date == date && item.Hits.Any(hit => hit.SourceType == "section"));
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal("attention", summary.Status);
+        Assert.Equal("invalid_jmf", summary.AttentionReason);
+    }
+
+    [Fact]
+    public async Task ScanAsync_RawOnlyInvalidThenDeletedEntryMarksMissing()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var now = DateTimeOffset.Parse("2026-05-13T01:00:00+00:00");
+        await service.SyncRawInputsAsync(
+            date,
+            [new RawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "raw-only input")],
+            CancellationToken.None);
+        await WriteEntryAsync(paths, date, "# broken markdown without JMF markers");
+        await service.ScanAsync(now, CancellationToken.None);
+        File.Delete(paths.EntryPath(date));
+
+        await service.ScanAsync(now.AddMinutes(5), CancellationToken.None);
+
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal("missing", summary.Status);
+        Assert.Equal("entry_file_missing", summary.AttentionReason);
+    }
+
+    [Fact]
+    public async Task ScanAsync_SkipsNonCanonicalEntryPathForMatchingDateFileName()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var canonicalMarkdown = CreateMarkdown(date, "只应该索引 canonical 内容");
+        await WriteEntryAsync(paths, date, canonicalMarkdown);
+        var backupPath = Path.Combine(paths.EntryRootDirectory(), "backup", date.MarkdownFileName);
+        LocalJournalPaths.EnsureParentDirectory(backupPath);
+        await File.WriteAllTextAsync(backupPath, CreateMarkdown(date, "backup 内容不能进入索引"), CancellationToken.None);
+
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T01:00:00+00:00"), CancellationToken.None);
+
+        var canonicalResult = await indexStore.SearchAsync(new JournalHistoryQuery("canonical", null, null, null, null, 20), CancellationToken.None);
+        var canonicalItem = Assert.Single(canonicalResult.Items);
+        Assert.Equal(date, canonicalItem.Date);
+        var backupResult = await indexStore.SearchAsync(new JournalHistoryQuery("backup", null, null, null, null, 20), CancellationToken.None);
+        Assert.Empty(backupResult.Items);
+
+        File.Delete(paths.EntryPath(date));
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T01:05:00+00:00"), CancellationToken.None);
+
+        backupResult = await indexStore.SearchAsync(new JournalHistoryQuery("backup", null, null, null, null, 20), CancellationToken.None);
+        Assert.Empty(backupResult.Items);
+    }
+
+    [Fact]
     public async Task SyncRawInputsAsync_IndexesRawInputJsonlIntoFts()
     {
         using var workspace = TempWorkspace.Create();
