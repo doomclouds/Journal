@@ -16,10 +16,19 @@ public sealed class JournalVersionStore : IJournalVersionStore
     };
 
     private readonly LocalJournalPaths _paths;
+    private readonly Func<string, string, CancellationToken, Task> _writeNewTextFileAsync;
 
     public JournalVersionStore(LocalJournalPaths paths)
+        : this(paths, WriteNewTextFileAsync)
+    {
+    }
+
+    internal JournalVersionStore(
+        LocalJournalPaths paths,
+        Func<string, string, CancellationToken, Task> writeNewTextFileAsync)
     {
         _paths = paths;
+        _writeNewTextFileAsync = writeNewTextFileAsync;
     }
 
     public async Task<JournalEntryVersion> CreateSnapshotAsync(
@@ -65,18 +74,38 @@ public sealed class JournalVersionStore : IJournalVersionStore
             try
             {
                 LocalJournalPaths.EnsureParentDirectory(markdownPath);
-                await WriteNewTextFileAsync(markdownPath, markdown, cancellationToken);
+                await _writeNewTextFileAsync(markdownPath, markdown, cancellationToken);
                 markdownCreated = true;
-                await WriteNewTextFileAsync(metaPath, JsonSerializer.Serialize(VersionMeta.From(version), JsonOptions), cancellationToken);
+            }
+            catch (IOException exception) when (IsCreateNewCollision(exception))
+            {
+                continue;
+            }
+            catch (IOException)
+            {
+                TryDelete(markdownPath);
+                TryDelete(metaPath);
+                throw;
+            }
+
+            try
+            {
+                await _writeNewTextFileAsync(metaPath, JsonSerializer.Serialize(VersionMeta.From(version), JsonOptions), cancellationToken);
 
                 return version;
             }
-            catch (IOException) when (File.Exists(markdownPath) || File.Exists(metaPath))
+            catch (IOException exception) when (IsCreateNewCollision(exception))
             {
                 if (markdownCreated)
                 {
                     TryDelete(markdownPath);
                 }
+            }
+            catch (IOException)
+            {
+                TryDelete(markdownPath);
+                TryDelete(metaPath);
+                throw;
             }
         }
 
@@ -149,6 +178,14 @@ public sealed class JournalVersionStore : IJournalVersionStore
         "version-" + createdAt
             .ToString("yyyy-MM-ddTHH-mm-ss-fffffffzzz", CultureInfo.InvariantCulture)
             .Replace(':', '-');
+
+    private static bool IsCreateNewCollision(IOException exception)
+    {
+        const int ErrorFileExists = unchecked((int)0x80070050); // HRESULT_FROM_WIN32(ERROR_FILE_EXISTS)
+        const int ErrorAlreadyExists = unchecked((int)0x800700B7); // HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)
+
+        return exception.HResult is ErrorFileExists or ErrorAlreadyExists;
+    }
 
     private static string ComputeContentHash(string markdown)
     {

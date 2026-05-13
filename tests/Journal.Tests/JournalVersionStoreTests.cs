@@ -49,6 +49,88 @@ public sealed class JournalVersionStoreTests
     }
 
     [Fact]
+    public async Task CreateSnapshotAsync_MetadataPathCollisionDeletesMarkdownAndRetries()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var store = new JournalVersionStore(paths);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var createdAt = DateTimeOffset.Parse("2026-05-13T07:11:14+08:00");
+        var collidedId = "version-2026-05-13T07-11-14-0000000+08-00";
+        var collidedMetaPath = paths.VersionMetaPath(date, collidedId);
+        LocalJournalPaths.EnsureParentDirectory(collidedMetaPath);
+        await File.WriteAllTextAsync(collidedMetaPath, "existing meta");
+
+        var version = await store.CreateSnapshotAsync(date, "markdown", "entry.md", "confirm-draft", createdAt, CancellationToken.None);
+
+        Assert.Equal($"{collidedId}-001", version.Id);
+        Assert.False(File.Exists(paths.VersionMarkdownPath(date, collidedId)));
+        Assert.Equal("existing meta", await File.ReadAllTextAsync(collidedMetaPath));
+        Assert.Equal("markdown", (await store.ReadAsync(date, version.Id, CancellationToken.None))!.Value.Markdown);
+    }
+
+    [Fact]
+    public async Task CreateSnapshotAsync_NonCollisionMetadataWriteFailureRethrowsOriginalException()
+    {
+        using var workspace = TempWorkspace.Create();
+        var expected = new IOException("metadata stream failed");
+        var store = new JournalVersionStore(
+            new LocalJournalPaths(new JournalStorageOptions(workspace.Root)),
+            async (path, contents, cancellationToken) =>
+            {
+                if (path.EndsWith(".meta.json", StringComparison.Ordinal))
+                {
+                    throw expected;
+                }
+
+                await WriteNewTextFileForTestAsync(path, contents, cancellationToken);
+            });
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+
+        var actual = await Assert.ThrowsAsync<IOException>(() => store.CreateSnapshotAsync(
+            date,
+            "markdown",
+            "entry.md",
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T07:11:14+08:00"),
+            CancellationToken.None));
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
+    public async Task CreateSnapshotAsync_NonCollisionMetadataWriteFailureCleansPartialFiles()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var expected = new IOException("metadata stream failed");
+        var store = new JournalVersionStore(
+            paths,
+            async (path, contents, cancellationToken) =>
+            {
+                if (path.EndsWith(".meta.json", StringComparison.Ordinal))
+                {
+                    await WriteNewTextFileForTestAsync(path, "partial", cancellationToken);
+                    throw expected;
+                }
+
+                await WriteNewTextFileForTestAsync(path, contents, cancellationToken);
+            });
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+
+        await Assert.ThrowsAsync<IOException>(() => store.CreateSnapshotAsync(
+            date,
+            "markdown",
+            "entry.md",
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T07:11:14+08:00"),
+            CancellationToken.None));
+
+        Assert.Empty(Directory.EnumerateFiles(paths.VersionDirectory(date), "*.md"));
+        Assert.Empty(Directory.EnumerateFiles(paths.VersionDirectory(date), "*.meta.json"));
+    }
+
+    [Fact]
     public async Task ReadByDateAsync_ReturnsVersionsNewestFirst()
     {
         using var workspace = TempWorkspace.Create();
@@ -156,6 +238,17 @@ public sealed class JournalVersionStoreTests
         var node = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
         node[propertyName] = value;
         await File.WriteAllTextAsync(path, node.ToJsonString());
+    }
+
+    private static async Task WriteNewTextFileForTestAsync(
+        string path,
+        string contents,
+        CancellationToken cancellationToken)
+    {
+        LocalJournalPaths.EnsureParentDirectory(path);
+        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        await using var writer = new StreamWriter(stream);
+        await writer.WriteAsync(contents.AsMemory(), cancellationToken);
     }
 
     private sealed class TempWorkspace : IDisposable
