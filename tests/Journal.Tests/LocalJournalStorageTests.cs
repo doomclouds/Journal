@@ -20,6 +20,52 @@ public sealed class LocalJournalStorageTests
     }
 
     [Fact]
+    public void VersionPaths_AreUnderHiddenJournalVersionDirectory()
+    {
+        var paths = new LocalJournalPaths(new JournalStorageOptions(@"C:\JournalTest"));
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+
+        Assert.Equal(
+            Path.Combine(@"C:\JournalTest", ".journal", "versions", "2026", "05", "2026-05-13"),
+            paths.VersionDirectory(date));
+        Assert.Equal(
+            Path.Combine(@"C:\JournalTest", ".journal", "versions", "2026", "05", "2026-05-13", "version-2026-05-13T07-11-14+08-00.md"),
+            paths.VersionMarkdownPath(date, "version-2026-05-13T07-11-14+08-00"));
+        Assert.Equal(
+            Path.Combine(@"C:\JournalTest", ".journal", "versions", "2026", "05", "2026-05-13", "version-2026-05-13T07-11-14+08-00.meta.json"),
+            paths.VersionMetaPath(date, "version-2026-05-13T07-11-14+08-00"));
+    }
+
+    [Theory]
+    [InlineData("version-2026-05-13T07-11-14+08-00", true)]
+    [InlineData("version-2026-05-13_07-11-14", true)]
+    [InlineData("../escape", false)]
+    [InlineData("version:bad", false)]
+    [InlineData("", false)]
+    public void IsValidVersionId_RejectsPathEscapes(string value, bool expected)
+    {
+        Assert.Equal(expected, LocalJournalPaths.IsValidVersionId(value));
+    }
+
+    [Fact]
+    public void IndexPaths_AreUnderHiddenJournalIndexDirectory()
+    {
+        var paths = new LocalJournalPaths(new JournalStorageOptions(@"C:\JournalTest"));
+
+        Assert.Equal(Path.Combine(@"C:\JournalTest", ".journal", "index"), paths.IndexDirectory());
+        Assert.Equal(Path.Combine(@"C:\JournalTest", ".journal", "index", "journal.db"), paths.IndexPath());
+        Assert.Equal(Path.Combine(@"C:\JournalTest", ".journal", "index", "backups"), paths.IndexBackupDirectory());
+    }
+
+    [Fact]
+    public void EntryRootDirectory_PointsAtEntriesRoot()
+    {
+        var paths = new LocalJournalPaths(new JournalStorageOptions(@"C:\JournalTest"));
+
+        Assert.Equal(Path.Combine(@"C:\JournalTest", "entries"), paths.EntryRootDirectory());
+    }
+
+    [Fact]
     public async Task RawInputStore_AppendsJsonLines()
     {
         using var workspace = TempWorkspace.Create();

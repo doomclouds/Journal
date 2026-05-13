@@ -14,6 +14,9 @@ public sealed class LocalJournalPaths
     public string EntryPath(JournalDate date) =>
         Path.Combine(_rootDirectory, "entries", date.Year, date.Month, date.MarkdownFileName);
 
+    public string EntryRootDirectory() =>
+        Path.Combine(_rootDirectory, "entries");
+
     public string RawInputPath(JournalDate date) =>
         Path.Combine(_rootDirectory, ".journal", "raw-inputs", date.Year, date.Month, $"{date.IsoDate}.jsonl");
 
@@ -22,6 +25,28 @@ public sealed class LocalJournalPaths
 
     public string DraftMetaPath(JournalDate date) =>
         Path.Combine(_rootDirectory, ".journal", "drafts", date.Year, date.Month, $"{date.IsoDate}.meta.json");
+
+    public string VersionDirectory(JournalDate date) =>
+        Path.Combine(_rootDirectory, ".journal", "versions", date.Year, date.Month, date.IsoDate);
+
+    public string VersionMarkdownPath(JournalDate date, string versionId) =>
+        IsValidVersionId(versionId)
+            ? Path.Combine(VersionDirectory(date), $"{versionId}.md")
+            : throw new ArgumentException("versionId contains invalid path characters.", nameof(versionId));
+
+    public string VersionMetaPath(JournalDate date, string versionId) =>
+        IsValidVersionId(versionId)
+            ? Path.Combine(VersionDirectory(date), $"{versionId}.meta.json")
+            : throw new ArgumentException("versionId contains invalid path characters.", nameof(versionId));
+
+    public string IndexDirectory() =>
+        Path.Combine(_rootDirectory, ".journal", "index");
+
+    public string IndexPath() =>
+        Path.Combine(IndexDirectory(), "journal.db");
+
+    public string IndexBackupDirectory() =>
+        Path.Combine(IndexDirectory(), "backups");
 
     public string AiSettingsPath() =>
         Path.Combine(_rootDirectory, ".journal", "settings", "ai-providers.json");
@@ -39,6 +64,14 @@ public sealed class LocalJournalPaths
         && runId.All(character =>
             char.IsAsciiLetterOrDigit(character)
             || character == '-');
+
+    public static bool IsValidVersionId(string? versionId) =>
+        !string.IsNullOrWhiteSpace(versionId)
+        && versionId.All(character =>
+            char.IsAsciiLetterOrDigit(character)
+            || character == '-'
+            || character == '_'
+            || character == '+');
 
     public static void EnsureParentDirectory(string filePath)
     {

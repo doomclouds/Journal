@@ -38,6 +38,10 @@ builder.Services.AddSingleton<IJournalClock, SystemJournalClock>();
 builder.Services.AddSingleton<RawInputStore>();
 builder.Services.AddSingleton<DraftStore>();
 builder.Services.AddSingleton<EntryStore>();
+builder.Services.AddSingleton<IJournalVersionStore, JournalVersionStore>();
+builder.Services.AddSingleton<JournalIndexStore>();
+builder.Services.AddSingleton<JournalIndexingService>();
+builder.Services.AddSingleton<EntryWritePipeline>();
 builder.Services.AddSingleton<JournalAiSettingsStore>();
 builder.Services.AddSingleton<IJournalAiEnvironment, SystemJournalAiEnvironment>();
 builder.Services.AddSingleton<JournalAiSettingsService>();
@@ -50,6 +54,7 @@ builder.Services.AddSingleton<JournalHarnessPlanner>();
 builder.Services.AddSingleton<JournalHarnessAuditStore>();
 builder.Services.AddSingleton<JournalHarnessService>();
 builder.Services.AddSingleton<TodayJournalService>();
+builder.Services.AddSingleton<JournalHistoryService>();
 
 var app = builder.Build();
 
@@ -242,6 +247,126 @@ app.MapGet("/journal/audit", async Task<IResult> (
     return Results.Ok(runs);
 });
 
+app.MapGet("/journal/history", async Task<IResult> (
+    string? query,
+    string? status,
+    string? from,
+    string? to,
+    string? cursor,
+    int? limit,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseOptionalJournalDate(from, out var fromDate))
+    {
+        return Results.BadRequest(new { error = "from must use yyyy-MM-dd" });
+    }
+
+    if (!TryParseOptionalJournalDate(to, out var toDate))
+    {
+        return Results.BadRequest(new { error = "to must use yyyy-MM-dd" });
+    }
+
+    var request = new JournalHistoryQuery(
+        query,
+        string.IsNullOrWhiteSpace(status) ? null : status,
+        fromDate,
+        toDate,
+        string.IsNullOrWhiteSpace(cursor) ? null : cursor,
+        limit.GetValueOrDefault(50));
+
+    return Results.Ok(await service.SearchAsync(request, cancellationToken));
+});
+
+app.MapGet("/journal/history/{date}", async Task<IResult> (
+    string date,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseJournalDate(date, out var journalDate))
+    {
+        return Results.BadRequest(new { error = "date must use yyyy-MM-dd" });
+    }
+
+    var detail = await service.GetEntryAsync(journalDate, cancellationToken);
+    return detail is null
+        ? Results.NotFound(new { error = "journal entry was not found" })
+        : Results.Ok(detail);
+});
+
+app.MapGet("/journal/history/{date}/versions", async Task<IResult> (
+    string date,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseJournalDate(date, out var journalDate))
+    {
+        return Results.BadRequest(new { error = "date must use yyyy-MM-dd" });
+    }
+
+    return Results.Ok(await service.ReadVersionsAsync(journalDate, cancellationToken));
+});
+
+app.MapGet("/journal/history/{date}/versions/{versionId}", async Task<IResult> (
+    string date,
+    string versionId,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseJournalDate(date, out var journalDate))
+    {
+        return Results.BadRequest(new { error = "date must use yyyy-MM-dd" });
+    }
+
+    var version = await service.ReadVersionAsync(journalDate, versionId, cancellationToken);
+    return version is null
+        ? Results.NotFound(new { error = "version was not found" })
+        : Results.Ok(new { version = version.Value.Version, markdown = version.Value.Markdown });
+});
+
+app.MapPost("/journal/history/{date}/versions/{versionId}/restore-draft", async Task<IResult> (
+    string date,
+    string versionId,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseJournalDate(date, out var journalDate))
+    {
+        return Results.BadRequest(new { error = "date must use yyyy-MM-dd" });
+    }
+
+    try
+    {
+        return Results.Ok(await service.RestoreVersionAsDraftAsync(journalDate, versionId, cancellationToken));
+    }
+    catch (JournalHistoryRestoreConflictException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/journal/index/scan", async (
+    JournalIndexingService service,
+    IJournalClock clock,
+    CancellationToken cancellationToken) =>
+{
+    await service.ScanAsync(clock.Now, cancellationToken);
+    return Results.Ok(new { status = "ok" });
+});
+
+app.MapPost("/journal/index/rebuild", async (
+    JournalIndexingService service,
+    IJournalClock clock,
+    CancellationToken cancellationToken) =>
+{
+    await service.RebuildAsync(clock.Now, cancellationToken);
+    return Results.Ok(new { status = "ok" });
+});
+
 app.MapPost("/journal/today/draft/confirm", async (TodayJournalService service, CancellationToken cancellationToken) =>
 {
     try
@@ -336,6 +461,29 @@ static bool TryParseJournalDate(string? value, out JournalDate date)
     }
 
     date = default!;
+    return false;
+}
+
+static bool TryParseOptionalJournalDate(string? value, out DateOnly? date)
+{
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        date = null;
+        return true;
+    }
+
+    if (DateOnly.TryParseExact(
+        value,
+        "yyyy-MM-dd",
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.None,
+        out var parsed))
+    {
+        date = parsed;
+        return true;
+    }
+
+    date = null;
     return false;
 }
 

@@ -4,7 +4,8 @@ export type JournalStatus =
   | "reviewing"
   | "processed"
   | "updated"
-  | "attention";
+  | "attention"
+  | "missing";
 
 export type JournalDate = {
   value: string;
@@ -220,6 +221,53 @@ export type StartHarnessRunResponse = {
   run: JournalHarnessAuditRun;
 };
 
+export type JournalHistoryHit = {
+  sourceType: "section" | "raw-input";
+  sectionId: string | null;
+  rawInputId: string | null;
+  title: string;
+  snippet: string;
+};
+
+export type JournalHistoryEntrySummary = {
+  date: JournalDate;
+  status: JournalStatus;
+  mood: string | null;
+  rawInputCount: number;
+  versionCount: number;
+  hits: JournalHistoryHit[];
+  attentionReason: string | null;
+};
+
+export type JournalHistorySearchResult = {
+  items: JournalHistoryEntrySummary[];
+};
+
+export type JournalEntryVersion = {
+  id: string;
+  date: JournalDate;
+  createdAt: string;
+  reason: string;
+  sourceEntryPath: string;
+  markdownPath: string;
+  metaPath: string;
+  contentHash: string;
+};
+
+export type JournalVersionDetail = {
+  version: JournalEntryVersion;
+  markdown: string;
+};
+
+export type JournalHistoryEntryDetail = {
+  date: JournalDate;
+  status: JournalStatus;
+  attentionReason: string | null;
+  markdown: string | null;
+  sections: JmfSection[];
+  versions: JournalEntryVersion[];
+};
+
 const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
 
 type ErrorResponse = {
@@ -355,6 +403,46 @@ export function openHarnessRunEvents(
 
 export function getJournalAudit(date: string): Promise<JournalHarnessAuditRun[]> {
   return requestJson<JournalHarnessAuditRun[]>(`/journal/audit?date=${encodeURIComponent(date)}`);
+}
+
+export function getJournalHistory(params: {
+  query?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<JournalHistorySearchResult> {
+  const search = new URLSearchParams();
+  if (params.query) search.set("query", params.query);
+  if (params.status) search.set("status", params.status);
+  if (params.from) search.set("from", params.from);
+  if (params.to) search.set("to", params.to);
+  if (params.cursor) search.set("cursor", params.cursor);
+  if (params.limit) search.set("limit", String(params.limit));
+  const suffix = search.toString();
+  return requestJson<JournalHistorySearchResult>(`/journal/history${suffix ? `?${suffix}` : ""}`);
+}
+
+export function getJournalHistoryEntry(date: string): Promise<JournalHistoryEntryDetail> {
+  return requestJson<JournalHistoryEntryDetail>(`/journal/history/${encodeURIComponent(date)}`);
+}
+
+export function getJournalHistoryVersions(date: string): Promise<JournalEntryVersion[]> {
+  return requestJson<JournalEntryVersion[]>(`/journal/history/${encodeURIComponent(date)}/versions`);
+}
+
+export function getJournalHistoryVersion(date: string, versionId: string): Promise<JournalVersionDetail> {
+  return requestJson<JournalVersionDetail>(
+    `/journal/history/${encodeURIComponent(date)}/versions/${encodeURIComponent(versionId)}`
+  );
+}
+
+export function restoreJournalHistoryVersionDraft(date: string, versionId: string): Promise<TodayEditorState> {
+  return requestJson<TodayEditorState>(
+    `/journal/history/${encodeURIComponent(date)}/versions/${encodeURIComponent(versionId)}/restore-draft`,
+    { method: "POST" }
+  );
 }
 
 export function confirmTodayDraft(): Promise<TodayJournalState> {

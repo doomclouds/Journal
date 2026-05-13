@@ -1,15 +1,19 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { RefreshCw, Save, SendHorizontal } from "lucide-react";
+import { History, RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   activateAiSettings,
   confirmTodayDraft,
   getAiSettings,
   getHealth,
   getJournalAudit,
+  getJournalHistory,
+  getJournalHistoryEntry,
+  getJournalHistoryVersions,
   getTodayEditor,
   openHarnessRunEvents,
   regenerateTodayDraft,
   revealAiProviderApiKey,
+  restoreJournalHistoryVersionDraft,
   saveBlockDraft,
   startHarnessRun,
   testAiProvider,
@@ -18,12 +22,16 @@ import {
   type AiProviderHealthResult,
   type AiSettingsView,
   type JournalBlockEditSection,
+  type JournalEntryVersion,
   type JournalHarnessAuditRun,
   type JournalHarnessRunEvent,
+  type JournalHistoryEntryDetail,
+  type JournalHistoryEntrySummary,
   type HealthResponse,
   type TodayEditorState
 } from "./api";
 import { AuditWorkbench } from "./AuditWorkbench";
+import { HistoryWorkbench } from "./HistoryWorkbench";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
 import {
@@ -77,6 +85,7 @@ export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
   const auditRequestIdRef = useRef(0);
+  const historyRequestIdRef = useRef(0);
   const harnessEventsRef = useRef<EventSource | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -91,9 +100,16 @@ export default function App() {
   const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
   const [workbenchView, setWorkbenchView] = useState<"journal" | "assistant">("assistant");
-  const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit">("today");
+  const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit" | "history">("today");
   const [auditDate, setAuditDate] = useState("");
   const [auditRuns, setAuditRuns] = useState<JournalHarnessAuditRun[]>([]);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyStatus, setHistoryStatus] = useState("");
+  const [historyEntries, setHistoryEntries] = useState<JournalHistoryEntrySummary[]>([]);
+  const [historyDetail, setHistoryDetail] = useState<JournalHistoryEntryDetail | null>(null);
+  const [historySelectedDate, setHistorySelectedDate] = useState("");
+  const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
+  const [historyError, setHistoryError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -528,6 +544,100 @@ export default function App() {
     }
   }
 
+  async function loadHistoryEntryForRequest(date: string, historyRequestId: number) {
+    const [detail, versions] = await Promise.all([
+      getJournalHistoryEntry(date),
+      getJournalHistoryVersions(date)
+    ]);
+
+    if (historyRequestId === historyRequestIdRef.current) {
+      setHistoryDetail(detail);
+      setHistoryVersions(versions);
+      setHistoryError("");
+    }
+  }
+
+  async function refreshHistory(query = historyQuery, status = historyStatus) {
+    const historyRequestId = historyRequestIdRef.current + 1;
+    historyRequestIdRef.current = historyRequestId;
+    setHistoryError("");
+    setHistoryDetail(null);
+    setHistoryVersions([]);
+
+    try {
+      const result = await getJournalHistory({ query, status, limit: 50 });
+      if (historyRequestId !== historyRequestIdRef.current) {
+        return;
+      }
+
+      const selectedStillExists = result.items.some(item => item.date.isoDate === historySelectedDate);
+      const selectedDate = selectedStillExists
+        ? historySelectedDate
+        : result.items[0]?.date.isoDate ?? "";
+      setHistoryEntries(result.items);
+      setHistorySelectedDate(selectedDate);
+
+      if (!selectedDate) {
+        return;
+      }
+
+      await loadHistoryEntryForRequest(selectedDate, historyRequestId);
+    } catch (caught) {
+      if (historyRequestId === historyRequestIdRef.current) {
+        setHistoryError(getErrorMessage(caught));
+      }
+    }
+  }
+
+  async function openHistoryWorkbench() {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
+    resetPendingRegenerateDraft();
+    setValidationError("");
+    setWorkspaceMode("history");
+    await refreshHistory(historyQuery, historyStatus);
+  }
+
+  async function handleHistorySelectDate(date: string) {
+    const historyRequestId = historyRequestIdRef.current + 1;
+    historyRequestIdRef.current = historyRequestId;
+    setHistorySelectedDate(date);
+    setHistoryDetail(null);
+    setHistoryVersions([]);
+    setHistoryError("");
+
+    try {
+      await loadHistoryEntryForRequest(date, historyRequestId);
+    } catch (caught) {
+      if (historyRequestId === historyRequestIdRef.current) {
+        setHistoryError(getErrorMessage(caught));
+      }
+    }
+  }
+
+  async function handleRestoreHistoryVersion(versionId: string) {
+    if (!historySelectedDate) {
+      return;
+    }
+
+    setHistoryError("");
+    setIsSubmitting(true);
+    try {
+      const restored = await restoreJournalHistoryVersionDraft(historySelectedDate, versionId);
+      setEditor(restored);
+      setWorkspaceMode("today");
+      setWorkbenchView("assistant");
+    } catch (caught) {
+      setHistoryError(getErrorMessage(caught));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className="desktop-shell" aria-label="Journal 今日工作台">
       <header className="top-context command-top-context">
@@ -566,6 +676,29 @@ export default function App() {
             selectedDate={auditDate}
             onDateChange={handleAuditDateChange}
             onReturnToday={() => setWorkspaceMode("today")}
+          />
+        ) : workspaceMode === "history" ? (
+          <HistoryWorkbench
+            isBusy={isBusy}
+            query={historyQuery}
+            status={historyStatus}
+            entries={historyEntries}
+            detail={historyDetail}
+            selectedDate={historySelectedDate}
+            versions={historyVersions}
+            error={historyError}
+            onBack={() => setWorkspaceMode("today")}
+            onQueryChange={value => {
+              setHistoryQuery(value);
+              void refreshHistory(value, historyStatus);
+            }}
+            onStatusChange={value => {
+              setHistoryStatus(value);
+              void refreshHistory(historyQuery, value);
+            }}
+            onSelectDate={date => void handleHistorySelectDate(date)}
+            onRefresh={() => void refreshHistory()}
+            onRestoreVersion={versionId => void handleRestoreHistoryVersion(versionId)}
           />
         ) : (
         <>
@@ -830,6 +963,17 @@ export default function App() {
               ) : (
                 <p className="muted">还没有输入。这里之后会显示原始表达如何进入日记段落。</p>
               )}
+            </section>
+
+            <section className="assistant-card path-panel">
+              <div className="assistant-card-head">
+                <h3>历史与版本</h3>
+                <button type="button" className="assistant-inline-action" onClick={openHistoryWorkbench}>
+                  <History size={14} aria-hidden="true" />
+                  查看历史
+                </button>
+              </div>
+              <p>搜索正式日记、查看覆盖前快照，并把旧版本恢复成待确认草稿。</p>
             </section>
 
             {uniqueAttentionErrors.length > 0 ? (

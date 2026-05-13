@@ -7,5 +7,6 @@ public enum JournalStatus
     Reviewing,
     Processed,
     Updated,
-    Attention
+    Attention,
+    Missing
 }

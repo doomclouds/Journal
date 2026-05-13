@@ -83,6 +83,27 @@ public sealed class TodayJournalServiceTests
     }
 
     [Fact]
+    public async Task ConfirmDraftAsync_WhenIndexFails_ReturnsProcessedAndSurfacesWarning()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var service = CreateService(paths);
+        await service.AddInputAsync("今天确认 entry，即使索引失败也要提示 #Journal", "text", CancellationToken.None);
+        Directory.CreateDirectory(paths.IndexPath());
+
+        var state = await service.ConfirmDraftAsync(CancellationToken.None);
+
+        Assert.Equal(JournalStatus.Processed, state.Status);
+        Assert.NotNull(state.Entry);
+        Assert.Contains("今天确认 entry，即使索引失败也要提示 #Journal", state.Entry.Markdown);
+        Assert.True(File.Exists(paths.EntryPath(state.Date)));
+        Assert.Contains(state.Errors, error => error.StartsWith("Index warning:", StringComparison.Ordinal));
+        Assert.NotNull(state.Draft);
+        Assert.Equal(JournalStatus.Processed, state.Draft.Status);
+        Assert.Contains(state.Draft.Errors, error => error.StartsWith("Index warning:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ConfirmDraftAsync_ReturnsUpdatedAndOverwritesEntryWhenEntryAlreadyExists()
     {
         using var workspace = TempWorkspace.Create();
@@ -103,6 +124,16 @@ public sealed class TodayJournalServiceTests
 
         var entryText = await File.ReadAllTextAsync(paths.EntryPath(updated.Date), CancellationToken.None);
         Assert.Equal(updated.Entry.Markdown, entryText);
+
+        var versions = await new JournalVersionStore(paths).ReadByDateAsync(updated.Date, CancellationToken.None);
+        var version = Assert.Single(versions);
+        Assert.Equal("confirm-draft", version.Reason);
+        Assert.Equal(firstMarkdown, (await new JournalVersionStore(paths).ReadAsync(updated.Date, version.Id, CancellationToken.None))!.Value.Markdown);
+
+        var summary = await new JournalIndexStore(paths).ReadSummaryAsync(updated.Date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal("updated", summary.Status);
+        Assert.Equal(1, summary.VersionCount);
     }
 
     [Fact]
@@ -250,8 +281,19 @@ public sealed class TodayJournalServiceTests
             new RawInputStore(paths),
             new DraftStore(paths),
             new EntryStore(paths),
+            CreateEntryWritePipeline(paths),
             generationService ?? CreateGenerationService(JournalAiSettings.CreateDefault()),
             new FixedJournalClock(FixedDay, FixedNow));
+
+    private static EntryWritePipeline CreateEntryWritePipeline(LocalJournalPaths paths)
+    {
+        var indexStore = new JournalIndexStore(paths);
+        return new EntryWritePipeline(
+            new EntryStore(paths),
+            new JournalVersionStore(paths),
+            new JournalIndexingService(paths, indexStore),
+            paths);
+    }
 
     private static LocalJournalPaths CreatePaths(string root) =>
         new(new JournalStorageOptions(root));

@@ -4,13 +4,13 @@
 
 Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
 
-Current delivered scope is Phase 6:
+Current delivered scope is Phase 6 plus Phase 4A local history reliability:
 
 ```text
-Natural language input -> Mock or real LLM JSON or Harness Core tool plan -> JMF Markdown draft -> block/source edit or harness execution with JMF validation -> user confirmation -> formal Markdown file
+Natural language input -> Mock or real LLM JSON or Harness Core tool plan -> JMF Markdown draft -> block/source edit or harness execution with JMF validation -> user confirmation -> version snapshot when overwriting -> formal Markdown file -> rebuildable SQLite/FTS history index -> history search/version restore workbench
 ```
 
-Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 real OpenAI-compatible LLM integration, and Harness Core:
+Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 real OpenAI-compatible LLM integration, Harness Core, and Phase 4A local history/search:
 
 - Backend parses draft/entry Markdown into a JMF document.
 - Block mode edits known editable sections while preserving protected/system sections.
@@ -29,8 +29,14 @@ Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 re
 - Harness tools are limited to append, upsert, revise AI-generated section, and no-op; user content must not be deleted, cleared, or replaced.
 - Section-level provenance is stored in JMF markers and hidden from normal preview.
 - Audit run records are stored as per-run JSON files under `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` and exposed through the audit workbench.
+- Formal entry overwrites go through `EntryWritePipeline`: snapshot the previous entry first, write Markdown second, then update the rebuildable SQLite index.
+- Version snapshots live under `.journal/versions/yyyy/MM/yyyy-MM-dd/` as Markdown plus metadata; first writes do not create snapshots.
+- SQLite lives under `.journal/index/journal.db` and is a rebuildable cache over Markdown, raw-input jsonl, and version files. Do not treat it as durable truth.
+- History APIs expose search, date detail, version list/detail, scan/rebuild, and restore-version-to-draft.
+- The history workbench is a full workspace mode opened from Today Assistant, mirroring audit-style navigation.
+- Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
 
-Do not assume these are implemented yet unless the code or docs say so: SQLite indexing/search, version snapshots, multi-date browsing, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.
+Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.
 
 ## Tech Stack
 
@@ -49,6 +55,8 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - OpenAI-compatible runtime and settings: `src/Journal.Infrastructure/Ai/OpenAiCompatibleAgentRuntime.cs`, `JournalAiGenerationService.cs`, `JournalAiSettingsService.cs`, `JournalAiSettingsStore.cs`, and `JournalAiSettings.cs`.
 - AI JSON validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
 - Harness Core service/planner/audit: `src/Journal.Infrastructure/Harness/JournalHarnessService.cs`, `JournalHarnessPlanner.cs`, `JournalHarnessToolCollector.cs`, `JournalHarnessOperationExecutor.cs`, and `JournalHarnessAuditStore.cs`.
+- History storage and indexing: `src/Journal.Infrastructure/Storage/JournalVersionStore.cs`, `EntryWritePipeline.cs`, `JournalIndexStore.cs`, and `JournalIndexingService.cs`.
+- History service/API composition: `src/Journal.Infrastructure/Today/JournalHistoryService.cs` and `src/Journal.Api/Program.cs`.
 - JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, and editor request/state records.
 - JMF parse/validate/compose layer: `src/Journal.Infrastructure/Jmf/JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, and `JmfMarkdownComposer.cs`.
 - Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
@@ -56,6 +64,7 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - JMF editor UI: `apps/desktop/src/JournalEditor.tsx`, `JournalBlockCard.tsx`, `InsertBlockMenu.tsx`, and `ValidationPanel.tsx`.
 - LLM settings UI: `apps/desktop/src/LlmSettingsPanel.tsx`.
 - AI audit workbench UI: `apps/desktop/src/AuditWorkbench.tsx`.
+- History workbench UI: `apps/desktop/src/HistoryWorkbench.tsx`.
 - API client and shared frontend contracts: `apps/desktop/src/api.ts`.
 - Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
@@ -63,6 +72,8 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 
 - Raw user input is the source material and must not be overwritten by summaries.
 - Formal Markdown is the durable human-readable source of truth; generated caches or indexes must be rebuildable.
+- SQLite history index is a cache only. Markdown entries, raw-input jsonl files, and version snapshot files are the source material.
+- Formal entry overwrites must snapshot the previous entry before writing the new Markdown.
 - AI output should stay behind the JSON validation and preview/confirmation boundary before it becomes a formal entry.
 - Editor saves are draft writes. `SaveBlockDraftAsync` and `SaveSourceDraftAsync` must not write directly to `entries/`.
 - JMF validation protects the formal entry: invalid source or block requests should become `attention` drafts with repair information, not partial formal writes.
@@ -76,6 +87,8 @@ Do not assume these are implemented yet unless the code or docs say so: SQLite i
 - Harness execution is also draft-only. `POST /journal/today/harness/runs` appends the current raw input and creates a run record; executing the run may write `reviewing` or `attention` draft, never `entries/`.
 - Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
 - Harness provenance is section-level. Do not claim item-level provenance, diff, or rollback unless those features are added.
+- Restoring a version is draft-only. It must create a `reviewing` draft and must not write `entries/` directly.
+- Current version restore is limited to today's date; avoid exposing non-today restore until date-aware editor/confirm behavior exists.
 - The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
 - Keep the UI quiet, tool-like, fast to scan, and focused on the daily writing workflow.
 
@@ -95,7 +108,9 @@ Useful focused checks:
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter TodayJournalEditorServiceTests
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JmfMarkdownParserTests|JmfMarkdownValidatorTests|JmfMarkdownComposerTests"
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalAiSettingsTests|JournalAiGenerationServiceTests|OpenAiCompatibleJournalAiProviderTests|TodayJournalEndpointTests"
+dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalVersionStoreTests|JournalIndexStoreTests|JournalIndexingServiceTests|EntryWritePipelineTests|JournalHistoryServiceTests|TodayJournalEndpointTests"
 npm test --prefix apps/desktop -- App.test.tsx
+npm test --prefix apps/desktop -- HistoryWorkbench.test.tsx
 ```
 
 Development run:
@@ -118,9 +133,12 @@ entries/yyyy/MM/yyyy-MM-dd.md
 .journal/drafts/yyyy/MM/yyyy-MM-dd.md
 .journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
 .journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json
+.journal/versions/yyyy/MM/yyyy-MM-dd/<versionId>.md
+.journal/versions/yyyy/MM/yyyy-MM-dd/<versionId>.meta.json
+.journal/index/journal.db
 ```
 
-Phase 5 added `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for persisted LLM settings. Phase 6 adds `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` for harness audit records. There is still no `.journal/versions/` or SQLite/index directory in delivered scope. Be careful with changes that alter these paths or formats; update docs and tests together.
+Phase 5 added `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for persisted LLM settings. Phase 6 adds `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` for harness audit records. Phase 4A adds `.journal/versions/` for overwrite snapshots and `.journal/index/journal.db` for the rebuildable SQLite/FTS cache. Be careful with changes that alter these paths or formats; update docs and tests together.
 
 ## Working Rules
 

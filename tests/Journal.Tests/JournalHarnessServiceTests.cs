@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Ai;
 using Journal.Infrastructure.Clock;
@@ -9,6 +10,7 @@ namespace Journal.Tests;
 
 public sealed class JournalHarnessServiceTests
 {
+    private static readonly JsonSerializerOptions HarnessAuditJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly DateOnly FixedDay = new(2026, 5, 12);
     private static readonly DateTimeOffset FixedNow = DateTimeOffset.Parse("2026-05-12T08:30:00+08:00");
 
@@ -250,12 +252,14 @@ public sealed class JournalHarnessServiceTests
         {
         }
 
+        var auditPath = paths.HarnessAuditRunPath(started.Run.Date, started.Run.Id);
+        var beforeCompletionWriteTime = File.GetLastWriteTimeUtc(auditPath);
         runtime.ReleasePlanner.SetResult(null);
-        var completed = await WaitForRunStatusAsync(
+        var completed = await WaitForCompletedRunAsync(
             paths,
             started.Run.Date,
             started.Run.Id,
-            status => status != "running",
+            beforeCompletionWriteTime,
             TimeSpan.FromSeconds(5));
 
         Assert.Equal(1, runtime.HarnessPlannerCallCount);
@@ -570,21 +574,30 @@ public sealed class JournalHarnessServiceTests
         return result;
     }
 
-    private static async Task<JournalHarnessAuditRun> WaitForRunStatusAsync(
+    private static async Task<JournalHarnessAuditRun> WaitForCompletedRunAsync(
         LocalJournalPaths paths,
         JournalDate date,
         string runId,
-        Func<string, bool> predicate,
+        DateTime previousWriteTimeUtc,
         TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow.Add(timeout);
         var store = new JournalHarnessAuditStore(paths);
+        var path = paths.HarnessAuditRunPath(date, runId);
         while (DateTimeOffset.UtcNow < deadline)
         {
-            var run = await store.ReadAsync(date, runId, CancellationToken.None);
-            if (run is not null && predicate(run.Status))
+            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) > previousWriteTimeUtc)
             {
-                return run;
+                var run = await ReadAuditRunForPollingAsync(paths, date, runId, CancellationToken.None);
+                if (run is not null && string.Equals(run.Status, "no-change", StringComparison.Ordinal))
+                {
+                    return run;
+                }
+
+                if (run is not null && !string.Equals(run.Status, "running", StringComparison.Ordinal))
+                {
+                    return run;
+                }
             }
 
             await Task.Delay(20);
@@ -592,6 +605,41 @@ public sealed class JournalHarnessServiceTests
 
         var latest = await store.ReadAsync(date, runId, CancellationToken.None);
         throw new TimeoutException($"Run {runId} stayed {latest?.Status ?? "missing"}.");
+    }
+
+    private static async Task<JournalHarnessAuditRun?> ReadAuditRunForPollingAsync(
+        LocalJournalPaths paths,
+        JournalDate date,
+        string runId,
+        CancellationToken cancellationToken)
+    {
+        if (!LocalJournalPaths.IsValidHarnessRunId(runId))
+        {
+            return null;
+        }
+
+        var path = paths.HarnessAuditRunPath(date, runId);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return await JsonSerializer.DeserializeAsync<JournalHarnessAuditRun>(
+                stream,
+                HarnessAuditJsonOptions,
+                cancellationToken);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static string ExistingDraftMarkdown() =>
@@ -750,10 +798,7 @@ public sealed class JournalHarnessServiceTests
 
         public void Dispose()
         {
-            if (Directory.Exists(Root))
-            {
-                Directory.Delete(Root, recursive: true);
-            }
+            TestWorkspaceCleanup.DeleteDirectory(Root);
         }
     }
 }
