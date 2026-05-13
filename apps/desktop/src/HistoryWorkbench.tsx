@@ -22,6 +22,7 @@ const statusOptions = [
   { value: "", label: "全部" },
   { value: "processed", label: "已保存" },
   { value: "updated", label: "已更新" },
+  { value: "reviewing", label: "待确认" },
   { value: "attention", label: "需处理" },
   { value: "missing", label: "缺失" }
 ];
@@ -46,6 +47,8 @@ function getStatusLabel(status: string) {
       return "已保存";
     case "updated":
       return "已更新";
+    case "reviewing":
+      return "待确认";
     case "attention":
       return "需处理";
     case "missing":

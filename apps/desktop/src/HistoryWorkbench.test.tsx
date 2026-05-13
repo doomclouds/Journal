@@ -114,4 +114,31 @@ describe("HistoryWorkbench", () => {
 
     expect(onRestoreVersion).toHaveBeenCalledWith("version-2026-05-13T07-11-14+08-00");
   });
+
+  it("requests reviewing history when the pending confirmation filter is selected", () => {
+    const onStatusChange = vi.fn();
+
+    render(
+      <HistoryWorkbench
+        isBusy={false}
+        query=""
+        status=""
+        entries={[]}
+        detail={null}
+        selectedDate=""
+        versions={[]}
+        error=""
+        onBack={vi.fn()}
+        onQueryChange={vi.fn()}
+        onStatusChange={onStatusChange}
+        onSelectDate={vi.fn()}
+        onRefresh={vi.fn()}
+        onRestoreVersion={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "待确认" }));
+
+    expect(onStatusChange).toHaveBeenCalledWith("reviewing");
+  });
 });

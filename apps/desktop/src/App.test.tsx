@@ -853,6 +853,9 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockResolvedValueOnce(mockJsonResponse({ items: [historySummary] }))
       .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse({ items: [{ ...historySummary, status: "reviewing" }] }))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail()))
       .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -867,6 +870,12 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08/versions", undefined);
     expect(screen.getByText("- 推进 Phase 4A 历史搜索")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "待确认" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history?status=reviewing&limit=50", undefined)
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "返回今日" }));
 
