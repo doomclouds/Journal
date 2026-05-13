@@ -561,6 +561,8 @@ export default function App() {
     const historyRequestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = historyRequestId;
     setHistoryError("");
+    setHistoryDetail(null);
+    setHistoryVersions([]);
 
     try {
       const result = await getJournalHistory({ query, status, limit: 50 });
@@ -574,8 +576,6 @@ export default function App() {
         : result.items[0]?.date.isoDate ?? "";
       setHistoryEntries(result.items);
       setHistorySelectedDate(selectedDate);
-      setHistoryDetail(null);
-      setHistoryVersions([]);
 
       if (!selectedDate) {
         return;
