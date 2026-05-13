@@ -303,44 +303,54 @@ public sealed class JournalIndexStore
     {
         Directory.CreateDirectory(_paths.IndexBackupDirectory());
         var databasePath = _paths.IndexPath();
-        if (File.Exists(databasePath))
+        if (File.Exists(databasePath) || File.Exists(databasePath + "-wal") || File.Exists(databasePath + "-shm"))
         {
-            var backupPath = Path.Combine(
-                _paths.IndexBackupDirectory(),
-                $"journal-{now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture)}-{SanitizeReason(reason)}.db");
-            if (File.Exists(backupPath))
-            {
-                backupPath = Path.Combine(
-                    _paths.IndexBackupDirectory(),
-                    $"journal-{now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture)}-{SanitizeReason(reason)}-{Guid.NewGuid():N}.db");
-            }
-
-            File.Move(databasePath, backupPath);
+            var backupPath = CreateUniqueBackupPath(now, reason);
+            MoveIfExists(databasePath, backupPath);
+            MoveIfExists(databasePath + "-wal", backupPath + "-wal");
+            MoveIfExists(databasePath + "-shm", backupPath + "-shm");
         }
 
-        DeleteIfExists(databasePath + "-wal");
-        DeleteIfExists(databasePath + "-shm");
         await EnsureReadyCoreAsync(now, allowBackup: false, cancellationToken);
     }
 
     private async Task EnsureReadyCoreAsync(DateTimeOffset now, bool allowBackup, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_paths.IndexDirectory());
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await ConfigureConnectionAsync(connection, cancellationToken);
-        await CreateMetaTableAsync(connection, cancellationToken);
-        var schemaVersion = await ReadMetaAsync(connection, "schema_version", cancellationToken);
-        if (schemaVersion is not null
-            && schemaVersion != SchemaVersion.ToString(CultureInfo.InvariantCulture)
-            && allowBackup)
+        try
         {
-            await connection.CloseAsync();
-            await BackupAndResetAsync(now, "schema", cancellationToken);
-            return;
-        }
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await ConfigureConnectionAsync(connection, cancellationToken);
+            await CreateMetaTableAsync(connection, cancellationToken);
+            var schemaVersion = await ReadMetaAsync(connection, "schema_version", cancellationToken);
+            if (schemaVersion is not null
+                && schemaVersion != SchemaVersion.ToString(CultureInfo.InvariantCulture)
+                && allowBackup)
+            {
+                await connection.CloseAsync();
+                await BackupAndResetAsync(now, "schema", cancellationToken);
+                return;
+            }
 
-        await CreateSchemaAsync(connection, cancellationToken);
-        await SetMetaAsync(connection, "schema_version", SchemaVersion.ToString(CultureInfo.InvariantCulture), cancellationToken);
+            await CreateSchemaAsync(connection, cancellationToken);
+            if (!await ValidateSchemaAsync(connection, cancellationToken))
+            {
+                if (!allowBackup)
+                {
+                    throw new InvalidOperationException("Journal index schema validation failed after reset.");
+                }
+
+                await connection.CloseAsync();
+                await BackupAndResetAsync(now, "schema", cancellationToken);
+                return;
+            }
+
+            await SetMetaAsync(connection, "schema_version", SchemaVersion.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        }
+        catch (SqliteException) when (allowBackup)
+        {
+            await BackupAndResetAsync(now, "corrupt", cancellationToken);
+        }
     }
 
     private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
@@ -445,6 +455,85 @@ public sealed class JournalIndexStore
             """, null, cancellationToken);
     }
 
+    private static async Task<bool> ValidateSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        if (!await IntegrityCheckPassesAsync(connection, cancellationToken))
+        {
+            return false;
+        }
+
+        return await HasColumnsAsync(connection, "journal_meta", ["key", "value"], cancellationToken)
+            && await HasColumnsAsync(
+                connection,
+                "entries",
+                [
+                    "date",
+                    "month_day",
+                    "entry_path",
+                    "status",
+                    "mood",
+                    "tags_json",
+                    "topics_json",
+                    "content_hash",
+                    "last_write_time_utc",
+                    "file_size",
+                    "indexed_at_utc",
+                    "attention_reason"
+                ],
+                cancellationToken)
+            && await HasColumnsAsync(
+                connection,
+                "entry_sections",
+                ["date", "section_id", "title", "display_order", "content"],
+                cancellationToken)
+            && await HasColumnsAsync(
+                connection,
+                "entry_versions",
+                ["id", "date", "version_path", "created_at_utc", "reason", "content_hash", "source_entry_path"],
+                cancellationToken)
+            && await HasColumnsAsync(
+                connection,
+                "raw_inputs",
+                ["id", "date", "created_at_utc", "source", "text"],
+                cancellationToken)
+            && await HasColumnsAsync(
+                connection,
+                "section_fts",
+                ["date", "section_id", "title", "content", "metadata"],
+                cancellationToken)
+            && await HasColumnsAsync(
+                connection,
+                "raw_input_fts",
+                ["raw_input_id", "date", "source", "text"],
+                cancellationToken);
+    }
+
+    private static async Task<bool> IntegrityCheckPassesAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA integrity_check;";
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return string.Equals(result as string, "ok", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<bool> HasColumnsAsync(
+        SqliteConnection connection,
+        string tableName,
+        IReadOnlyCollection<string> requiredColumns,
+        CancellationToken cancellationToken)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({QuoteIdentifier(tableName)});";
+        var actualColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            actualColumns.Add(reader.GetString(1));
+        }
+
+        return requiredColumns.All(actualColumns.Contains);
+    }
+
     private static async Task<IReadOnlyList<JournalHistoryEntrySummary>> SearchEntriesAsync(
         SqliteConnection connection,
         JournalHistoryQuery query,
@@ -538,7 +627,7 @@ public sealed class JournalIndexStore
             ORDER BY h.date DESC, h.source_type, h.section_id, h.raw_input_id;
             """;
         AddSearchParameters(command, query, limit);
-        command.Parameters.AddWithValue("$query", normalizedQuery);
+        command.Parameters.AddWithValue("$query", BuildFtsLiteralQuery(normalizedQuery));
 
         var grouped = new Dictionary<string, MutableSummary>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -549,7 +638,7 @@ public sealed class JournalIndexStore
             {
                 if (grouped.Count >= limit)
                 {
-                    continue;
+                    break;
                 }
 
                 summary = new MutableSummary(
@@ -653,7 +742,7 @@ public sealed class JournalIndexStore
             {
                 if (grouped.Count >= limit)
                 {
-                    continue;
+                    break;
                 }
 
                 summary = new MutableSummary(
@@ -797,6 +886,33 @@ public sealed class JournalIndexStore
             .Replace("%", @"\%", StringComparison.Ordinal)
             .Replace("_", @"\_", StringComparison.Ordinal);
 
+    private static string BuildFtsLiteralQuery(string value) =>
+        $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    private string CreateUniqueBackupPath(DateTimeOffset now, string reason)
+    {
+        var backupPath = Path.Combine(
+            _paths.IndexBackupDirectory(),
+            $"journal-{now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture)}-{SanitizeReason(reason)}.db");
+        if (!BackupGroupExists(backupPath))
+        {
+            return backupPath;
+        }
+
+        backupPath = Path.Combine(
+            _paths.IndexBackupDirectory(),
+            $"journal-{now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture)}-{SanitizeReason(reason)}-{Guid.NewGuid():N}.db");
+        return backupPath;
+    }
+
+    private static bool BackupGroupExists(string backupPath) =>
+        File.Exists(backupPath)
+        || File.Exists(backupPath + "-wal")
+        || File.Exists(backupPath + "-shm");
+
+    private static string QuoteIdentifier(string value) =>
+        $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
     private static string SanitizeReason(string reason)
     {
         var normalized = string.IsNullOrWhiteSpace(reason) ? "reset" : reason.Trim();
@@ -809,11 +925,11 @@ public sealed class JournalIndexStore
     private static string? GetNullableString(SqliteDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
 
-    private static void DeleteIfExists(string path)
+    private static void MoveIfExists(string sourcePath, string destinationPath)
     {
-        if (File.Exists(path))
+        if (File.Exists(sourcePath))
         {
-            File.Delete(path);
+            File.Move(sourcePath, destinationPath);
         }
     }
 
