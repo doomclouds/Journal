@@ -84,7 +84,7 @@ public sealed class JournalIndexingService
         foreach (var entry in index.Values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!File.Exists(entry.EntryPath))
+            if (!string.IsNullOrWhiteSpace(entry.EntryPath) && !File.Exists(entry.EntryPath))
             {
                 await _indexStore.MarkEntryStatusAsync(
                     entry.Date,
@@ -102,6 +102,14 @@ public sealed class JournalIndexingService
         CancellationToken cancellationToken)
     {
         await _indexStore.EnsureReadyAsync(cancellationToken);
+
+        if (rawInputs.Count > 0 && await _indexStore.ReadSummaryAsync(date, cancellationToken) is null)
+        {
+            await _indexStore.UpsertEntryAsync(
+                CreateMinimalRawOnlyEntry(date, rawInputs),
+                [],
+                cancellationToken);
+        }
 
         foreach (var rawInput in rawInputs)
         {
@@ -127,6 +135,58 @@ public sealed class JournalIndexingService
     {
         await _indexStore.BackupAndResetAsync(now, "rebuild", cancellationToken);
         await ScanAsync(now, cancellationToken);
+        await SyncRawInputFilesAsync(cancellationToken);
+        await SyncVersionFilesAsync(cancellationToken);
+    }
+
+    private async Task SyncRawInputFilesAsync(CancellationToken cancellationToken)
+    {
+        var rawInputRoot = RawInputRootDirectory();
+        if (!Directory.Exists(rawInputRoot))
+        {
+            return;
+        }
+
+        var rawInputStore = new RawInputStore(_paths);
+        foreach (var rawInputPath in Directory.EnumerateFiles(rawInputRoot, "*.jsonl", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fileName = Path.GetFileNameWithoutExtension(rawInputPath);
+            if (!JournalDate.TryParse(fileName, out var date))
+            {
+                continue;
+            }
+
+            var rawInputs = await rawInputStore.ReadAsync(date, cancellationToken);
+            await SyncRawInputsAsync(date, rawInputs, cancellationToken);
+        }
+    }
+
+    private async Task SyncVersionFilesAsync(CancellationToken cancellationToken)
+    {
+        var versionRoot = VersionRootDirectory();
+        if (!Directory.Exists(versionRoot))
+        {
+            return;
+        }
+
+        var versionStore = new JournalVersionStore(_paths);
+        foreach (var markdownPath in Directory.EnumerateFiles(versionRoot, "*.md", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var dateDirectory = Path.GetFileName(Path.GetDirectoryName(markdownPath));
+            if (!JournalDate.TryParse(dateDirectory, out var date))
+            {
+                continue;
+            }
+
+            var versionId = Path.GetFileNameWithoutExtension(markdownPath);
+            var result = await versionStore.ReadAsync(date, versionId, cancellationToken);
+            if (result is not null)
+            {
+                await SyncVersionAsync(result.Value.Version, cancellationToken);
+            }
+        }
     }
 
     private static JournalIndexedEntry CreateIndexedEntry(
@@ -176,6 +236,27 @@ public sealed class JournalIndexingService
             InvalidJmfReason);
     }
 
+    private static JournalIndexedEntry CreateMinimalRawOnlyEntry(JournalDate date, IReadOnlyList<RawInput> rawInputs)
+    {
+        var indexedAtUtc = rawInputs
+            .Select(input => input.CreatedAt.ToUniversalTime())
+            .DefaultIfEmpty(DateTimeOffset.UtcNow)
+            .Max();
+
+        return new JournalIndexedEntry(
+            date,
+            "",
+            "raw-only",
+            null,
+            "[]",
+            "[]",
+            ComputeSha256(""),
+            indexedAtUtc,
+            0,
+            indexedAtUtc,
+            null);
+    }
+
     private static (DateTimeOffset LastWriteTimeUtc, long FileSize) ReadFileFacts(
         string entryPath,
         string markdown,
@@ -194,5 +275,19 @@ public sealed class JournalIndexingService
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(markdown));
         return "sha256:" + Convert.ToHexString(bytes).ToLower(CultureInfo.InvariantCulture);
+    }
+
+    private string RawInputRootDirectory()
+    {
+        var sample = JournalDate.From(new DateOnly(2000, 1, 1));
+        var sampleMonthDirectory = Path.GetDirectoryName(_paths.RawInputPath(sample))
+            ?? throw new InvalidOperationException("Raw input path has no parent directory.");
+        return Path.GetFullPath(Path.Combine(sampleMonthDirectory, "..", ".."));
+    }
+
+    private string VersionRootDirectory()
+    {
+        var sample = JournalDate.From(new DateOnly(2000, 1, 1));
+        return Path.GetFullPath(Path.Combine(_paths.VersionDirectory(sample), "..", "..", ".."));
     }
 }

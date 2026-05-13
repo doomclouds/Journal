@@ -91,11 +91,8 @@ public sealed class JournalIndexingServiceTests
     public async Task SyncRawInputsAsync_IndexesRawInputJsonlIntoFts()
     {
         using var workspace = TempWorkspace.Create();
-        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var (_, indexStore, service) = CreateService(workspace.Root);
         var date = JournalDate.From(new DateOnly(2026, 5, 13));
-        var now = DateTimeOffset.Parse("2026-05-13T01:00:00+00:00");
-        await WriteEntryAsync(paths, date, CreateMarkdown(date, "今天继续做接口整理"));
-        await service.ScanAsync(now, CancellationToken.None);
 
         await service.SyncRawInputsAsync(
             date,
@@ -106,6 +103,35 @@ public sealed class JournalIndexingServiceTests
         var item = Assert.Single(result.Items);
         var hit = Assert.Single(item.Hits, hit => hit.SourceType == "raw-input");
         Assert.Equal("raw-1", hit.RawInputId);
+    }
+
+    [Fact]
+    public async Task RebuildAsync_RestoresRawInputsAndVersionsFromFiles()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var markdown = CreateMarkdown(date, "今天继续做接口整理");
+        await WriteEntryAsync(paths, date, markdown);
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "重建时恢复 DeepSeek 原始材料"),
+            CancellationToken.None);
+        await new JournalVersionStore(paths).CreateSnapshotAsync(
+            date,
+            markdown,
+            paths.EntryPath(date),
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"),
+            CancellationToken.None);
+
+        await service.RebuildAsync(DateTimeOffset.Parse("2026-05-13T01:00:00+00:00"), CancellationToken.None);
+
+        var result = await indexStore.SearchAsync(new JournalHistoryQuery("DeepSeek", null, null, null, null, 20), CancellationToken.None);
+        var item = Assert.Single(result.Items);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal(1, summary.VersionCount);
     }
 
     [Fact]
