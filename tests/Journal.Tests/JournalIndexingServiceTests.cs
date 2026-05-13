@@ -272,6 +272,42 @@ public sealed class JournalIndexingServiceTests
     }
 
     [Fact]
+    public async Task ScanAsync_RepopulatesEntriesRawInputsAndVersionsAfterCorruptDatabaseReset()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var markdown = CreateMarkdown(date, "corrupt db reset 后恢复正式正文");
+        await WriteEntryAsync(paths, date, markdown);
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "corrupt db reset 后恢复 DeepSeek raw"),
+            CancellationToken.None);
+        await new JournalVersionStore(paths).CreateSnapshotAsync(
+            date,
+            markdown,
+            paths.EntryPath(date),
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"),
+            CancellationToken.None);
+        Directory.CreateDirectory(paths.IndexDirectory());
+        await File.WriteAllTextAsync(paths.IndexPath(), "this is not a sqlite database", CancellationToken.None);
+
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T01:00:00+00:00"), CancellationToken.None);
+
+        var markdownResult = await indexStore.SearchAsync(new JournalHistoryQuery("正式正文", null, null, null, null, 20), CancellationToken.None);
+        var markdownItem = Assert.Single(markdownResult.Items);
+        Assert.Equal(date, markdownItem.Date);
+        Assert.Contains(markdownItem.Hits, hit => hit.SourceType == "section" && hit.SectionId == "today-focus");
+        var rawResult = await indexStore.SearchAsync(new JournalHistoryQuery("DeepSeek", null, null, null, null, 20), CancellationToken.None);
+        var rawItem = Assert.Single(rawResult.Items);
+        Assert.Contains(rawItem.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal(1, summary.RawInputCount);
+        Assert.Equal(1, summary.VersionCount);
+    }
+
+    [Fact]
     public async Task SyncVersionAsync_IndexesVersionSummary()
     {
         using var workspace = TempWorkspace.Create();
@@ -357,10 +393,7 @@ public sealed class JournalIndexingServiceTests
 
         public void Dispose()
         {
-            if (Directory.Exists(Root))
-            {
-                Directory.Delete(Root, recursive: true);
-            }
+            TestWorkspaceCleanup.DeleteDirectory(Root);
         }
     }
 }

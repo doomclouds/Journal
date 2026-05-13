@@ -254,8 +254,8 @@ public sealed class JournalIndexStoreTests
         var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
         var store = new JournalIndexStore(paths);
         await store.EnsureReadyAsync(CancellationToken.None);
-        await File.WriteAllTextAsync(paths.IndexPath() + "-wal", "diagnostic wal", CancellationToken.None);
-        await File.WriteAllTextAsync(paths.IndexPath() + "-shm", "diagnostic shm", CancellationToken.None);
+        await WriteSidecarTextWithRetryAsync(paths.IndexPath() + "-wal", "diagnostic wal");
+        await WriteSidecarTextWithRetryAsync(paths.IndexPath() + "-shm", "diagnostic shm");
 
         await store.BackupAndResetAsync(
             DateTimeOffset.Parse("2026-05-13T10:00:00+08:00"),
@@ -441,6 +441,31 @@ public sealed class JournalIndexStoreTests
     private static JournalIndexStore CreateStore(string root) =>
         new(new LocalJournalPaths(new JournalStorageOptions(root)));
 
+    private static async Task WriteSidecarTextWithRetryAsync(string path, string contents)
+    {
+        Exception? firstFailure = null;
+        for (var attempt = 1; attempt <= 8; attempt++)
+        {
+            try
+            {
+                await File.WriteAllTextAsync(path, contents, CancellationToken.None);
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                firstFailure ??= exception;
+                if (attempt == 8)
+                {
+                    throw firstFailure ?? exception;
+                }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Task.Delay(75);
+            }
+        }
+    }
+
     private static JournalIndexedEntry CreateEntry(
         JournalDate date,
         string status = "processed",
@@ -468,10 +493,7 @@ public sealed class JournalIndexStoreTests
 
         public void Dispose()
         {
-            if (Directory.Exists(Root))
-            {
-                Directory.Delete(Root, recursive: true);
-            }
+            TestWorkspaceCleanup.DeleteDirectory(Root);
         }
     }
 }
