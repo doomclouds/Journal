@@ -12,6 +12,7 @@ public sealed class TodayJournalService
     private readonly RawInputStore _rawInputStore;
     private readonly DraftStore _draftStore;
     private readonly EntryStore _entryStore;
+    private readonly EntryWritePipeline _entryWritePipeline;
     private readonly JournalAiGenerationService _aiGenerationService;
     private readonly IJournalClock _clock;
 
@@ -19,12 +20,14 @@ public sealed class TodayJournalService
         RawInputStore rawInputStore,
         DraftStore draftStore,
         EntryStore entryStore,
+        EntryWritePipeline entryWritePipeline,
         JournalAiGenerationService aiGenerationService,
         IJournalClock clock)
     {
         _rawInputStore = rawInputStore;
         _draftStore = draftStore;
         _entryStore = entryStore;
+        _entryWritePipeline = entryWritePipeline;
         _aiGenerationService = aiGenerationService;
         _clock = clock;
     }
@@ -147,12 +150,16 @@ public sealed class TodayJournalService
         }
 
         var now = _clock.Now;
-        var status = _entryStore.Exists(date) ? JournalStatus.Updated : JournalStatus.Processed;
+        var result = await _entryWritePipeline.WriteFormalEntryAsync(
+            date,
+            draft.Markdown,
+            now,
+            "confirm-draft",
+            cancellationToken);
 
-        await _entryStore.WriteAsync(date, draft.Markdown, now, cancellationToken);
-        await _draftStore.WriteAsync(draft with { Status = status, UpdatedAt = now }, cancellationToken);
+        await _draftStore.WriteAsync(draft with { Status = result.Status, UpdatedAt = now }, cancellationToken);
 
-        return await BuildStateAsync(date, status, cancellationToken);
+        return await BuildStateAsync(date, result.Status, cancellationToken);
     }
 
     public async Task<TodayEditorState> SaveBlockDraftAsync(

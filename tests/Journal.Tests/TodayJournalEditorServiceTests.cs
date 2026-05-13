@@ -234,8 +234,19 @@ public sealed class TodayJournalEditorServiceTests
             new RawInputStore(paths),
             new DraftStore(paths),
             new EntryStore(paths),
+            CreateEntryWritePipeline(paths),
             CreateGenerationService(),
             new FixedJournalClock(FixedDay, FixedNow));
+
+    private static EntryWritePipeline CreateEntryWritePipeline(LocalJournalPaths paths)
+    {
+        var indexStore = new JournalIndexStore(paths);
+        return new EntryWritePipeline(
+            new EntryStore(paths),
+            new JournalVersionStore(paths),
+            new JournalIndexingService(paths, indexStore),
+            paths);
+    }
 
     private static LocalJournalPaths CreatePaths(string root) =>
         new(new JournalStorageOptions(root));

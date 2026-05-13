@@ -98,6 +98,9 @@ public sealed class TodayJournalEndpointTests
 
         Assert.Equal("processed", document.RootElement.GetProperty("status").GetString());
         Assert.True(File.Exists(paths.EntryPath(date)));
+        var summary = await new JournalIndexStore(paths).ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal("processed", summary.Status);
     }
 
     [Fact]
@@ -240,6 +243,18 @@ public sealed class TodayJournalEndpointTests
         var reader = factory.Services.GetRequiredService<IJournalAiSettingsReader>();
 
         Assert.Same(concrete, reader);
+    }
+
+    [Fact]
+    public void Services_ResolveEntryWritePipelineDependencies()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+
+        Assert.IsType<JournalVersionStore>(factory.Services.GetRequiredService<IJournalVersionStore>());
+        Assert.NotNull(factory.Services.GetRequiredService<JournalIndexStore>());
+        Assert.NotNull(factory.Services.GetRequiredService<JournalIndexingService>());
+        Assert.NotNull(factory.Services.GetRequiredService<EntryWritePipeline>());
     }
 
     [Fact]
