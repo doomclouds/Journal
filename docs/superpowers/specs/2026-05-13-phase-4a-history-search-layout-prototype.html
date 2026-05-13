@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 4A 历史搜索与版本恢复工作台原型</title>
+  <style>
+    :root {
+      --paper: #fffdf7;
+      --bg: #eef1eb;
+      --rail: #f2efe7;
+      --assistant: #efeadd;
+      --ink: #25211d;
+      --ink-soft: #4d463e;
+      --muted: #746d63;
+      --line: rgba(52, 45, 36, 0.13);
+      --sage: #2f6f5f;
+      --gold: #b57f30;
+      --danger: #9d5146;
+      --soft-green: rgba(230, 243, 235, 0.72);
+      --soft-gold: rgba(255, 250, 240, 0.82);
+      --soft-red: rgba(246, 230, 226, 0.82);
+      --shadow-paper: 0 18px 42px rgba(52, 43, 31, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1180px;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select { font: inherit; }
+
+    .desktop-shell {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .top-context {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.88);
+      padding: 12px 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .brand strong { font-size: 18px; }
+    .brand span,
+    .today-line {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .today-line {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .audit-return-action {
+      min-height: 30px;
+      border: 1px solid rgba(47,111,95,.18);
+      border-radius: 8px;
+      background: rgba(255,253,247,.9);
+      color: var(--sage);
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .workspace,
+    .command-workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 264px minmax(640px, 1fr) minmax(320px, .46fr);
+      grid-template-areas: "rail main inspector";
+      background: rgba(248, 246, 239, 0.84);
+    }
+
+    .rail,
+    .context-rail.history-rail {
+      grid-area: rail;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(247,244,236,.86), rgba(238,232,219,.82)), var(--rail);
+    }
+
+    .main-stage,
+    .journal-stage.history-stage {
+      grid-area: main;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: rgba(248,246,239,.74);
+    }
+
+    .inspector,
+    .assistant-panel.today-assistant.history-inspector {
+      grid-area: inspector;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      border-left: 1px solid rgba(52,45,36,.13);
+      background: linear-gradient(180deg, rgba(255,253,247,.84), rgba(239,234,222,.9)), var(--assistant);
+    }
+
+    .date-card {
+      border-bottom: 1px solid var(--line);
+      padding: 22px 20px 18px;
+    }
+
+    .date-card p {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .date-card h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.1;
+    }
+
+    .date-card h1 span {
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    .search-box {
+      width: 100%;
+      min-height: 34px;
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,253,247,.92);
+      color: var(--ink);
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+    .rail-section {
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    .section-head,
+    .panel-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2,
+    .panel-head h2 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .section-head span,
+    .panel-head span {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .filter-pill {
+      min-height: 30px;
+      border: 1px solid rgba(52,45,36,.12);
+      border-radius: 8px;
+      background: rgba(255,253,247,.7);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .filter-pill.active {
+      border-color: rgba(47,111,95,.28);
+      background: var(--soft-green);
+      color: var(--sage);
+    }
+
+    .entry-list,
+    .version-list,
+    .status-list,
+    .summary-grid { display: grid; gap: 9px; }
+
+    .entry-card,
+    .version-card,
+    .status-card,
+    .summary-card,
+    .inspector-card {
+      border: 1px solid rgba(52,45,36,.12);
+      border-radius: 10px;
+      background: rgba(255,253,247,.68);
+      padding: 11px;
+    }
+
+    .entry-card.active {
+      border-color: rgba(47,111,95,.3);
+      background: var(--soft-green);
+    }
+
+    .entry-card.attention,
+    .status-card.attention {
+      border-color: rgba(181,127,48,.24);
+      background: var(--soft-gold);
+    }
+
+    .entry-card.missing,
+    .status-card.danger {
+      border-color: rgba(157,81,70,.22);
+      background: var(--soft-red);
+    }
+
+    .meta {
+      display: flex;
+      gap: 7px;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 7px;
+    }
+
+    .entry-card p,
+    .version-card p,
+    .summary-card p,
+    .inspector-card p,
+    .status-card p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .entry-card strong,
+    .version-card strong,
+    .status-card strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .mini-pill {
+      border-radius: 999px;
+      background: rgba(47,111,95,.1);
+      color: var(--sage);
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .mini-pill.warn { background: rgba(181,127,48,.14); color: #805b1d; }
+    .mini-pill.danger { background: rgba(157,81,70,.1); color: var(--danger); }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 26px 12px;
+      border-bottom: 1px solid rgba(52,45,36,.08);
+    }
+
+    .stage-title p {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-title h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .history-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 22px 34px 36px;
+    }
+
+    .history-board {
+      width: min(920px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .summary-card strong {
+      display: block;
+      color: var(--sage);
+      font-size: 22px;
+      line-height: 1.15;
+    }
+
+    .entry-paper {
+      border: 1px solid rgba(52,45,36,.12);
+      border-radius: 12px;
+      background: var(--paper);
+      box-shadow: var(--shadow-paper);
+      padding: 34px 42px;
+    }
+
+    .paper-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: start;
+      border-bottom: 1px solid rgba(52,45,36,.09);
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+    }
+
+    .paper-head p {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .paper-head h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.16;
+    }
+
+    .paper-section {
+      margin-bottom: 26px;
+    }
+
+    .paper-section h2 {
+      margin: 0 0 13px;
+      color: var(--sage);
+      font-size: 19px;
+    }
+
+    .paper-section ul {
+      margin: 0;
+      padding-left: 22px;
+      color: #3f3a33;
+      line-height: 2;
+      font-size: 15px;
+    }
+
+    mark {
+      background: rgba(181,127,48,.22);
+      color: inherit;
+      padding: 0 2px;
+      border-radius: 3px;
+    }
+
+    .warning-strip {
+      border: 1px solid rgba(181,127,48,.22);
+      border-radius: 10px;
+      background: var(--soft-gold);
+      padding: 12px 13px;
+      color: #72521f;
+      font-size: 13px;
+      line-height: 1.65;
+      margin-bottom: 16px;
+    }
+
+    .inspector-head {
+      border-bottom: 1px solid var(--line);
+      padding: 22px 22px 18px;
+    }
+
+    .inspector-head p {
+      margin: 0 0 8px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .inspector-head h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .inspector-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 8px 12px;
+      margin: 0;
+    }
+
+    .field-grid dt {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .field-grid dd {
+      margin: 0;
+      min-width: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .version-card.active {
+      border-color: rgba(47,111,95,.3);
+      background: var(--soft-green);
+    }
+
+    .restore-box {
+      border: 1px solid rgba(47,111,95,.2);
+      border-radius: 12px;
+      background: rgba(230,243,235,.72);
+      padding: 14px;
+    }
+
+    .restore-box h2 {
+      margin: 0 0 8px;
+      color: var(--sage);
+      font-size: 15px;
+    }
+
+    .restore-box p {
+      margin: 0 0 12px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .restore-button {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid rgba(47,111,95,.28);
+      border-radius: 8px;
+      background: var(--sage);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .restore-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 1280px) {
+      .workspace { grid-template-columns: 248px minmax(560px, 1fr) 300px; }
+      .history-scroll { padding-left: 24px; padding-right: 24px; }
+      .entry-paper { padding: 28px 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="desktop-shell">
+    <header class="top-context command-top-context">
+      <div class="brand">
+        <strong>Journal</strong>
+        <span>Local History</span>
+      </div>
+      <div class="today-line">
+        <span class="dot" aria-hidden="true"></span>
+        <span>2026年5月13日</span>
+        <span>历史搜索与版本恢复工作台</span>
+      </div>
+    </header>
+    <section class="feedback-row" aria-label="提示信息"></section>
+
+    <main class="workspace command-workspace">
+      <aside class="context-rail history-rail" aria-label="历史搜索">
+        <section class="date-card">
+          <p>History</p>
+          <h1>
+            历史日记
+            <span>从本地 Markdown 与 SQLite 索引中查找日期、状态、正文和版本。</span>
+          </h1>
+          <input class="search-box" value="DeepSeek 第一性原理" aria-label="全文搜索">
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>状态筛选</h2>
+            <span>7 entries</span>
+          </div>
+          <div class="filter-grid">
+            <button class="filter-pill active">全部</button>
+            <button class="filter-pill">已确认</button>
+            <button class="filter-pill">需处理</button>
+            <button class="filter-pill">缺失</button>
+          </div>
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>搜索结果</h2>
+            <span>按日期倒序</span>
+          </div>
+          <div class="entry-list">
+            <article class="entry-card active">
+              <div class="meta">
+                <span>2026-05-13</span>
+                <span class="mini-pill">processed</span>
+              </div>
+              <strong>DeepSeek 接入与 Phase 4A 规划</strong>
+              <p>3 条 raw input · 2 个版本 · 命中 today-focus</p>
+            </article>
+            <article class="entry-card">
+              <div class="meta">
+                <span>2026-05-12</span>
+                <span class="mini-pill">updated</span>
+              </div>
+              <strong>Harness Core 交付</strong>
+              <p>8 条 raw input · 4 个版本 · 审计记录 5 条</p>
+            </article>
+            <article class="entry-card attention">
+              <div class="meta">
+                <span>2026-05-10</span>
+                <span class="mini-pill warn">invalid_jmf</span>
+              </div>
+              <strong>LLM 设置体验</strong>
+              <p>外部修改后 JMF 校验失败，等待用户处理</p>
+            </article>
+            <article class="entry-card missing">
+              <div class="meta">
+                <span>2026-05-08</span>
+                <span class="mini-pill danger">missing</span>
+              </div>
+              <strong>JMF 生成确认 MVP</strong>
+              <p>索引存在，但正式 Markdown 文件缺失</p>
+            </article>
+          </div>
+        </section>
+      </aside>
+
+      <section class="journal-stage history-stage" aria-label="历史日记预览">
+        <div class="stage-toolbar">
+          <div class="stage-title">
+            <p>Entry Preview</p>
+            <h2>2026-05-13 · 正式 Markdown</h2>
+          </div>
+          <button type="button" class="secondary audit-return-action">返回今日</button>
+        </div>
+
+        <div class="history-scroll">
+          <div class="history-board">
+            <section class="summary-grid" aria-label="索引摘要">
+              <article class="summary-card">
+                <strong>3</strong>
+                <p>原始输入</p>
+              </article>
+              <article class="summary-card">
+                <strong>2</strong>
+                <p>历史版本</p>
+              </article>
+              <article class="summary-card">
+                <strong>5</strong>
+                <p>JMF sections</p>
+              </article>
+              <article class="summary-card">
+                <strong>OK</strong>
+                <p>hash match</p>
+              </article>
+            </section>
+
+            <article class="entry-paper">
+              <div class="paper-head">
+                <div>
+                  <p>2026年5月13日 · 星期三</p>
+                  <h1>把今天收好</h1>
+                </div>
+                <span class="mini-pill">processed</span>
+              </div>
+
+              <section class="paper-section">
+                <h2>昨日回顾</h2>
+                <ul>
+                  <li>完成了 Harness Core 审计工作台和主输入接线。</li>
+                  <li>修复了 DeepSeek tool call 中 reason content 带来的兼容问题。</li>
+                </ul>
+              </section>
+
+              <section class="paper-section">
+                <h2>今天想推进</h2>
+                <ul>
+                  <li>检查 <mark>DeepSeek</mark> reason content 导致的小 bug 是否已修复。</li>
+                  <li>也许翻翻《<mark>第一性原理</mark>》这本书，看缘分吧～</li>
+                  <li>启动 Phase 4A：版本快照、索引地基、历史搜索与恢复。</li>
+                </ul>
+              </section>
+
+              <section class="paper-section">
+                <h2>灵感</h2>
+                <ul>
+                  <li>长期日记系统必须先做到“写坏了能找回来”。</li>
+                  <li>SQLite 只是索引缓存，Markdown 才是可信源。</li>
+                </ul>
+              </section>
+            </article>
+
+            <div class="warning-strip">
+              当 entry 处于 `missing` 或 `invalid_jmf` 时，中间区域必须明确标记异常；合法外部修改会重新解析并更新索引。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="assistant-panel today-assistant history-inspector" aria-label="版本与恢复">
+        <section class="inspector-head">
+          <p>Versions</p>
+          <h1>版本快照与恢复</h1>
+        </section>
+
+        <div class="inspector-scroll">
+          <section class="inspector-card">
+            <div class="panel-head">
+              <h2>文件状态</h2>
+              <span class="mini-pill">hash match</span>
+            </div>
+            <dl class="field-grid">
+              <dt>Entry</dt>
+              <dd>entries/2026/05/2026-05-13.md</dd>
+              <dt>Hash</dt>
+              <dd>sha256:71cc...b240</dd>
+              <dt>Indexed</dt>
+              <dd>2026-05-13 07:11</dd>
+              <dt>Status</dt>
+              <dd>processed</dd>
+            </dl>
+          </section>
+
+          <section class="inspector-card">
+            <div class="panel-head">
+              <h2>历史版本</h2>
+              <span>2 snapshots</span>
+            </div>
+            <div class="version-list">
+              <article class="version-card active">
+                <div class="meta">
+                  <span>06:48</span>
+                  <span class="mini-pill">confirm-draft</span>
+                </div>
+                <strong>确认新 draft 前的正式版本</strong>
+                <p>覆盖正式 entry 前自动创建。可恢复为 reviewing draft。</p>
+              </article>
+              <article class="version-card">
+                <div class="meta">
+                  <span>05:52</span>
+                  <span class="mini-pill">restore-version-confirm</span>
+                </div>
+                <strong>从旧版本恢复后再次确认</strong>
+                <p>恢复链路也会重新快照，不直接覆盖。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="restore-box">
+            <h2>恢复所选版本为草稿</h2>
+            <p>点击后只写 `.journal/drafts/2026/05/2026-05-13.md`，状态为 `reviewing`。正式 entry 不会被直接覆盖。</p>
+            <button class="restore-button">恢复为 reviewing draft</button>
+            <div class="restore-note">恢复后的草稿仍需要用户回到今日工作台确认。确认时会先给当前正式 entry 再创建一份快照。</div>
+          </section>
+
+          <section class="inspector-card">
+            <div class="panel-head">
+              <h2>异常处理</h2>
+              <span>Phase 4A</span>
+            </div>
+            <div class="status-list">
+              <article class="status-card attention">
+                <strong>changed + valid</strong>
+                <p>文件存在且 hash 漂移，但 JMF 仍合法。系统重新解析并更新索引。</p>
+              </article>
+              <article class="status-card attention">
+                <strong>invalid_jmf</strong>
+                <p>文件存在但结构损坏。系统标记 attention，不把损坏结构写入索引。</p>
+              </article>
+              <article class="status-card danger">
+                <strong>missing</strong>
+                <p>索引存在但 Markdown 缺失。保留索引记录，提示用户处理。</p>
+              </article>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

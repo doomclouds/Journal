@@ -17,6 +17,8 @@
 - [LLM 设置体验设计](./docs/superpowers/specs/2026-05-10-llm-settings-ux-polish-design.md)
 - [LLM 设置体验原型](./docs/superpowers/specs/2026-05-10-llm-settings-ux-polish-prototype.html)
 - [LLM 设置体验实施归档](./docs/superpowers/archives/2026-05/2026-05-10-llm-settings-ux-polish-archives.md)
+- [阶段 4A 本地历史与搜索设计](./docs/superpowers/specs/2026-05-13-phase-4a-local-history-search-design.md)
+- [阶段 4A 历史搜索与版本恢复原型](./docs/superpowers/specs/2026-05-13-phase-4a-history-search-layout-prototype.html)
 - [阶段 6 Harness Core 设计](./docs/superpowers/specs/2026-05-12-journal-harness-core-design.md)
 - [阶段 6 审计工作台原型](./docs/superpowers/specs/2026-05-12-journal-harness-audit-workbench-prototype.html)
 - [阶段 6 实施计划](./docs/superpowers/plans/2026-05-12-journal-harness-core-implementation-plan.md)
