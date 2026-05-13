@@ -32,6 +32,7 @@ public sealed class JournalHarnessServiceTests
         Assert.False(runtime.HarnessPlannerCalled);
         Assert.StartsWith("run-2026-05-12-", result.Run.Id, StringComparison.Ordinal);
         Assert.Equal("queued", result.Run.Status);
+        Assert.Equal(JournalHarnessPrompt.AppendInputMode, result.Run.Mode);
         Assert.Equal("mock", result.Run.ProviderId);
         Assert.Equal(JournalHarnessPrompt.Version, result.Run.PromptVersion);
         Assert.Equal(result.Today.RawInputs[0].Id, result.Run.CurrentRawInputId);
@@ -48,6 +49,42 @@ public sealed class JournalHarnessServiceTests
     }
 
     [Fact]
+    public async Task StartTodayRunAsync_WithReorganizeExisting_DoesNotAppendRawInputAndCreatesQueuedRun()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Failure(
+                JournalAiSafeError.Create("test", "unexpected", "Planner should not be called.", "Planner should not be called."),
+                TimeSpan.Zero));
+        var service = CreateService(paths, runtime);
+        var date = JournalDate.From(FixedDay);
+        await SeedRawInputAsync(paths, date, "raw-existing", "已有原始输入");
+
+        var result = await service.StartTodayRunAsync(
+            JournalHarnessRunStartRequest.ReorganizeExisting(),
+            CancellationToken.None);
+
+        Assert.Equal(JournalStatus.Empty, result.Today.Status);
+        Assert.Single(result.Today.RawInputs);
+        Assert.False(runtime.HarnessPlannerCalled);
+        Assert.StartsWith("run-2026-05-12-", result.Run.Id, StringComparison.Ordinal);
+        Assert.Equal("queued", result.Run.Status);
+        Assert.Equal(JournalHarnessPrompt.ReorganizeExistingMode, result.Run.Mode);
+        Assert.Equal("mock", result.Run.ProviderId);
+        Assert.Equal(JournalHarnessPrompt.Version, result.Run.PromptVersion);
+        Assert.Null(result.Run.CurrentRawInputId);
+
+        var rawInputs = await new RawInputStore(paths).ReadAsync(date, CancellationToken.None);
+        var persisted = await new JournalHarnessAuditStore(paths).ReadAsync(date, result.Run.Id, CancellationToken.None);
+        Assert.Single(rawInputs);
+        Assert.Equal("已有原始输入", rawInputs[0].Text);
+        Assert.NotNull(persisted);
+        Assert.Equal(JournalHarnessPrompt.ReorganizeExistingMode, persisted.Mode);
+        Assert.Null(persisted.CurrentRawInputId);
+    }
+
+    [Fact]
     public async Task ExecuteRunAsync_WritesReviewingDraftAndCompletesRunWithoutWritingEntry()
     {
         using var workspace = TempWorkspace.Create();
@@ -61,7 +98,7 @@ public sealed class JournalHarnessServiceTests
             JournalHarnessPlannerRuntimeResult.Success([operation], "append accepted", TimeSpan.FromMilliseconds(17)));
         var service = CreateService(paths, runtime);
         var started = await service.StartTodayRunAsync("今天推进 harness service 执行链", "text", CancellationToken.None);
-        operation = operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] };
+        operation = operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId!] };
         runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success([operation], "append accepted", TimeSpan.FromMilliseconds(17));
 
         var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
@@ -104,7 +141,7 @@ public sealed class JournalHarnessServiceTests
         var service = CreateService(paths, runtime);
         var started = await service.StartTodayRunAsync("首次执行后不允许重复执行", "text", CancellationToken.None);
         runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
-            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId!] }],
             "append accepted",
             TimeSpan.FromMilliseconds(17));
 
@@ -286,7 +323,7 @@ public sealed class JournalHarnessServiceTests
         var service = CreateService(paths, runtime);
         var started = await service.StartTodayRunAsync("当前 raw input 必须进入 raw-inputs 区块", "text", CancellationToken.None);
         runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
-            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId!] }],
             "append accepted",
             TimeSpan.FromMilliseconds(17));
 
@@ -299,6 +336,81 @@ public sealed class JournalHarnessServiceTests
         var todayFocus = GetSection(result.Today.Draft.Markdown, "today-focus");
         Assert.Contains("用户保留的今日重点", todayFocus.Content, StringComparison.Ordinal);
         Assert.Contains("AI 追加整理，不重复原始输入文本", todayFocus.Content, StringComparison.Ordinal);
+        Assert.False(File.Exists(paths.EntryPath(date)));
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_WithReorganizeExisting_UsesFixedUserPromptAndExistingRawInputs()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var date = JournalDate.From(FixedDay);
+        await SeedExistingDraftAsync(paths, date);
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success(
+                [JournalHarnessOperation.NoOp("已有内容安全，无需调整。")],
+                "no-op",
+                TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync(
+            JournalHarnessRunStartRequest.ReorganizeExisting(),
+            CancellationToken.None);
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        Assert.Equal("no-change", result.Run.Status);
+        Assert.True(runtime.HarnessPlannerCalled);
+        Assert.NotNull(runtime.LastHarnessPlannerRequest);
+        Assert.Equal(JournalHarnessPrompt.ReorganizeExistingUserMessage, runtime.LastHarnessPlannerRequest.UserMessage);
+        using var context = JsonDocument.Parse(runtime.LastHarnessPlannerRequest.ProtectedContext);
+        Assert.Equal(JournalHarnessPrompt.ReorganizeExistingMode, context.RootElement.GetProperty("mode").GetString());
+        var historicalRawInputs = context.RootElement.GetProperty("historicalRawInputs").EnumerateArray().ToArray();
+        var historical = Assert.Single(historicalRawInputs);
+        Assert.Equal("raw-existing", historical.GetProperty("id").GetString());
+        Assert.Equal("旧 raw input 已在 draft 里", historical.GetProperty("text").GetString());
+        Assert.Single(result.Today.RawInputs);
+        Assert.Null(started.Run.CurrentRawInputId);
+        Assert.False(File.Exists(paths.EntryPath(date)));
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_WithAppendInput_ExcludesCurrentInputFromJournalContextButKeepsRawSectionAuthoritative()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var date = JournalDate.From(FixedDay);
+        await SeedExistingDraftAsync(paths, date);
+        var operation = JournalHarnessOperation.Append(
+            "today-focus",
+            "- AI 追加当前输入整理",
+            ["raw-current"],
+            "整理当前输入。");
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([operation], "append accepted", TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync("当前输入只应该出现在 user message", "text", CancellationToken.None);
+        runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId!] }],
+            "append accepted",
+            TimeSpan.FromMilliseconds(17));
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        Assert.Equal("reviewing", result.Run.Status);
+        Assert.NotNull(runtime.LastHarnessPlannerRequest);
+        using var context = JsonDocument.Parse(runtime.LastHarnessPlannerRequest.ProtectedContext);
+        Assert.Equal(JournalHarnessPrompt.AppendInputMode, context.RootElement.GetProperty("mode").GetString());
+        var historicalRawInputs = context.RootElement.GetProperty("historicalRawInputs").EnumerateArray().ToArray();
+        var historical = Assert.Single(historicalRawInputs);
+        Assert.Equal("raw-existing", historical.GetProperty("id").GetString());
+        Assert.DoesNotContain(
+            historicalRawInputs,
+            input => string.Equals(input.GetProperty("id").GetString(), started.Run.CurrentRawInputId, StringComparison.Ordinal));
+        Assert.Contains("当前输入只应该出现在 user message", runtime.LastHarnessPlannerRequest.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("当前输入只应该出现在 user message", context.RootElement.GetProperty("currentDraftMarkdown").GetString(), StringComparison.Ordinal);
+        var rawInputs = GetSection(result.Today.Draft!.Markdown, "raw-inputs");
+        Assert.Contains("旧 raw input 已在 draft 里", rawInputs.Content, StringComparison.Ordinal);
+        Assert.Contains("当前输入只应该出现在 user message", rawInputs.Content, StringComparison.Ordinal);
         Assert.False(File.Exists(paths.EntryPath(date)));
     }
 
@@ -322,7 +434,7 @@ public sealed class JournalHarnessServiceTests
             "text",
             CancellationToken.None);
         runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
-            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId!] }],
             "revise accepted",
             TimeSpan.FromMilliseconds(17));
 
@@ -338,7 +450,7 @@ public sealed class JournalHarnessServiceTests
         Assert.Equal("ai", todayFocus.Provenance.CreatedBy);
         Assert.Equal("ai", todayFocus.Provenance.LastTouchedBy);
         Assert.Equal("revise", todayFocus.Provenance.LastOperation);
-        Assert.Equal([started.Run.CurrentRawInputId], todayFocus.Provenance.BasedOnRawInputIds);
+        Assert.Equal([started.Run.CurrentRawInputId!], todayFocus.Provenance.BasedOnRawInputIds);
         Assert.False(File.Exists(paths.EntryPath(date)));
     }
 
@@ -362,7 +474,7 @@ public sealed class JournalHarnessServiceTests
                 {
                     BasedOnRawInputIds =
                     [
-                        started.Run.CurrentRawInputId,
+                        started.Run.CurrentRawInputId!,
                         "raw-does-not-exist",
                         "raw-x\" --><script>alert(1)</script><!--"
                     ]
@@ -374,7 +486,7 @@ public sealed class JournalHarnessServiceTests
         var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
 
         var todayFocus = GetSection(result.Today.Draft!.Markdown, "today-focus");
-        Assert.Equal([started.Run.CurrentRawInputId], todayFocus.Provenance.BasedOnRawInputIds);
+        Assert.Equal([started.Run.CurrentRawInputId!], todayFocus.Provenance.BasedOnRawInputIds);
         Assert.Contains($"based_on_raw_inputs=\"{started.Run.CurrentRawInputId}\"", result.Today.Draft.Markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("raw-does-not-exist", result.Today.Draft.Markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>", result.Today.Draft.Markdown, StringComparison.Ordinal);
@@ -421,7 +533,7 @@ public sealed class JournalHarnessServiceTests
         var service = CreateService(paths, runtime, clock);
         var started = await service.StartTodayRunAsync("跨日执行的当前 raw input", "text", CancellationToken.None);
         runtime.PlannerResult = JournalHarnessPlannerRuntimeResult.Success(
-            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId] }],
+            [operation with { BasedOnRawInputIds = [started.Run.CurrentRawInputId!] }],
             "append accepted",
             TimeSpan.FromMilliseconds(17));
         clock.Today = FixedDay.AddDays(1);
@@ -499,6 +611,50 @@ public sealed class JournalHarnessServiceTests
         Assert.Equal(["run-2026-05-12-cccc", "run-2026-05-12-aaaa", "run-2026-05-12-bbbb"], runs.Select(run => run.Id).ToArray());
     }
 
+    [Fact]
+    public async Task AuditStore_ReadsLegacyRunWithoutModeAsAppendInput()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var store = new JournalHarnessAuditStore(paths);
+        var date = JournalDate.From(FixedDay);
+        var runId = "run-2026-05-12-legacy";
+        var path = paths.HarnessAuditRunPath(date, runId);
+        LocalJournalPaths.EnsureParentDirectory(path);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {
+              "id": "run-2026-05-12-legacy",
+              "date": {
+                "value": "2026-05-12",
+                "isoDate": "2026-05-12",
+                "monthDay": "05-12"
+              },
+              "createdAt": "2026-05-12T08:30:00+08:00",
+              "startedAt": null,
+              "completedAt": null,
+              "status": "queued",
+              "providerId": "mock",
+              "promptVersion": "journal-harness-v2",
+              "currentRawInputId": "raw-legacy",
+              "toolCalls": [],
+              "errors": [],
+              "summary": "legacy queued"
+            }
+            """,
+            CancellationToken.None);
+
+        var run = await store.ReadAsync(date, runId, CancellationToken.None);
+        var runs = await store.ReadByDateAsync(date, CancellationToken.None);
+
+        Assert.NotNull(run);
+        Assert.Equal(JournalHarnessPrompt.AppendInputMode, run.Mode);
+        Assert.Equal("raw-legacy", run.CurrentRawInputId);
+        var listed = Assert.Single(runs);
+        Assert.Equal(JournalHarnessPrompt.AppendInputMode, listed.Mode);
+    }
+
     private static JournalHarnessService CreateService(
         LocalJournalPaths paths,
         CapturingPlannerRuntime runtime,
@@ -517,13 +673,7 @@ public sealed class JournalHarnessServiceTests
 
     private static async Task SeedExistingDraftAsync(LocalJournalPaths paths, JournalDate date)
     {
-        var oldRawInput = new RawInput(
-            "raw-existing",
-            date,
-            FixedNow.AddMinutes(-30),
-            "text",
-            "旧 raw input 已在 draft 里");
-        await new RawInputStore(paths).AppendAsync(oldRawInput, CancellationToken.None);
+        var oldRawInput = await SeedRawInputAsync(paths, date, "raw-existing", "旧 raw input 已在 draft 里");
         await new DraftStore(paths).WriteAsync(
             new JournalDraft(
                 date,
@@ -533,6 +683,22 @@ public sealed class JournalHarnessServiceTests
                 Array.Empty<string>(),
                 FixedNow.AddMinutes(-20)),
             CancellationToken.None);
+    }
+
+    private static async Task<RawInput> SeedRawInputAsync(
+        LocalJournalPaths paths,
+        JournalDate date,
+        string id,
+        string text)
+    {
+        var input = new RawInput(
+            id,
+            date,
+            FixedNow.AddMinutes(-30),
+            "text",
+            text);
+        await new RawInputStore(paths).AppendAsync(input, CancellationToken.None);
+        return input;
     }
 
     private static async Task SeedLegacyGeneratedDraftWithoutProvenanceAsync(LocalJournalPaths paths, JournalDate date)
@@ -721,6 +887,7 @@ public sealed class JournalHarnessServiceTests
             null,
             null,
             "queued",
+            JournalHarnessPrompt.AppendInputMode,
             "mock",
             JournalHarnessPrompt.Version,
             "raw-test",
@@ -762,6 +929,8 @@ public sealed class JournalHarnessServiceTests
 
         public bool ThrowOnHarnessPlanner { get; set; }
 
+        public JournalHarnessPlannerRuntimeRequest? LastHarnessPlannerRequest { get; private set; }
+
         public Task<OpenAiCompatibleRunResult> RunJsonAsync(
             OpenAiCompatibleRunRequest request,
             CancellationToken cancellationToken) =>
@@ -775,6 +944,7 @@ public sealed class JournalHarnessServiceTests
         {
             HarnessPlannerCalled = true;
             HarnessPlannerCallCount++;
+            LastHarnessPlannerRequest = request;
             PlannerEntered?.TrySetResult(null);
             if (ReleasePlanner is not null)
             {

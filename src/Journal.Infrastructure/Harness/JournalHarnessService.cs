@@ -14,6 +14,15 @@ public sealed record JournalHarnessRunStartResult(TodayJournalState Today, Journ
 
 public sealed record JournalHarnessRunExecutionResult(TodayJournalState Today, JournalHarnessAuditRun Run);
 
+public sealed record JournalHarnessRunStartRequest(string Mode, string? Text, string Source)
+{
+    public static JournalHarnessRunStartRequest AppendInput(string text, string source) =>
+        new(JournalHarnessPrompt.AppendInputMode, text, source);
+
+    public static JournalHarnessRunStartRequest ReorganizeExisting() =>
+        new(JournalHarnessPrompt.ReorganizeExistingMode, null, string.Empty);
+}
+
 public sealed class JournalHarnessService
 {
     private readonly RawInputStore _rawInputStore;
@@ -46,11 +55,35 @@ public sealed class JournalHarnessService
     public async Task<JournalHarnessRunStartResult> StartTodayRunAsync(
         string text,
         string source,
+        CancellationToken cancellationToken) =>
+        await StartTodayRunAsync(JournalHarnessRunStartRequest.AppendInput(text, source), cancellationToken);
+
+    public async Task<JournalHarnessRunStartResult> StartTodayRunAsync(
+        JournalHarnessRunStartRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.Equals(request.Mode, JournalHarnessPrompt.AppendInputMode, StringComparison.Ordinal))
         {
-            throw new ArgumentException("text is required", nameof(text));
+            return await StartAppendInputRunAsync(request, cancellationToken);
+        }
+
+        if (string.Equals(request.Mode, JournalHarnessPrompt.ReorganizeExistingMode, StringComparison.Ordinal))
+        {
+            return await StartReorganizeExistingRunAsync(cancellationToken);
+        }
+
+        throw new ArgumentException("run mode is invalid", nameof(request));
+    }
+
+    private async Task<JournalHarnessRunStartResult> StartAppendInputRunAsync(
+        JournalHarnessRunStartRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            throw new ArgumentException("text is required", nameof(request));
         }
 
         var date = JournalDate.From(_clock.Today);
@@ -59,28 +92,60 @@ public sealed class JournalHarnessService
             $"raw-{Guid.NewGuid():N}",
             date,
             now,
-            string.IsNullOrWhiteSpace(source) ? "text" : source.Trim(),
-            text);
+            string.IsNullOrWhiteSpace(request.Source) ? "text" : request.Source.Trim(),
+            request.Text);
 
         await _rawInputStore.AppendAsync(input, cancellationToken);
+        var run = await CreateQueuedRunAsync(
+            date,
+            now,
+            JournalHarnessPrompt.AppendInputMode,
+            input.Id,
+            cancellationToken);
+
+        await _auditStore.WriteAsync(run, cancellationToken);
+        return new JournalHarnessRunStartResult(await BuildStateAsync(date, null, cancellationToken), run);
+    }
+
+    private async Task<JournalHarnessRunStartResult> StartReorganizeExistingRunAsync(
+        CancellationToken cancellationToken)
+    {
+        var date = JournalDate.From(_clock.Today);
+        var now = _clock.Now;
+        var run = await CreateQueuedRunAsync(
+            date,
+            now,
+            JournalHarnessPrompt.ReorganizeExistingMode,
+            currentRawInputId: null,
+            cancellationToken);
+
+        await _auditStore.WriteAsync(run, cancellationToken);
+        return new JournalHarnessRunStartResult(await BuildStateAsync(date, null, cancellationToken), run);
+    }
+
+    private async Task<JournalHarnessAuditRun> CreateQueuedRunAsync(
+        JournalDate date,
+        DateTimeOffset now,
+        string mode,
+        string? currentRawInputId,
+        CancellationToken cancellationToken)
+    {
         var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
         var provider = ResolveProvider(settings);
-        var run = new JournalHarnessAuditRun(
+        return new JournalHarnessAuditRun(
             $"run-{date.IsoDate}-{Guid.NewGuid():N}",
             date,
             now,
             null,
             null,
             "queued",
+            mode,
             provider.Id,
             JournalHarnessPrompt.Version,
-            input.Id,
+            currentRawInputId,
             Array.Empty<JournalHarnessAuditToolCall>(),
             Array.Empty<string>(),
             "Harness run queued.");
-
-        await _auditStore.WriteAsync(run, cancellationToken);
-        return new JournalHarnessRunStartResult(await BuildStateAsync(date, null, cancellationToken), run);
     }
 
     public Task<JournalHarnessRunExecutionResult> ExecuteRunAsync(
@@ -176,17 +241,15 @@ public sealed class JournalHarnessService
                 var settings = await _settingsReader.ReadEffectiveAsync(cancellationToken);
                 var provider = ResolveProvider(settings);
                 var inputs = await _rawInputStore.ReadAsync(date, cancellationToken);
-                var currentInput = inputs.FirstOrDefault(input => string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
-                    ?? throw new InvalidOperationException("current raw input does not exist.");
                 var draft = await _draftStore.ReadAsync(date, cancellationToken);
                 var entry = await _entryStore.ReadAsync(date, cancellationToken);
                 var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, inputs, now);
                 var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, inputs);
                 var authoritativeBaselineMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
-                var prompt = JournalHarnessPrompt.Build(
+                var prompt = BuildPromptForRun(
+                    run,
                     date,
-                    inputs.Where(input => !string.Equals(input.Id, currentInput.Id, StringComparison.Ordinal)).ToArray(),
-                    currentInput,
+                    inputs,
                     authoritativeBaselineMarkdown,
                     entry?.Markdown ?? string.Empty);
 
@@ -301,6 +364,43 @@ public sealed class JournalHarnessService
         };
         await _auditStore.WriteAsync(completed, cancellationToken);
         return completed;
+    }
+
+    private static JournalHarnessPromptRequest BuildPromptForRun(
+        JournalHarnessAuditRun run,
+        JournalDate date,
+        IReadOnlyList<RawInput> inputs,
+        string authoritativeBaselineMarkdown,
+        string confirmedEntryMarkdown)
+    {
+        if (string.Equals(run.Mode, JournalHarnessPrompt.ReorganizeExistingMode, StringComparison.Ordinal))
+        {
+            return JournalHarnessPrompt.BuildForReorganizeExisting(
+                date,
+                inputs,
+                authoritativeBaselineMarkdown,
+                confirmedEntryMarkdown);
+        }
+
+        if (!string.Equals(run.Mode, JournalHarnessPrompt.AppendInputMode, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("harness run mode is invalid.");
+        }
+
+        if (string.IsNullOrWhiteSpace(run.CurrentRawInputId))
+        {
+            throw new InvalidOperationException("current raw input does not exist.");
+        }
+
+        var currentInput = inputs.FirstOrDefault(input => string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException("current raw input does not exist.");
+
+        return JournalHarnessPrompt.BuildForAppendInput(
+            date,
+            inputs.Where(input => !string.Equals(input.Id, currentInput.Id, StringComparison.Ordinal)).ToArray(),
+            currentInput,
+            authoritativeBaselineMarkdown,
+            confirmedEntryMarkdown);
     }
 
     private async Task<TodayJournalState> BuildStateAsync(
