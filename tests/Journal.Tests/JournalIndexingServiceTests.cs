@@ -208,6 +208,70 @@ public sealed class JournalIndexingServiceTests
     }
 
     [Fact]
+    public async Task ScanAsync_SynchronizesRawInputsAndVersionsFromFiles()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var markdown = CreateMarkdown(date, "今天继续做接口整理");
+        await WriteEntryAsync(paths, date, markdown);
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "scan 恢复 DeepSeek 原始材料"),
+            CancellationToken.None);
+        await new JournalVersionStore(paths).CreateSnapshotAsync(
+            date,
+            markdown,
+            paths.EntryPath(date),
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"),
+            CancellationToken.None);
+
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T01:00:00+00:00"), CancellationToken.None);
+
+        var result = await indexStore.SearchAsync(new JournalHistoryQuery("DeepSeek", null, null, null, null, 20), CancellationToken.None);
+        var item = Assert.Single(result.Items);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal(1, summary.RawInputCount);
+        Assert.Equal(1, summary.VersionCount);
+    }
+
+    [Fact]
+    public async Task ScanAsync_RepopulatesEntriesRawInputsAndVersionsAfterSchemaReset()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, indexStore, service) = CreateService(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+        var markdown = CreateMarkdown(date, "schema reset 后恢复正式正文");
+        await WriteEntryAsync(paths, date, markdown);
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "schema reset 后恢复 DeepSeek raw"),
+            CancellationToken.None);
+        await new JournalVersionStore(paths).CreateSnapshotAsync(
+            date,
+            markdown,
+            paths.EntryPath(date),
+            "confirm-draft",
+            DateTimeOffset.Parse("2026-05-13T09:00:00+08:00"),
+            CancellationToken.None);
+        await indexStore.EnsureReadyAsync(CancellationToken.None);
+        await indexStore.SetMetaAsync("schema_version", "999", CancellationToken.None);
+
+        await service.ScanAsync(DateTimeOffset.Parse("2026-05-13T01:00:00+00:00"), CancellationToken.None);
+
+        var markdownResult = await indexStore.SearchAsync(new JournalHistoryQuery("正式正文", null, null, null, null, 20), CancellationToken.None);
+        Assert.Contains(markdownResult.Items, item => item.Date == date);
+        var rawResult = await indexStore.SearchAsync(new JournalHistoryQuery("DeepSeek", null, null, null, null, 20), CancellationToken.None);
+        var item = Assert.Single(rawResult.Items);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        var summary = await indexStore.ReadSummaryAsync(date, CancellationToken.None);
+        Assert.NotNull(summary);
+        Assert.Equal(1, summary.RawInputCount);
+        Assert.Equal(1, summary.VersionCount);
+    }
+
+    [Fact]
     public async Task SyncVersionAsync_IndexesVersionSummary()
     {
         using var workspace = TempWorkspace.Create();

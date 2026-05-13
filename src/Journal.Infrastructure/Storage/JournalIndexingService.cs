@@ -57,7 +57,14 @@ public sealed class JournalIndexingService
     public async Task ScanAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         await _indexStore.EnsureReadyAsync(cancellationToken);
+        await SyncEntryFilesAsync(now, cancellationToken);
+        await SyncRawInputFilesAsync(cancellationToken);
+        await SyncVersionFilesAsync(cancellationToken);
+        await MarkMissingEntryFilesAsync(now, cancellationToken);
+    }
 
+    private async Task SyncEntryFilesAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var entryRoot = _paths.EntryRootDirectory();
         if (Directory.Exists(entryRoot))
         {
@@ -79,7 +86,10 @@ public sealed class JournalIndexingService
                 await IndexEntryAsync(date, markdown, entryPath, "processed", now, cancellationToken);
             }
         }
+    }
 
+    private async Task MarkMissingEntryFilesAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var index = await _indexStore.ReadEntryIndexAsync(cancellationToken);
         foreach (var entry in index.Values)
         {
@@ -135,8 +145,6 @@ public sealed class JournalIndexingService
     {
         await _indexStore.BackupAndResetAsync(now, "rebuild", cancellationToken);
         await ScanAsync(now, cancellationToken);
-        await SyncRawInputFilesAsync(cancellationToken);
-        await SyncVersionFilesAsync(cancellationToken);
     }
 
     private async Task SyncRawInputFilesAsync(CancellationToken cancellationToken)

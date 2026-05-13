@@ -30,6 +30,38 @@ public sealed class JournalHistoryServiceTests
     }
 
     [Fact]
+    public async Task SearchAsync_ScansRawInputsAndVersionsBeforeReturningResults()
+    {
+        using var workspace = TempWorkspace.Create();
+        var (paths, service) = CreateSubject(workspace.Root);
+        var markdown = CreateMarkdown(Date, "测试历史搜索");
+        await WriteEntryAsync(paths, Date, markdown);
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput("raw-1", Date, FixedNow.AddMinutes(1), "text", "历史搜索 raw 提到了 DeepSeek"),
+            CancellationToken.None);
+        await new JournalVersionStore(paths).CreateSnapshotAsync(
+            Date,
+            CreateMarkdown(Date, "测试历史版本"),
+            paths.EntryPath(Date),
+            "test",
+            FixedNow.AddMinutes(2),
+            CancellationToken.None);
+
+        var result = await service.SearchAsync(
+            new JournalHistoryQuery("DeepSeek", null, null, null, null, 20),
+            CancellationToken.None);
+        var detail = await service.GetEntryAsync(Date, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(Date, item.Date);
+        Assert.Equal(1, item.RawInputCount);
+        Assert.Equal(1, item.VersionCount);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        Assert.NotNull(detail);
+        Assert.Single(detail.Versions);
+    }
+
+    [Fact]
     public async Task GetEntryAsync_ReturnsMetadataSectionsAndVersions()
     {
         using var workspace = TempWorkspace.Create();
