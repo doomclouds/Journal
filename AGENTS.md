@@ -22,7 +22,7 @@ Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 re
 - File-backed API keys can be revealed on explicit user action through `GET /settings/ai/{providerId}/api-key`; environment-backed keys are never revealable through the API.
 - `POST /settings/ai/test` supports candidate settings so the UI can test the current form before saving it.
 - `POST /settings/ai/activate` is the protected activation path: test first, then save/enable only on success.
-- `POST /journal/today/draft/regenerate` can regenerate the current draft through a selected LLM, but the settings panel remains configuration-only; user-facing regeneration belongs in the Today workflow.
+- `POST /journal/today/draft/regenerate` remains a legacy full-draft regeneration compatibility endpoint; the Today workflow should use Harness Run for both normal input and reorganize actions.
 - Real LLM output must not overwrite `raw-inputs`; server-side raw input text remains the source of truth in draft and formal JMF.
 - Phase 6 adds Harness Core: real LLMs can use side-effect-free Agent Framework tools to plan draft operations.
 - Harness operations write draft only; formal entries still require user confirmation.
@@ -82,9 +82,11 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - `GET /settings/ai` must only expose safe API key previews. Do not add full key values to settings views, Markdown, logs, generated metadata, screenshots, or archives.
 - Environment variables override file settings for the active/effective LLM provider. On Windows, read environment values from Process first, then User, then Machine, so user-level API keys configured outside the current terminal are still picked up. File settings are the fallback and the only source whose API key can be revealed through the UI.
 - Provider activation should remain protected: failed health checks should not switch the active provider or persist a broken candidate.
-- Regenerating a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
-- The Today compose submit flow should use `POST /journal/today/harness/runs` plus the run SSE stream, so normal user input creates audit records.
-- Harness execution is also draft-only. `POST /journal/today/harness/runs` appends the current raw input and creates a run record; executing the run may write `reviewing` or `attention` draft, never `entries/`.
+- Reorganizing a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
+- The Today compose submit flow and reorganize action should use `POST /journal/today/harness/runs` plus the run SSE stream, so both paths create audit records.
+- Harness append-input runs persist the current user text as raw input for future runs, but the planner prompt must treat it as the current user message, not as historical raw input context.
+- Harness reorganize-existing runs must not append raw input; they use a fixed server-side user prompt to reorganize from existing raw inputs, the current draft, the confirmed entry, and the section catalog.
+- Harness execution is draft-only. Executing a run may write a `reviewing` or `attention` draft, never `entries/`.
 - Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
 - Harness provenance is section-level. Do not claim item-level provenance, diff, or rollback unless those features are added.
 - Restoring a version is draft-only. It must create a `reviewing` draft and must not write `entries/` directly.
