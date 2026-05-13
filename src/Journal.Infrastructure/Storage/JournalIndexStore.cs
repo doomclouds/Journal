@@ -503,11 +503,13 @@ public sealed class JournalIndexStore
                 "section_fts",
                 ["date", "section_id", "title", "content", "metadata"],
                 cancellationToken)
+            && await IsFts5TrigramVirtualTableAsync(connection, "section_fts", cancellationToken)
             && await HasColumnsAsync(
                 connection,
                 "raw_input_fts",
                 ["raw_input_id", "date", "source", "text"],
-                cancellationToken);
+                cancellationToken)
+            && await IsFts5TrigramVirtualTableAsync(connection, "raw_input_fts", cancellationToken);
     }
 
     private static async Task<bool> IntegrityCheckPassesAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -534,6 +536,38 @@ public sealed class JournalIndexStore
         }
 
         return requiredColumns.All(actualColumns.Contains);
+    }
+
+    private static async Task<bool> IsFts5TrigramVirtualTableAsync(
+        SqliteConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = $tableName;
+            """;
+        command.Parameters.AddWithValue("$tableName", tableName);
+        var sql = await command.ExecuteScalarAsync(cancellationToken) as string;
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return false;
+        }
+
+        var normalizedSql = NormalizeSql(sql);
+        return normalizedSql.Contains("createvirtualtable", StringComparison.Ordinal)
+            && normalizedSql.Contains("usingfts5", StringComparison.Ordinal)
+            && (normalizedSql.Contains("tokenize='trigram'", StringComparison.Ordinal)
+                || normalizedSql.Contains("tokenize=\"trigram\"", StringComparison.Ordinal)
+                || normalizedSql.Contains("tokenize=trigram", StringComparison.Ordinal));
+    }
+
+    private static string NormalizeSql(string sql)
+    {
+        return string.Concat(sql.Where(static character => !char.IsWhiteSpace(character))).ToLowerInvariant();
     }
 
     private static async Task<IReadOnlyList<JournalHistoryEntrySummary>> SearchEntriesAsync(

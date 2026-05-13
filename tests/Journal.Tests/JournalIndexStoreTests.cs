@@ -329,6 +329,96 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
+    public async Task EnsureReadyAsync_WhenExistingFtsTablesAreOrdinaryTables_BacksUpRebuildsAndSearches()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        Directory.CreateDirectory(paths.IndexDirectory());
+        await using (var connection = new SqliteConnection($"Data Source={paths.IndexPath()};Pooling=False"))
+        {
+            await connection.OpenAsync(CancellationToken.None);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE journal_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO journal_meta(key, value) VALUES('schema_version', '1');
+                CREATE TABLE entries(
+                    date TEXT PRIMARY KEY,
+                    month_day TEXT NOT NULL,
+                    entry_path TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    mood TEXT NULL,
+                    tags_json TEXT NOT NULL,
+                    topics_json TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    last_write_time_utc TEXT NOT NULL,
+                    file_size INTEGER NOT NULL,
+                    indexed_at_utc TEXT NOT NULL,
+                    attention_reason TEXT NULL
+                );
+                CREATE TABLE entry_sections(
+                    date TEXT NOT NULL,
+                    section_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    display_order INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    PRIMARY KEY(date, section_id)
+                );
+                CREATE TABLE entry_versions(
+                    id TEXT PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    version_path TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    source_entry_path TEXT NOT NULL
+                );
+                CREATE TABLE raw_inputs(
+                    id TEXT PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    text TEXT NOT NULL
+                );
+                CREATE TABLE section_fts(
+                    date TEXT,
+                    section_id TEXT,
+                    title TEXT,
+                    content TEXT,
+                    metadata TEXT
+                );
+                CREATE TABLE raw_input_fts(
+                    raw_input_id TEXT,
+                    date TEXT,
+                    source TEXT,
+                    text TEXT
+                );
+                """;
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        var store = new JournalIndexStore(paths);
+        var date = JournalDate.From(new DateOnly(2026, 5, 13));
+
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date),
+            [new JournalIndexedSection(date, "today-focus", "今日重点", 10, "Need DeepSeek adapter validation")],
+            CancellationToken.None);
+        await store.UpsertRawInputAsync(
+            new JournalIndexedRawInput("raw-1", date, DateTimeOffset.Parse("2026-05-13T08:00:00+08:00"), "text", "DeepSeek raw input"),
+            CancellationToken.None);
+
+        var result = await store.SearchAsync(new JournalHistoryQuery("DeepSeek", null, null, null, null, 20), CancellationToken.None);
+
+        Assert.Equal("1", await store.ReadMetaAsync("schema_version", CancellationToken.None));
+        Assert.NotEmpty(Directory.EnumerateFiles(paths.IndexBackupDirectory()));
+        var item = Assert.Single(result.Items);
+        Assert.Equal(date, item.Date);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "section" && hit.SectionId == "today-focus");
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+    }
+
+    [Fact]
     public async Task SearchAsync_AppliesDateFiltersAndCursor()
     {
         using var workspace = TempWorkspace.Create();
