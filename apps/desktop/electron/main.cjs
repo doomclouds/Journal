@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const fs = require("node:fs");
 const path = require("node:path");
 const { createBackendRuntime } = require("./backendRuntime.cjs");
 const { createApplicationMenuTemplate } = require("./menu.cjs");
@@ -30,6 +31,18 @@ function resolveLocalJournalDataRoot() {
 function resolvePackagedBackendExePath() {
   // The Windows installer staging places the published API beside app resources.
   return path.join(process.resourcesPath, "backend", "Journal.Api.exe");
+}
+
+function resolveAppIconPath() {
+  const sourceIconPath = path.join(__dirname, "../../../assets/app-icon/journal.ico");
+  const installerAssetIconPath = path.join(process.resourcesPath, "..", "..", "assets", "journal.ico");
+  const packagedIconPath = path.join(process.resourcesPath, "assets", "journal.ico");
+  const packagedSourceLayoutIconPath = path.join(process.resourcesPath, "assets", "app-icon", "journal.ico");
+  const candidatePaths = isDev
+    ? [sourceIconPath, packagedIconPath, packagedSourceLayoutIconPath, installerAssetIconPath]
+    : [installerAssetIconPath, packagedIconPath, packagedSourceLayoutIconPath, sourceIconPath];
+
+  return candidatePaths.find(candidatePath => fs.existsSync(candidatePath));
 }
 
 function setLocalServiceState(nextState) {
@@ -97,6 +110,7 @@ function focusExistingWindow() {
 }
 
 async function createWindow() {
+  const appIconPath = resolveAppIconPath();
   const mainWindow = new BrowserWindow({
     width: 1180,
     height: 780,
@@ -104,6 +118,7 @@ async function createWindow() {
     minHeight: 640,
     title: "Journal",
     backgroundColor: "#f6efe4",
+    ...(appIconPath ? { icon: appIconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

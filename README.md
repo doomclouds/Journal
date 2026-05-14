@@ -53,6 +53,10 @@
 
 仍未交付：非今日版本直接恢复/确认、AI 改写聊天、自动保存、应用内录音/语音转写、安装包、生产 Electron 托管 .NET 后端、删除流程、item 级 provenance、draft diff 和 rollback。
 
+## Release Identity
+
+应用图标资产提交在 `assets/app-icon/` 下。Release/CI 使用这些已提交的确定性 PNG/ICO 文件，不在发布构建过程中重新生成 AI 图像。
+
 ## 阶段 1：应用框架骨架
 
 阶段 1 只验证 Electron + React + .NET 本地 API 的工程链路。
