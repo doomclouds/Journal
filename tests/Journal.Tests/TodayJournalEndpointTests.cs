@@ -305,6 +305,56 @@ public sealed class TodayJournalEndpointTests
         Assert.Contains(items, item => item.GetProperty("date").GetProperty("isoDate").GetString() == "2026-05-08");
     }
 
+    [Fact]
+    public async Task GetHistoryAnniversary_ReturnsSameMonthDayResults()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        await client.PostAsJsonAsync("/journal/today/inputs", new { text = "今天继续打磨同日年轮", source = "text" });
+        await client.PostAsync("/journal/today/draft/confirm", content: null);
+
+        using var response = await client.GetAsync("/journal/history/anniversary/05-08?limit=50");
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JournalAnniversaryWheelResult>();
+        Assert.NotNull(result);
+        Assert.Equal("05-08", result.MonthDay);
+        Assert.Contains(result.Items, item => item.Date.IsoDate == "2026-05-08");
+    }
+
+    [Theory]
+    [InlineData("/journal/history/anniversary/not-a-day", "monthDay must use MM-dd")]
+    [InlineData("/journal/history/anniversary/13-01", "monthDay is invalid")]
+    [InlineData("/journal/history/anniversary/02-30", "monthDay is invalid")]
+    public async Task GetHistoryAnniversary_RejectsInvalidMonthDay(string url, string expectedError)
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains(expectedError, body);
+    }
+
+    [Fact]
+    public async Task GetHistoryAnniversary_AcceptsLeapDay()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/journal/history/anniversary/02-29");
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JournalAnniversaryWheelResult>();
+        Assert.NotNull(result);
+        Assert.Equal("02-29", result.MonthDay);
+    }
+
     [Theory]
     [InlineData("/journal/history?from=not-a-date", "from must use yyyy-MM-dd")]
     [InlineData("/journal/history?to=2026-99-99", "to must use yyyy-MM-dd")]

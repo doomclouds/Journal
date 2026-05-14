@@ -32,6 +32,15 @@ public sealed class JournalHistoryService(
         return await indexStore.SearchAsync(query, cancellationToken);
     }
 
+    public async Task<JournalAnniversaryWheelResult> GetAnniversaryAsync(
+        string monthDay,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        await indexingService.ScanAsync(clock.Now, cancellationToken);
+        return await indexStore.ReadAnniversaryAsync(monthDay, limit, cancellationToken);
+    }
+
     public async Task<JournalHistoryEntryDetail?> GetEntryAsync(
         JournalDate date,
         CancellationToken cancellationToken)
