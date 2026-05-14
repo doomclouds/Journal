@@ -663,6 +663,11 @@ export default function App() {
     }
   }
 
+  function clearHistoryVersionDetail() {
+    historyVersionRequestIdRef.current += 1;
+    setHistoryVersionDetail(null);
+  }
+
   async function handleHistorySelectDate(date: string) {
     const historyRequestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = historyRequestId;
@@ -776,7 +781,7 @@ export default function App() {
               onMonthDayChange={handleAnniversaryMonthDayChange}
               onSelectDate={date => void handleHistorySelectDate(date)}
               onViewVersion={version => void handleViewHistoryVersion(version)}
-              onClearVersion={() => setHistoryVersionDetail(null)}
+              onClearVersion={clearHistoryVersionDetail}
               onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
             />
           ) : (
@@ -802,7 +807,7 @@ export default function App() {
               onSelectDate={date => void handleHistorySelectDate(date)}
               onRefresh={() => void refreshHistory()}
               onViewVersion={version => void handleViewHistoryVersion(version)}
-              onClearVersion={() => setHistoryVersionDetail(null)}
+              onClearVersion={clearHistoryVersionDetail}
               onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
             />
           )

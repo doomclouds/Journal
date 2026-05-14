@@ -1113,6 +1113,49 @@ describe("App", () => {
     expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
   });
 
+  test("ignores stale anniversary version detail after returning to current entry", async () => {
+    const pendingVersionDetailDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 当前同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse({
+        version: historyVersion,
+        markdown: "# 已打开版本\n\n已打开版本内容"
+      }))
+      .mockReturnValueOnce(pendingVersionDetailDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
+
+    const preview = screen.getByRole("region", { name: "同日年轮预览" });
+    expect(await within(preview).findByText("已打开版本内容")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看版本/ }));
+    fireEvent.click(screen.getByRole("button", { name: /查看当前日记/ }));
+
+    expect(within(preview).getByText("当前同日详情")).toBeInTheDocument();
+    expect(within(preview).queryByText("复活版本内容")).not.toBeInTheDocument();
+
+    await act(async () => {
+      pendingVersionDetailDeferred.resolve(mockJsonResponse({
+        version: historyVersion,
+        markdown: "# 复活版本\n\n复活版本内容"
+      }));
+      await pendingVersionDetailDeferred.promise;
+    });
+
+    expect(within(preview).getByText("当前同日详情")).toBeInTheDocument();
+    expect(within(preview).queryByText("复活版本内容")).not.toBeInTheDocument();
+  });
+
   test("clears stale history detail and version actions while a new selected date is loading", async () => {
     const nextDate = {
       ...journalDate,
