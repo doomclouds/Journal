@@ -54,12 +54,10 @@ describe("Electron native menu", () => {
 
   test("custom menu actions have useful click handlers", () => {
     const app = { quit: vi.fn() };
-    const showAbout = vi.fn();
     const sent: Array<[string, string]> = [];
     const executeJavaScript = vi.fn();
     const template = createApplicationMenuTemplate({
       app,
-      showAbout,
       mainWindow: {
         isDestroyed: () => false,
         webContents: {
@@ -82,6 +80,5 @@ describe("Electron native menu", () => {
       [nativeMenuChannel, "open-about"]
     ]);
     expect(app.quit).toHaveBeenCalledTimes(1);
-    expect(showAbout).not.toHaveBeenCalled();
   });
 });

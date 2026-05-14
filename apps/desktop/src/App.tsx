@@ -7,6 +7,7 @@ import {
   getAiSettings,
   getAppInfo,
   getHealth,
+  initializeApiBaseUrlFromDesktop,
   getJournalAudit,
   getJournalAnniversaryWheel,
   getJournalHistory,
@@ -44,6 +45,10 @@ import { HistoryWorkbench } from "./HistoryWorkbench";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
 import {
+  getLocalServiceStatusLabel,
+  type LocalServiceState
+} from "./serviceStatus";
+import {
   getAssistantSummary,
   getProductJournalStatus,
   getRawInputPreview,
@@ -60,6 +65,8 @@ declare global {
   interface Window {
     journalDesktop?: {
       platform?: string;
+      getLocalServiceStatus?: () => Promise<LocalServiceState>;
+      getApiBaseUrl?: () => Promise<string | null>;
       onNativeMenuCommand?: (handler: (command: NativeMenuCommand) => void) => () => void;
     };
   }
@@ -116,6 +123,18 @@ function isTerminalHarnessEvent(event: JournalHarnessRunEvent) {
     || event.type === "run-interrupted";
 }
 
+function isTrustedLocalServiceState(state: LocalServiceState | null) {
+  return state?.status === "connected" || state?.status === "reused";
+}
+
+function getBlockedLocalServiceMessage(state: LocalServiceState | null) {
+  if (state?.reason) {
+    return state.reason;
+  }
+
+  return "本地服务启动失败，暂时无法读取今天的状态。";
+}
+
 export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
@@ -159,6 +178,7 @@ export default function App() {
   const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
   const [historyVersionDetail, setHistoryVersionDetail] = useState<JournalVersionDetail | null>(null);
   const [historyError, setHistoryError] = useState("");
+  const [localServiceState, setLocalServiceState] = useState<LocalServiceState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,6 +187,41 @@ export default function App() {
 
     async function load() {
       try {
+        const hasDesktopBridge = Boolean(window.journalDesktop);
+        const getDesktopServiceState = window.journalDesktop?.getLocalServiceStatus;
+        let desktopServiceState: LocalServiceState | null = null;
+        if (getDesktopServiceState) {
+          desktopServiceState = await getDesktopServiceState().catch(() => null);
+          if (!cancelled && requestId === requestIdRef.current && desktopServiceState) {
+            setLocalServiceState(desktopServiceState);
+          }
+        }
+
+        if (hasDesktopBridge) {
+          if (desktopServiceState && !isTrustedLocalServiceState(desktopServiceState)) {
+            if (!cancelled && requestId === requestIdRef.current) {
+              setLoadState("error");
+              setApiError(getBlockedLocalServiceMessage(desktopServiceState));
+            }
+            return;
+          }
+
+          const trustedApiBaseUrl = await initializeApiBaseUrlFromDesktop();
+          if (!trustedApiBaseUrl) {
+            if (!cancelled && requestId === requestIdRef.current) {
+              setLoadState("error");
+              setApiError(getBlockedLocalServiceMessage(desktopServiceState));
+            }
+            return;
+          }
+        } else {
+          await initializeApiBaseUrlFromDesktop();
+        }
+
+        if (cancelled || requestId !== requestIdRef.current) {
+          return;
+        }
+
         const [healthResult, editorResult, aiSettingsResult] = await Promise.all([
           getHealth(),
           getTodayEditor(),
@@ -207,6 +262,24 @@ export default function App() {
   useEffect(() => {
     return () => {
       harnessEventsRef.current?.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const getDesktopServiceState = window.journalDesktop?.getLocalServiceStatus;
+    if (!getDesktopServiceState) {
+      return undefined;
+    }
+
+    const refreshLocalServiceState = () => {
+      void getDesktopServiceState()
+        .then(setLocalServiceState)
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(refreshLocalServiceState, 5000);
+
+    return () => {
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -322,6 +395,14 @@ export default function App() {
   const latestRawInputTime = latestRawInput?.createdAt
     ? formatRawInputTime(latestRawInput.createdAt)
     : "--:--";
+  const localServiceDetail = localServiceState
+    ? [
+        isTrustedLocalServiceState(localServiceState)
+          ? localServiceState.apiBaseUrl ?? (localServiceState.port ? `127.0.0.1:${localServiceState.port}` : "")
+          : "",
+        localServiceState.pid ? `PID ${localServiceState.pid}` : ""
+      ].filter(Boolean).join(" · ")
+    : "";
   const sectionTargets = editor?.sections
     .filter(section => section.id !== "raw-inputs")
     .map(section => getSectionDisplayTitle(section.id, section.title)) ?? [];
@@ -868,6 +949,12 @@ export default function App() {
           ></span>
           <span><strong>{zhDateLabel}</strong> · {weekdayLabel} · {inputCount > 0 ? "原始表达已保留" : "等待第一句原始表达"}</span>
         </div>
+        {localServiceState ? (
+          <div className="local-service-line" aria-label="本地服务状态">
+            <span>{getLocalServiceStatusLabel(localServiceState.status)}</span>
+            {localServiceDetail ? <span>{localServiceDetail}</span> : null}
+          </div>
+        ) : null}
       </header>
 
       <section className="feedback-row" aria-label="提示信息">

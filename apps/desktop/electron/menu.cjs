@@ -12,7 +12,7 @@ function sendCommand(mainWindow, command) {
 }
 
 function createApplicationMenuTemplate(options = {}) {
-  const { app, mainWindow, showAbout } = options;
+  const { app, mainWindow } = options;
 
   return [
     {

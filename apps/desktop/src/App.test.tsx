@@ -3,11 +3,12 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
   activateAiSettings,
-  getJournalAudit,
   getAiSettings,
+  getJournalAudit,
   getTodayEditor,
   openHarnessRunEvents,
   regenerateTodayDraft,
+  resetApiBaseUrlForTests,
   revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
@@ -425,10 +426,125 @@ async function openLlmSettingsFromNativeMenu() {
 
 afterEach(() => {
   cleanup();
+  resetApiBaseUrlForTests();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  delete window.journalDesktop;
+  delete (globalThis as typeof globalThis & { journalDesktop?: Window["journalDesktop"] }).journalDesktop;
 });
 describe("App", () => {
+  test("initializes the API client from the desktop bridge before loading today", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: vi.fn().mockResolvedValue("http://127.0.0.1:61234"),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "reused",
+        apiBaseUrl: "http://127.0.0.1:61234",
+        port: 61234,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: null
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByLabelText("今日助手");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:61234/health", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:61234/journal/today/editor", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:61234/settings/ai", undefined);
+    expect(screen.getByText("复用上次残留进程")).toBeInTheDocument();
+    expect(screen.getByText(/127\.0\.0\.1:61234/)).toBeInTheDocument();
+    expect(screen.getByText(/PID 4321/)).toBeInTheDocument();
+  });
+
+  test("does not use a failed local service URL for business API requests", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: vi.fn().mockResolvedValue("http://127.0.0.1:61234"),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "failed",
+        apiBaseUrl: null,
+        port: 61234,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: "Existing backend lock points to a live process, but ownership could not be verified."
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByText("连接失败");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("连接失败")).toBeInTheDocument();
+    expect(screen.queryByText(/127\.0\.0\.1:61234/)).not.toBeInTheDocument();
+  });
+
+  test("blocks desktop startup when the bridge has no trusted API base URL", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: vi.fn().mockResolvedValue(null),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "connected",
+        apiBaseUrl: null,
+        port: 61234,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: null
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByText("本地服务启动失败，暂时无法读取今天的状态。");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("已连接")).toBeInTheDocument();
+  });
+
+  test("awaits a desktop bridge thenable before loading today", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: () => ({
+        then: (resolve: (value: string) => void) => {
+          setTimeout(() => resolve("http://127.0.0.1:62345"), 0);
+        }
+      }),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "connected",
+        apiBaseUrl: "http://127.0.0.1:62345",
+        port: 62345,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: null
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByLabelText("今日助手");
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:62345/health", undefined)
+    );
+  });
+
   test("prevents stale initial load race by disabling submit until editor state resolves", async () => {
     const eventSource = createEventSourceMock();
     const healthDeferred = createDeferred<Response>();
@@ -454,7 +570,7 @@ describe("App", () => {
     fireEvent.click(submitButton);
 
     expect(submitButton).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
 
     healthDeferred.resolve({
       ok: true,
@@ -3430,6 +3546,16 @@ describe("LlmSettingsPanel", () => {
 });
 
 describe("editor API client", () => {
+  test("getAiSettings uses the configured desktop API base URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resetApiBaseUrlForTests("http://127.0.0.1:61234");
+    await getAiSettings();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:61234/settings/ai", undefined);
+  });
+
   test("getAiSettings calls settings endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
     vi.stubGlobal("fetch", fetchMock);
@@ -3710,6 +3836,20 @@ describe("editor API client", () => {
     completedListener?.({ data: JSON.stringify(event) } as MessageEvent);
 
     expect(onEvent).toHaveBeenCalledWith(event);
+  });
+
+  test("openHarnessRunEvents uses the configured desktop API base URL", () => {
+    const addEventListener = vi.fn();
+    const eventSource = { addEventListener } as unknown as EventSource;
+    const EventSourceMock = vi.fn(function () {
+      return eventSource;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+    resetApiBaseUrlForTests("http://127.0.0.1:61234");
+
+    openHarnessRunEvents("run id", vi.fn());
+
+    expect(EventSourceMock).toHaveBeenCalledWith("http://127.0.0.1:61234/journal/harness/runs/run%20id/events");
   });
 
   test("openHarnessRunEvents reports invalid event JSON without throwing", () => {

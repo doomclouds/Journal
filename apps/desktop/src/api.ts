@@ -299,7 +299,37 @@ export type JournalHistoryEntryDetail = {
   versions: JournalEntryVersion[];
 };
 
-const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
+const defaultApiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
+let apiBaseUrl = defaultApiBaseUrl;
+
+function normalizeApiBaseUrl(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+export function setApiBaseUrl(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  apiBaseUrl = normalizeApiBaseUrl(value.trim());
+  return apiBaseUrl;
+}
+
+export function initializeApiBaseUrlFromDesktop() {
+  const getApiBaseUrl = globalThis.window?.journalDesktop?.getApiBaseUrl;
+  if (!getApiBaseUrl) {
+    return apiBaseUrl;
+  }
+
+  return Promise.resolve(getApiBaseUrl())
+    .then(value => setApiBaseUrl(value))
+    .catch(() => null);
+}
+
+export function resetApiBaseUrlForTests(nextApiBaseUrl = defaultApiBaseUrl) {
+  apiBaseUrl = normalizeApiBaseUrl(nextApiBaseUrl);
+  return apiBaseUrl;
+}
 
 export const frontendBuildInfo = {
   frontendVersion: import.meta.env.VITE_JOURNAL_FRONTEND_VERSION ?? "0.1.0-dev",
