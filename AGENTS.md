@@ -35,6 +35,7 @@ Phase 6B includes the Phase 3 generation/confirmation/editor workflow, Phase 5 r
 - History APIs expose search, date detail, version list/detail, scan/rebuild, and restore-version-to-draft.
 - The history workbench is a full workspace mode opened from the journal paper's corridor menu, mirroring audit-style navigation.
 - Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from the journal paper's corridor menu, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and keep the anniversary surface read-only.
+- Anniversary mode is a read-only memory corridor; versions can be viewed there, not restored.
 - Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
 
 Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.
@@ -66,6 +67,7 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - LLM settings UI: `apps/desktop/src/LlmSettingsPanel.tsx`.
 - AI audit workbench UI: `apps/desktop/src/AuditWorkbench.tsx`.
 - History workbench UI: `apps/desktop/src/HistoryWorkbench.tsx`.
+- Same-day anniversary workbench UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
 - API client and shared frontend contracts: `apps/desktop/src/api.ts`.
 - Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
@@ -94,6 +96,7 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - Harness execution is draft-only. Executing a run may write a `reviewing` or `attention` draft, never `entries/`.
 - Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
 - Harness provenance is section-level. Do not claim item-level provenance, diff, or rollback unless those features are added.
+- Anniversary mode is read-only. Do not expose restore, delete, diff, or edit actions there unless the product direction changes explicitly.
 - Restoring a version is draft-only. It must create a `reviewing` draft and must not write `entries/` directly.
 - Current version restore is limited to today's date; avoid exposing non-today restore until date-aware editor/confirm behavior exists.
 - The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
@@ -118,6 +121,7 @@ dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalAiSettings
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalVersionStoreTests|JournalIndexStoreTests|JournalIndexingServiceTests|EntryWritePipelineTests|JournalHistoryServiceTests|TodayJournalEndpointTests"
 npm test --prefix apps/desktop -- App.test.tsx
 npm test --prefix apps/desktop -- HistoryWorkbench.test.tsx
+npm test --prefix apps/desktop -- AnniversaryWheelWorkbench.test.tsx
 ```
 
 Development run:
