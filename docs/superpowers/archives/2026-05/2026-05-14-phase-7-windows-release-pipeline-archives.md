@@ -46,10 +46,14 @@ Phase 7 把 Journal 从开发态双进程应用推进到 Windows 本地发布闭
 
 ## Related Problems
 
+- [Phase 7 Problem Gate Omission](../../problems/2026-05/2026-05-15-phase-7-problem-gate-omission-problem.md)
+- [Electron Preload Sandbox Bridge](../../problems/2026-05/2026-05-15-electron-preload-sandbox-bridge-problem.md)
 - [Vite Loopback Origin CORS Drift](../../problems/2026-05/2026-05-07-vite-loopback-cors-problem.md)
+- Inbox: [Phase 7 Post-Install Validation Gaps](../../inbox/2026-05/2026-05-15-phase-7-post-install-validation-gaps-inbox.md)
 
 ## Notes
 
 - Packaged Electron keeps `webSecurity` enabled. The production fix is not `AllowAnyOrigin`; it is a narrow CORS predicate: dev origins are development-only, packaged `null` preflight is allowed, and actual browser `Origin` requests require the Electron-owned desktop access token whenever that token is configured.
 - `JOURNAL_DESKTOP_ACCESS_TOKEN` is an internal packaged runtime variable. If it is manually left in a development shell, dev browser requests without the token will be rejected by design.
 - Release staging now treats frontend asset path shape and frontend version metadata as build-time gates, so future installer builds fail before shipping a white-screen package.
+- The automated verification snapshot proves build artifacts, checksum, frontend build, and test suite health. It does not replace manual installed-app UX checks for About, legal notices, native path opening, and other Electron bridge surfaces.

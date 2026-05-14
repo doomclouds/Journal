@@ -765,11 +765,19 @@ describe("App", () => {
     await screen.findByText("本地优先晨间日记");
     act(() => handlers[0]("open-about"));
 
-    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
-    expect(screen.getByText("Backend 0.1.0")).toBeInTheDocument();
-    expect(screen.getByText(/Frontend/)).toBeInTheDocument();
-    expect(screen.getByText(/abc1234/)).toBeInTheDocument();
-    expect(screen.getByText(/AppData\\Local\\Journal/)).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "关于 Journal" });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Journal" })).toBeInTheDocument();
+    expect(within(dialog).getByText("本地优先的晨间日记与 AI 整理工具")).toBeInTheDocument();
+    expect(within(dialog).getByRole("region", { name: "版本信息" })).toHaveTextContent("0.1.0");
+    expect(within(dialog).getByText("Frontend")).toBeInTheDocument();
+    expect(within(dialog).getByText("Backend")).toBeInTheDocument();
+    expect(within(dialog).getByText(/abc1234/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/AppData\\Local\\Journal/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "关闭" }).textContent).toBe("");
+    expect(within(dialog).getByRole("button", { name: "Statement" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Privacy" }));
+    expect(within(dialog).getByRole("region", { name: "隐私边界" })).toHaveTextContent("本版本不提供云同步");
   });
 
   test("deduplicates duplicate about menu commands while app info is loading", async () => {
@@ -803,7 +811,8 @@ describe("App", () => {
 
     appInfoDeferred.resolve(mockJsonResponse(appInfo));
 
-    expect(await screen.findByText("Backend 0.1.0")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "关于 Journal" });
+    expect(within(dialog).getByRole("region", { name: "版本信息" })).toHaveTextContent("0.1.0");
   });
 
   test("focuses about close button and closes about panel on Escape", async () => {
@@ -833,6 +842,7 @@ describe("App", () => {
 
     const closeButton = await screen.findByRole("button", { name: "关闭" });
     expect(closeButton).toHaveFocus();
+    expect(closeButton.textContent).toBe("");
 
     fireEvent.keyDown(document, { key: "Escape" });
 
@@ -1781,6 +1791,7 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
     const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    expect(within(dialog).getByRole("button", { name: "关闭" }).textContent).toBe("");
     fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
 
     await waitFor(() =>
@@ -2017,6 +2028,21 @@ describe("App", () => {
 
     await waitFor(() => expect(selectImportPackage).toHaveBeenCalled());
     expect(pathInput).toHaveValue(existingPath);
+  });
+
+  test("shows a clear data backup message when native package selection is unavailable", async () => {
+    vi.stubGlobal("fetch", createInitialFetchMock());
+    vi.stubGlobal("journalDesktop", {});
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "选择导入包" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "当前环境不支持打开本地文件选择器，请手动填写导入包路径。"
+    );
   });
 
   test("LLM settings shows provider configuration without style selector buttons", async () => {

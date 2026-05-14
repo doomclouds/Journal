@@ -31,6 +31,10 @@ function getDefaultAllowedOpenRoots(dataRoot) {
   ];
 }
 
+function getDefaultExportDirectory(dataRoot) {
+  return path.join(dataRoot, ".journal", "exports");
+}
+
 function isSafeJournalOpenPath(targetPath, options = {}) {
   const { dataRoot, allowedRoots, exists = fs.existsSync } = options;
   if (typeof targetPath !== "string" || typeof dataRoot !== "string") {
@@ -54,20 +58,29 @@ function isSafeJournalOpenPath(targetPath, options = {}) {
 }
 
 async function openSafeJournalPath(targetPath, options) {
-  const { shell, dataRoot, exists } = options;
+  const { shell, dataRoot, exists, stat = fs.statSync } = options;
   if (!isSafeJournalOpenPath(targetPath, { dataRoot, exists })) {
     return false;
   }
 
-  const errorMessage = await shell.openPath(path.resolve(targetPath.trim()));
+  const resolvedPath = path.resolve(targetPath.trim());
+  let openTargetPath;
+  try {
+    openTargetPath = stat(resolvedPath).isDirectory() ? resolvedPath : path.dirname(resolvedPath);
+  } catch {
+    return false;
+  }
+
+  const errorMessage = await shell.openPath(openTargetPath);
   return errorMessage === "";
 }
 
 function createDataBackupIpcHandlers(options) {
-  const { ipcMain, dialog, shell, dataRoot, exists = fs.existsSync } = options;
+  const { ipcMain, dialog, shell, dataRoot, exists = fs.existsSync, stat = fs.statSync } = options;
   ipcMain.handle("journal:select-import-package", async () => {
     const result = await dialog.showOpenDialog({
       title: "选择导入包",
+      defaultPath: getDefaultExportDirectory(dataRoot),
       properties: ["openFile"],
       filters: [{ name: "Journal 数据包", extensions: ["zip"] }]
     });
@@ -80,11 +93,12 @@ function createDataBackupIpcHandlers(options) {
   });
 
   ipcMain.handle("journal:open-path", (_event, targetPath) =>
-    openSafeJournalPath(targetPath, { shell, dataRoot, exists }));
+    openSafeJournalPath(targetPath, { shell, dataRoot, exists, stat }));
 }
 
 module.exports = {
   createDataBackupIpcHandlers,
+  getDefaultExportDirectory,
   isSafeJournalOpenPath,
   openSafeJournalPath
 };

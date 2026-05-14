@@ -5,7 +5,8 @@ const require = createRequire(import.meta.url);
 const { createApplicationMenuTemplate, nativeMenuChannel } = require("../electron/menu.cjs");
 const {
   createDataBackupIpcHandlers,
-  isSafeJournalOpenPath
+  isSafeJournalOpenPath,
+  openSafeJournalPath
 } = require("../electron/dataBackupIpc.cjs");
 
 describe("Electron native menu", () => {
@@ -152,18 +153,21 @@ describe("Electron native menu", () => {
     };
     const dataRoot = "C:\\Users\\10062\\AppData\\Local\\Journal";
     const exportPath = "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\exports\\Journal.zip";
+    const exportDirectory = "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\exports";
 
     createDataBackupIpcHandlers({
       ipcMain,
       dialog,
       shell,
       dataRoot,
-      exists: (targetPath: string) => targetPath === exportPath
+      exists: (targetPath: string) => targetPath === exportPath,
+      stat: () => ({ isDirectory: () => false })
     });
 
     await handlers.get("journal:select-import-package")?.();
     expect(dialog.showOpenDialog).toHaveBeenCalledWith({
       title: "选择导入包",
+      defaultPath: exportDirectory,
       properties: ["openFile"],
       filters: [{ name: "Journal 数据包", extensions: ["zip"] }]
     });
@@ -171,6 +175,26 @@ describe("Electron native menu", () => {
     await expect(handlers.get("journal:open-path")?.({}, exportPath)).resolves.toBe(true);
     await expect(handlers.get("journal:open-path")?.({}, "C:\\Temp\\Journal.zip")).resolves.toBe(false);
     expect(shell.openPath).toHaveBeenCalledTimes(1);
-    expect(shell.openPath).toHaveBeenCalledWith(exportPath);
+    expect(shell.openPath).toHaveBeenCalledWith(exportDirectory);
+  });
+
+  test("safe open path opens directories directly and files through their parent folder", async () => {
+    const dataRoot = "C:\\Users\\10062\\AppData\\Local\\Journal";
+    const exportPath = "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\exports\\Journal.zip";
+    const exportDirectory = "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\exports";
+    const backupDirectory = "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\import-backups\\20260515";
+    const shell = {
+      openPath: vi.fn().mockResolvedValue("")
+    };
+    const exists = (targetPath: string) => targetPath === exportPath || targetPath === backupDirectory;
+    const stat = (targetPath: string) => ({
+      isDirectory: () => targetPath === backupDirectory
+    });
+
+    await expect(openSafeJournalPath(exportPath, { shell, dataRoot, exists, stat })).resolves.toBe(true);
+    await expect(openSafeJournalPath(backupDirectory, { shell, dataRoot, exists, stat })).resolves.toBe(true);
+
+    expect(shell.openPath).toHaveBeenNthCalledWith(1, exportDirectory);
+    expect(shell.openPath).toHaveBeenNthCalledWith(2, backupDirectory);
   });
 });

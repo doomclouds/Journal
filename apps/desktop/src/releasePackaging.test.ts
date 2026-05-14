@@ -43,4 +43,29 @@ describe("release packaging", () => {
       rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  test("keeps the modular Electron preload outside the renderer sandbox", () => {
+    const mainProcess = readFileSync(join(repoRoot, "apps", "desktop", "electron", "main.cjs"), "utf8");
+
+    expect(mainProcess).toContain('preload: path.join(__dirname, "preload.cjs")');
+    expect(mainProcess).toContain("contextIsolation: true");
+    expect(mainProcess).toContain("nodeIntegration: false");
+    expect(mainProcess).toContain("sandbox: false");
+  });
+
+  test("about panel styles use concrete theme values", () => {
+    const styles = readFileSync(join(repoRoot, "apps", "desktop", "src", "styles.css"), "utf8");
+    const aboutPanelMatch = styles.match(/\.about-panel\s*\{(?<body>[^}]+)\}/);
+
+    expect(aboutPanelMatch?.groups?.body).toContain("background: #fffdf8");
+    expect(styles).toContain(".about-product-mark");
+    expect(styles).toContain(".about-release-card");
+    expect(styles).toContain(".about-runtime-list");
+    expect(styles).toContain(".about-legal-detail");
+    expect(styles).toContain(".modal-close-action");
+    expect(aboutPanelMatch?.groups?.body).not.toContain("var(--surface)");
+    expect(aboutPanelMatch?.groups?.body).not.toContain("var(--border)");
+    expect(aboutPanelMatch?.groups?.body).not.toContain("var(--shadow-lg)");
+    expect(aboutPanelMatch?.groups?.body).not.toContain("var(--text-primary)");
+  });
 });

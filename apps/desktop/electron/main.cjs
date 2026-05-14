@@ -178,7 +178,9 @@ async function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // The preload currently composes local CommonJS modules for IPC bridges.
+      sandbox: false
     }
   });
   mainWindowRef = mainWindow;

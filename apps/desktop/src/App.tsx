@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { DatabaseBackup, FolderOpen, History, RefreshCw, Save, SendHorizontal } from "lucide-react";
+import { DatabaseBackup, FolderOpen, History, RefreshCw, Save, SendHorizontal, X } from "lucide-react";
 import {
   activateAiSettings,
   confirmTodayDraft,
@@ -64,7 +64,46 @@ import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
 type NativeMenuCommand = "open-llm-settings" | "open-about" | "open-data-backup";
+type AboutLegalNoticeId = "statement" | "license" | "privacy" | "data-safety" | "ai-notice";
 const nativeMenuDomEventName = "journal:native-menu-command";
+
+const aboutLegalNotices: Array<{
+  id: AboutLegalNoticeId;
+  label: string;
+  title: string;
+  body: string;
+}> = [
+  {
+    id: "statement",
+    label: "Statement",
+    title: "个人声明",
+    body: "Journal 是一个 local-first 的晨间日记应用，面向长期个人记忆。\n\n它更在意保留原始表达、把日记落成可读 Markdown、在写入正式条目前认真确认，并让本地数据归用户拥有。\n\nAI 可以帮忙整理结构，但人的表达、判断和确认才是日记的中心。"
+  },
+  {
+    id: "license",
+    label: "License",
+    title: "许可证",
+    body: "Journal 当前随仓库提供 Apache License 2.0 许可证文本。\n\n安装包会携带完整 LICENSE 与 NOTICE 文件。这里显示的是面向用户的入口摘要；完整条款以随软件分发的 LICENSE 文件为准。"
+  },
+  {
+    id: "privacy",
+    label: "Privacy",
+    title: "隐私边界",
+    body: "Journal 默认把日记条目、原始输入、草稿、版本快照、AI 审计记录和可重建索引保存在当前 Windows 用户的本地应用数据目录。\n\n本版本不提供云同步。启用真实 LLM provider 后，你提交用于整理日记的文本可能会发送给当前启用的 provider。"
+  },
+  {
+    id: "data-safety",
+    label: "Data Safety",
+    title: "数据安全",
+    body: "Markdown 日记、raw-input jsonl 和版本快照是长期 source material；SQLite 历史索引只是可重建缓存。\n\n卸载应用默认应保留本地用户数据。导入数据包会先备份当前数据，再恢复 source material 并重建索引。导出数据包默认不包含完整 API Key。"
+  },
+  {
+    id: "ai-notice",
+    label: "AI Notice",
+    title: "AI 使用说明",
+    body: "AI 输出是整理辅助，不是事实源。\n\n真实 LLM 或 Mock provider 生成的内容会先进入草稿边界。正式 Markdown 日记只有在用户确认当前草稿后才会更新。校验失败时，Journal 会创建 attention 草稿并保留修复信息，不覆盖正式日记。"
+  }
+];
 
 declare global {
   interface Window {
@@ -178,6 +217,8 @@ export default function App() {
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [aboutError, setAboutError] = useState("");
+  const [selectedAboutLegalNoticeId, setSelectedAboutLegalNoticeId] =
+    useState<AboutLegalNoticeId>("statement");
   const [dataBackupError, setDataBackupError] = useState("");
   const [importPackagePath, setImportPackagePath] = useState("");
   const [dataExportResult, setDataExportResult] = useState<JournalDataExportResult | null>(null);
@@ -480,6 +521,8 @@ export default function App() {
   })) ?? [];
   const todayTags = Array.from(new Set(rawInputViews.flatMap(item => item.tags)));
   const visibleTodayTags = todayTags.length > 0 ? todayTags : ["#今日材料"];
+  const selectedAboutLegalNotice =
+    aboutLegalNotices.find(notice => notice.id === selectedAboutLegalNoticeId) ?? aboutLegalNotices[0];
   const documentTitle = hasEditableJournal ? "把今天收好" : "今天先写一句";
   const documentSubtitle = inputCount > 0
     ? "今天的原始表达已经保留。先确认日记段落，再把它保存成本地 Markdown。"
@@ -497,6 +540,7 @@ export default function App() {
     aboutInFlightRef.current = null;
     setIsAboutOpen(false);
     setAboutError("");
+    setSelectedAboutLegalNoticeId("statement");
   }
 
   function resetDataBackupPanelState() {
@@ -528,6 +572,7 @@ export default function App() {
     setIsLlmPanelOpen(false);
     setIsAboutOpen(true);
     setAboutError("");
+    setSelectedAboutLegalNoticeId("statement");
     if (aboutInFlightRef.current) {
       return;
     }
@@ -579,7 +624,13 @@ export default function App() {
 
     setDataBackupError("");
     try {
-      const selectedPath = await window.journalDesktop?.selectImportPackage?.();
+      const selectImportPackage = window.journalDesktop?.selectImportPackage;
+      if (!selectImportPackage) {
+        setDataBackupError("当前环境不支持打开本地文件选择器，请手动填写导入包路径。");
+        return;
+      }
+
+      const selectedPath = await selectImportPackage();
       if (selectedPath) {
         setImportPackagePath(selectedPath);
       }
@@ -1624,8 +1675,15 @@ export default function App() {
                 <strong>数据与备份</strong>
                 <span>导出、迁移和恢复本地 Journal 数据</span>
               </div>
-              <button type="button" ref={dataBackupCloseButtonRef} onClick={closeDataBackupPanel}>
-                关闭
+              <button
+                type="button"
+                className="icon-action modal-close-action"
+                ref={dataBackupCloseButtonRef}
+                aria-label="关闭"
+                title="关闭"
+                onClick={closeDataBackupPanel}
+              >
+                <X size={18} strokeWidth={1.9} aria-hidden="true" />
               </button>
             </header>
 
@@ -1740,17 +1798,40 @@ export default function App() {
             ref={aboutDialogRef}
             tabIndex={-1}
           >
-            <header>
-              <h2>关于 Journal</h2>
-              <button type="button" ref={aboutCloseButtonRef} onClick={closeAboutPanel}>关闭</button>
+            <header className="about-panel-head">
+              <div className="about-product">
+                <span className="about-product-mark" aria-hidden="true">J</span>
+                <div>
+                  <h2>Journal</h2>
+                  <p>本地优先的晨间日记与 AI 整理工具</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="icon-action modal-close-action"
+                ref={aboutCloseButtonRef}
+                aria-label="关闭"
+                title="关闭"
+                onClick={closeAboutPanel}
+              >
+                <X size={18} strokeWidth={1.9} aria-hidden="true" />
+              </button>
             </header>
-            <dl>
-              <dt>Release</dt>
-              <dd>{appInfo?.releaseVersion ?? frontendBuildInfo.releaseVersion}</dd>
-              <dt>前端</dt>
-              <dd>Frontend {frontendBuildInfo.frontendVersion}</dd>
-              <dt>Backend</dt>
-              <dd>{appInfo ? `Backend ${appInfo.version}` : "Backend 未连接"}</dd>
+            <section className="about-release-card" aria-label="版本信息">
+              <div>
+                <span>Release</span>
+                <strong>{appInfo?.releaseVersion ?? frontendBuildInfo.releaseVersion}</strong>
+              </div>
+              <div>
+                <span>Frontend</span>
+                <strong>{frontendBuildInfo.frontendVersion}</strong>
+              </div>
+              <div>
+                <span>Backend</span>
+                <strong>{appInfo?.version ?? "未连接"}</strong>
+              </div>
+            </section>
+            <dl className="about-runtime-list">
               <dt>Commit</dt>
               <dd>{appInfo?.commit ?? frontendBuildInfo.commit}</dd>
               <dt>Build</dt>
@@ -1759,12 +1840,23 @@ export default function App() {
               <dd>{appInfo?.dataRoot ?? "本地服务未连接"}</dd>
             </dl>
             {aboutError ? <p className="api-error" role="alert">{aboutError}</p> : null}
-            <footer>
-              <span>License</span>
-              <span>Privacy</span>
-              <span>Data Safety</span>
-              <span>AI Notice</span>
+            <footer className="about-legal-links" aria-label="法务与安全说明">
+              {aboutLegalNotices.map(notice => (
+                <button
+                  type="button"
+                  key={notice.id}
+                  className={notice.id === selectedAboutLegalNotice.id ? "active" : ""}
+                  aria-pressed={notice.id === selectedAboutLegalNotice.id}
+                  onClick={() => setSelectedAboutLegalNoticeId(notice.id)}
+                >
+                  {notice.label}
+                </button>
+              ))}
             </footer>
+            <section className="about-legal-detail" aria-live="polite" aria-label={selectedAboutLegalNotice.title}>
+              <h3>{selectedAboutLegalNotice.title}</h3>
+              <p>{selectedAboutLegalNotice.body}</p>
+            </section>
           </section>
         </div>
       ) : null}

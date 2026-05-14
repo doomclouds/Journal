@@ -33,6 +33,10 @@ body:has(.data-backup-panel) {
   overflow: hidden;
 }
 
+body:has(.about-panel) {
+  overflow: hidden;
+}
+
 button,
 textarea {
   font: inherit;
@@ -1044,6 +1048,11 @@ button:focus-visible {
 }
 
 .llm-close-action {
+  background: transparent;
+}
+
+.modal-close-action {
+  flex: 0 0 auto;
   background: transparent;
 }
 
@@ -3226,39 +3235,177 @@ button:focus-visible {
 }
 
 .about-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  color: var(--text-primary);
-  margin: 8vh auto;
-  max-width: 620px;
-  padding: 22px;
+  position: relative;
+  z-index: 10;
+  width: min(680px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  background: #fffdf8;
+  border: 1px solid #c7c0b4;
+  border-radius: 12px;
+  box-shadow: 0 28px 80px rgba(42, 36, 28, 0.28);
+  color: var(--ink);
+  margin: 6vh auto;
+  padding: 0;
 }
 
-.about-panel header,
-.about-panel footer {
-  align-items: center;
+.about-panel-head {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  border-bottom: 1px solid #ded7cc;
+  padding: 24px 24px 20px;
 }
 
-.about-panel dl {
-  display: grid;
-  gap: 10px 16px;
-  grid-template-columns: 120px minmax(0, 1fr);
-  margin: 18px 0;
+.about-product {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-.about-panel dt {
-  color: var(--text-secondary);
-  font-weight: 700;
+.about-product-mark {
+  width: 54px;
+  height: 54px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(47, 111, 95, 0.32);
+  border-radius: 14px;
+  background: #2f6f5f;
+  color: #fffdf8;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(47, 111, 95, 0.18);
 }
 
-.about-panel dd {
+.about-product h2 {
   margin: 0;
+  color: #24231f;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+
+.about-product p {
+  margin: 6px 0 0;
+  color: #655d53;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.about-release-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border-bottom: 1px solid #ebe4d8;
+  background: #faf7f0;
+  padding: 14px 24px;
+}
+
+.about-release-card div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  border: 1px solid #ded7cc;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 10px 12px;
+}
+
+.about-release-card span,
+.about-runtime-list dt {
+  color: #655d53;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.about-release-card strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #24231f;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-runtime-list {
+  display: grid;
+  gap: 12px 18px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  margin: 0;
+  padding: 18px 24px 20px;
+}
+
+.about-runtime-list dt {
+  align-self: start;
+  padding-top: 2px;
+}
+
+.about-runtime-list dd {
+  margin: 0;
+  color: #24231f;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.about-legal-links {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid #ebe4d8;
+}
+
+.about-legal-links button {
+  min-width: 0;
+  min-height: 46px;
+  border: 0;
+  border-right: 1px solid #ebe4d8;
+  border-radius: 0;
+  background: #fffdf8;
+  color: #2f2a24;
+  padding: 0 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.about-legal-links button:last-child {
+  border-right: 0;
+}
+
+.about-legal-links button:hover,
+.about-legal-links button.active {
+  background: #eef5f1;
+  color: #2f6f5f;
+}
+
+.about-legal-links button:focus-visible {
+  outline: 2px solid rgba(45, 116, 106, 0.35);
+  outline-offset: -3px;
+}
+
+.about-legal-detail {
+  border-top: 1px solid #ebe4d8;
+  background: #fbf8f1;
+  padding: 16px 24px 20px;
+}
+
+.about-legal-detail h3 {
+  margin: 0 0 8px;
+  color: #2f2a24;
+  font-size: 15px;
+}
+
+.about-legal-detail p {
+  margin: 0;
+  color: #3d3933;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 1280px) {
