@@ -78,6 +78,32 @@ function getRawInputTags(text: string): string[] {
 
 const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补充或重新整理。";
 const terminalHarnessStatuses = new Set(["reviewing", "attention", "no-change", "failed", "interrupted"]);
+const daysInMonthByNumber = new Map([
+  [1, 31],
+  [2, 29],
+  [3, 31],
+  [4, 30],
+  [5, 31],
+  [6, 30],
+  [7, 31],
+  [8, 31],
+  [9, 30],
+  [10, 31],
+  [11, 30],
+  [12, 31]
+]);
+
+function isValidAnniversaryMonthDay(monthDay: string) {
+  const match = /^(\d{2})-(\d{2})$/.exec(monthDay);
+  if (!match) {
+    return false;
+  }
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const maxDay = daysInMonthByNumber.get(month);
+  return maxDay !== undefined && day >= 1 && day <= maxDay;
+}
 
 function isTerminalHarnessEvent(event: JournalHarnessRunEvent) {
   return terminalHarnessStatuses.has(event.status)
@@ -593,6 +619,8 @@ export default function App() {
     const historyRequestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = historyRequestId;
     setHistoryError("");
+    setAnniversaryResult(null);
+    setHistorySelectedDate("");
     setHistoryDetail(null);
     setHistoryVersions([]);
     setHistoryVersionDetail(null);
@@ -658,9 +686,19 @@ export default function App() {
 
   function handleAnniversaryMonthDayChange(monthDay: string) {
     setAnniversaryMonthDay(monthDay);
-    if (/^\d{2}-\d{2}$/.test(monthDay)) {
+    if (isValidAnniversaryMonthDay(monthDay)) {
       void refreshAnniversary(monthDay);
+      return;
     }
+
+    historyRequestIdRef.current += 1;
+    historyVersionRequestIdRef.current += 1;
+    setAnniversaryResult(null);
+    setHistorySelectedDate("");
+    setHistoryDetail(null);
+    setHistoryVersions([]);
+    setHistoryVersionDetail(null);
+    setHistoryError("monthDay is invalid");
   }
 
   function clearHistoryVersionDetail() {

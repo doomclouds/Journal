@@ -942,6 +942,34 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /2025/ })).toBeInTheDocument();
   });
 
+  test("clears anniversary results and blocks invalid month-day requests", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    expect(await screen.findByRole("button", { name: /2025/ })).toBeInTheDocument();
+    expect(screen.getByText("去年同一天的原始材料")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "02-30" } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("monthDay is invalid");
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "http://localhost:5057/journal/history/anniversary/02-30?limit=50",
+      undefined
+    );
+    expect(screen.queryByRole("button", { name: /2025/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("去年同一天的原始材料")).not.toBeInTheDocument();
+  });
+
   test("keeps newest selected history date when detail requests resolve out of order", async () => {
     const olderDate = {
       ...journalDate,
