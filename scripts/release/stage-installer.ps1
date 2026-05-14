@@ -66,6 +66,42 @@ function Import-BuildMetadata {
   return $metadata
 }
 
+function Assert-BuildMetadata {
+  param([hashtable]$Metadata)
+
+  $expectedValues = @{
+    JOURNAL_RELEASE_VERSION = $ReleaseVersion
+    VITE_JOURNAL_RELEASE_VERSION = $ReleaseVersion
+    VITE_JOURNAL_FRONTEND_VERSION = $ReleaseVersion
+  }
+
+  foreach ($name in $expectedValues.Keys) {
+    if (-not $Metadata.ContainsKey($name)) {
+      throw "Build metadata is missing required value: $name"
+    }
+
+    if ($Metadata[$name] -ne $expectedValues[$name]) {
+      throw "Build metadata $name=$($Metadata[$name]) does not match release version $ReleaseVersion."
+    }
+  }
+}
+
+function Assert-DesktopDistUsesRelativeAssets {
+  $indexPath = Join-Path $repoRoot "apps/desktop/dist/index.html"
+  if (-not (Test-Path -LiteralPath $indexPath -PathType Leaf)) {
+    throw "Desktop build index was not created: $indexPath"
+  }
+
+  $html = [System.IO.File]::ReadAllText($indexPath, [System.Text.Encoding]::UTF8)
+  if ($html -match '(?i)\b(?:src|href)="/assets/') {
+    throw "Desktop build index contains root-relative asset paths. Configure Vite base to use relative packaged paths."
+  }
+
+  if ($html -notmatch '(?i)\b(?:src|href)="(?:\./)?assets/') {
+    throw "Desktop build index does not reference relative asset paths."
+  }
+}
+
 function Copy-RequiredFile {
   param(
     [string]$Source,
@@ -154,6 +190,7 @@ $packageJsonPath = Join-Path $repoRoot "apps/desktop/package.json"
 Assert-PublishRootIsSafe -PathValue $resolvedPublishRoot
 & (Join-Path $PSScriptRoot "write-build-metadata.ps1") -ReleaseVersion $ReleaseVersion -OutputPath $metadataPath
 $metadata = Import-BuildMetadata -PathValue $metadataPath
+Assert-BuildMetadata -Metadata $metadata
 
 if (Test-Path -LiteralPath $resolvedPublishRoot) {
   Remove-Item -LiteralPath $resolvedPublishRoot -Recurse -Force
@@ -169,6 +206,7 @@ try {
   Invoke-NativeCommand -Name "npm run build" -Command {
     npm run build --prefix apps/desktop
   }
+  Assert-DesktopDistUsesRelativeAssets
   Invoke-WithTemporaryPackageVersion -PackageJsonPath $packageJsonPath -Command {
     Invoke-NativeCommand -Name "npm run package:win" -Command {
       npm run package:win --prefix apps/desktop

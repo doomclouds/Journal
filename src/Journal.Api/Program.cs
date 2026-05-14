@@ -24,10 +24,15 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("DesktopDevelopment", policy =>
     {
+        var allowedOrigins = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "null"
+        };
+
         policy
-            .WithOrigins(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173")
+            .SetIsOriginAllowed(origin => allowedOrigins.Contains(origin))
             .AllowAnyHeader()
             .AllowAnyMethod();
     });

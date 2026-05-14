@@ -34,6 +34,7 @@ $metadata = @(
   "JOURNAL_RELEASE_VERSION=$ReleaseVersion"
   "JOURNAL_BUILD_COMMIT=$commit"
   "JOURNAL_BUILD_TIME_UTC=$buildTime"
+  "VITE_JOURNAL_FRONTEND_VERSION=$ReleaseVersion"
   "VITE_JOURNAL_RELEASE_VERSION=$ReleaseVersion"
   "VITE_JOURNAL_COMMIT=$commit"
   "VITE_JOURNAL_BUILD_TIME_UTC=$buildTime"

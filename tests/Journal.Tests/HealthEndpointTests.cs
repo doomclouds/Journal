@@ -80,6 +80,23 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Contains("http://127.0.0.1:5173", origins);
     }
 
+    [Theory]
+    [InlineData("http://localhost:5173")]
+    [InlineData("null")]
+    public async Task HealthEndpoint_AllowsPackagedAndDevelopmentPreflightOrigins(string origin)
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/health");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
+        Assert.Contains(origin, origins);
+    }
+
     [Fact]
     public async Task GetAppInfo_ReturnsVersionBuildAndStoragePaths()
     {
