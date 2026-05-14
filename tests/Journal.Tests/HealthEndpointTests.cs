@@ -80,10 +80,44 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Contains("http://127.0.0.1:5173", origins);
     }
 
+    [Fact]
+    public async Task GetAppInfo_ReturnsVersionBuildAndStoragePaths()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = TodayJournalEndpointTests.CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/app/info");
+
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+        Assert.Equal("Journal.Api", root.GetProperty("name").GetString());
+        Assert.Equal("0.1.0", root.GetProperty("version").GetString());
+        Assert.Equal("0.1.0", root.GetProperty("releaseVersion").GetString());
+        Assert.Equal("dev", root.GetProperty("commit").GetString());
+        Assert.Equal("local", root.GetProperty("buildTimeUtc").GetString());
+        Assert.Equal("Development", root.GetProperty("environment").GetString());
+        Assert.Equal(workspace.Root, root.GetProperty("dataRoot").GetString());
+        Assert.EndsWith(Path.Combine(".journal", "index", "journal.db"), root.GetProperty("indexPath").GetString());
+    }
+
     private sealed record HealthResponse(
         string App,
         string Status,
         string Version,
         string Environment,
         DateTimeOffset ServerTime);
+
+    private sealed class TempWorkspace : IDisposable
+    {
+        public string Root { get; } = Path.Combine(Path.GetTempPath(), "journal-health-endpoint-tests", Guid.NewGuid().ToString("N"));
+
+        public static TempWorkspace Create() => new();
+
+        public void Dispose()
+        {
+            TestWorkspaceCleanup.DeleteDirectory(Root);
+        }
+    }
 }

@@ -1281,6 +1281,9 @@ public sealed class TodayJournalEndpointTests
         return JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse($"{date.IsoDate}T09:00:00+08:00"));
     }
 
+    internal static WebApplicationFactory<Program> CreateFactory(string root) =>
+        CreateFactory(root, env: null, runtime: null);
+
     private static WebApplicationFactory<Program> CreateFactory(
         string root,
         IReadOnlyDictionary<string, string?>? env = null,

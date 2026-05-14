@@ -71,6 +71,23 @@ app.MapGet("/health", (IHostEnvironment environment) =>
         DateTimeOffset.Now));
 });
 
+app.MapGet("/app/info", (
+    IHostEnvironment environment,
+    JournalStorageOptions storageOptions,
+    LocalJournalPaths paths) =>
+{
+    var build = ApplicationBuildInfo.Current;
+    return Results.Ok(new AppInfoResponse(
+        ApplicationInfo.Name,
+        ApplicationInfo.Version,
+        build.ReleaseVersion,
+        build.Commit,
+        build.BuildTimeUtc,
+        environment.EnvironmentName,
+        storageOptions.RootDirectory,
+        paths.IndexPath()));
+});
+
 app.MapGet("/settings/ai", async (JournalAiSettingsService service, CancellationToken cancellationToken) =>
 {
     var view = await service.ReadViewAsync(cancellationToken);
@@ -609,3 +626,13 @@ public sealed record HealthResponse(
     string Version,
     string Environment,
     DateTimeOffset ServerTime);
+
+public sealed record AppInfoResponse(
+    string Name,
+    string Version,
+    string ReleaseVersion,
+    string Commit,
+    string BuildTimeUtc,
+    string Environment,
+    string DataRoot,
+    string IndexPath);
