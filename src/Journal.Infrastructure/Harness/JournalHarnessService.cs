@@ -243,7 +243,10 @@ public sealed class JournalHarnessService
                 var allInputs = await _rawInputStore.ReadAsync(date, cancellationToken);
                 var draft = await _draftStore.ReadAsync(date, cancellationToken);
                 var entry = await _entryStore.ReadAsync(date, cancellationToken);
-                var baselineMarkdown = draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, allInputs, now);
+                var isReorganizeExistingRun = IsReorganizeExistingRun(run);
+                var baselineMarkdown = isReorganizeExistingRun
+                    ? CreateEmptyDraftMarkdown(date, allInputs, now)
+                    : draft?.Markdown ?? entry?.Markdown ?? CreateEmptyDraftMarkdown(date, allInputs, now);
                 var baselineDocument = BuildBaselineDocumentWithServerRawInputs(baselineMarkdown, allInputs);
                 var authoritativeBaselineMarkdown = JmfMarkdownComposer.Compose(baselineDocument);
                 var promptContextInputs = GetPromptContextInputs(run, allInputs);
@@ -376,13 +379,13 @@ public sealed class JournalHarnessService
         string authoritativeBaselineMarkdown,
         string confirmedEntryMarkdown)
     {
-        if (string.Equals(run.Mode, JournalHarnessPrompt.ReorganizeExistingMode, StringComparison.Ordinal))
+        if (IsReorganizeExistingRun(run))
         {
             return JournalHarnessPrompt.BuildForReorganizeExisting(
                 date,
                 inputs,
-                authoritativeBaselineMarkdown,
-                confirmedEntryMarkdown);
+                string.Empty,
+                string.Empty);
         }
 
         if (!string.Equals(run.Mode, JournalHarnessPrompt.AppendInputMode, StringComparison.Ordinal))
@@ -424,6 +427,9 @@ public sealed class JournalHarnessService
             .Where(input => !string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
             .ToArray();
     }
+
+    private static bool IsReorganizeExistingRun(JournalHarnessAuditRun run) =>
+        string.Equals(run.Mode, JournalHarnessPrompt.ReorganizeExistingMode, StringComparison.Ordinal);
 
     private async Task<TodayJournalState> BuildStateAsync(
         JournalDate date,

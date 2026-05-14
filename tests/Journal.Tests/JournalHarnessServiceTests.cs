@@ -374,6 +374,40 @@ public sealed class JournalHarnessServiceTests
     }
 
     [Fact]
+    public async Task ExecuteRunAsync_WithReorganizeExisting_RebuildsDraftFromRawInputsOnly()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var date = JournalDate.From(FixedDay);
+        await SeedExistingDraftAsync(paths, date);
+        var operation = JournalHarnessOperation.Upsert(
+            "today-focus",
+            "- **今天最重要**：根据原始输入重新整理日记结构",
+            ["raw-existing"],
+            "重新整理按钮应只基于历史 raw inputs 重建日记正文。");
+        var runtime = new CapturingPlannerRuntime(
+            JournalHarnessPlannerRuntimeResult.Success([operation], "reorganize accepted", TimeSpan.FromMilliseconds(17)));
+        var service = CreateService(paths, runtime);
+        var started = await service.StartTodayRunAsync(
+            JournalHarnessRunStartRequest.ReorganizeExisting(),
+            CancellationToken.None);
+
+        var result = await service.ExecuteRunAsync(started.Run.Id, CancellationToken.None);
+
+        Assert.Equal("reviewing", result.Run.Status);
+        Assert.NotNull(runtime.LastHarnessPlannerRequest);
+        using var context = JsonDocument.Parse(runtime.LastHarnessPlannerRequest.ProtectedContext);
+        Assert.False(context.RootElement.TryGetProperty("currentDraftMarkdown", out _));
+        Assert.False(context.RootElement.TryGetProperty("confirmedEntryMarkdown", out _));
+        var draftMarkdown = result.Today.Draft!.Markdown;
+        Assert.Contains("旧 raw input 已在 draft 里", GetSection(draftMarkdown, "raw-inputs").Content, StringComparison.Ordinal);
+        Assert.Contains("根据原始输入重新整理日记结构", GetSection(draftMarkdown, "today-focus").Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("旧的昨日回顾", draftMarkdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("用户保留的今日重点", draftMarkdown, StringComparison.Ordinal);
+        Assert.False(File.Exists(paths.EntryPath(date)));
+    }
+
+    [Fact]
     public async Task ExecuteRunAsync_WithAppendInput_ExcludesCurrentInputFromJournalContextButKeepsRawSectionAuthoritative()
     {
         using var workspace = TempWorkspace.Create();

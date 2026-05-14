@@ -110,7 +110,7 @@ public sealed class JournalHarnessPromptTests
     }
 
     [Fact]
-    public void BuildForReorganizeExisting_UsesFixedUserPromptAndDoesNotRequireCurrentRawInput()
+    public void BuildForReorganizeExisting_UsesOnlyHistoricalRawInputsAndDoesNotExposeDraftOrEntry()
     {
         var date = JournalDate.From(new DateOnly(2026, 5, 13));
         var historicalRawInputs = new[]
@@ -133,14 +133,19 @@ public sealed class JournalHarnessPromptTests
         Assert.Equal("journal-harness-v2", context.RootElement.GetProperty("version").GetString());
         Assert.Equal("reorganize-existing", context.RootElement.GetProperty("mode").GetString());
         Assert.Contains("历史输入：今天要重新整理。", request.ProtectedContext, StringComparison.Ordinal);
+        Assert.False(context.RootElement.TryGetProperty("currentDraftMarkdown", out _));
+        Assert.False(context.RootElement.TryGetProperty("confirmedEntryMarkdown", out _));
+        Assert.DoesNotContain("# Draft", request.ProtectedContext, StringComparison.Ordinal);
+        Assert.DoesNotContain("# Entry", request.ProtectedContext, StringComparison.Ordinal);
         Assert.Equal(JournalHarnessPrompt.ReorganizeExistingUserMessage, request.UserMessage);
         Assert.Contains("本次请求不是新的原始输入", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("不要新增、改写或覆盖 raw inputs", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("protected context", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("全量结构重组", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("历史 raw inputs 是最高事实来源", request.UserMessage, StringComparison.Ordinal);
-        Assert.Contains("current draft 和 confirmed entry 只是参考材料", request.UserMessage, StringComparison.Ordinal);
-        Assert.Contains("摈弃当前草稿里已经形成但不合理的旧结构", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("不要读取、参考或继承 current draft", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("放弃现有全部日记正文", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("不得把旧日记正文当作事实来源", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("重新规划整篇日记的九宫格分布", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("合并重复、移动错分、压缩冗余表达", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("id", request.UserMessage, StringComparison.Ordinal);
@@ -153,8 +158,9 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("轻量结构调整", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("按钮重新整理", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("强结构重组模式", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("current draft / confirmed entry 只作为参考", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("不要保守地维持旧 section 分布", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("只提供 historical raw inputs", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不提供 currentDraftMarkdown", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("放弃现有全部日记正文", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]

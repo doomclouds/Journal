@@ -174,17 +174,17 @@ PUT http://localhost:5057/journal/today/editor/source
 
 ## 阶段 6：LLM Harness Core
 
-Harness Core 将 LLM 从“整篇生成器”收束为受控工具调用：稳定的 Markdown system instructions 描述 planner 方法论和安全边界，动态 journal context 提供历史 raw inputs、当前 draft、正式 entry、section catalog 和工具约束；当前用户输入只作为本次 user message 参与决策，模型不能直接写 Markdown 或正式 entry。
+Harness Core 将 LLM 从“整篇生成器”收束为受控工具调用：稳定的 Markdown system instructions 描述 planner 方法论和安全边界，动态 journal context 提供历史 raw inputs、section catalog 和工具约束；append 输入时额外提供当前 draft / 正式 entry 作为安全边界材料，当前用户输入只作为本次 user message 参与决策，模型不能直接写 Markdown 或正式 entry。
 
 阶段 6 已交付：
 
 - 今日工作台底部输入提交和“重新整理”都已接入 `POST /journal/today/harness/runs`，并通过 SSE 等待 harness run 完成后刷新日记纸面。
 - `append-input` run 会持久化当前输入，供后续运行作为历史 raw input；但本次 planner prompt 中当前输入只出现在 user message，不会混入历史 raw inputs context。
-- `reorganize-existing` run 不追加 raw input，而是使用固定服务端 user message，让模型基于已有 raw inputs、当前 draft 和正式 entry 重新协调九宫格内容分布。
+- `reorganize-existing` run 不追加 raw input，而是使用固定服务端 user message；服务端只把已有 raw inputs、section catalog 和工具约束提供给 LLM，不提供当前 draft 或正式 entry。
 - LLM 只能调用 append / upsert / revise AI section / no-op 工具，工具调用先被收集为计划，再由服务端执行。
 - 用户内容只能被追加，不能被删除、清空或替换；`raw-inputs` 仍由服务端原始输入生成和保护。
 - Harness Planner 的 section catalog 携带主题语义和避让规则；同一事实应进入一个最合适的 section，具体工作、学习、健康等主题不应重复堆进 `today-focus`。
-- 今日页按钮“重新整理”是强结构重组模式：以历史 raw inputs 为最高事实来源，当前 draft / confirmed entry 只作参考，AI 应重新规划整篇九宫格结构、合并重复、移动错分并压缩冗余。
+- 今日页按钮“重新整理”是强结构重组模式：以历史 raw inputs 为唯一日记事实来源，放弃现有全部日记正文，不让 LLM 参考或继承当前 draft / confirmed entry，并重新规划整篇九宫格结构、合并重复、移动错分并压缩冗余。
 - Harness Planner 要用 Markdown 语法标注重点内容，例如用 `**加粗**` 标出关键行动、关键风险和今日最重要目标，并按轻重缓急排序。
 - Harness 执行器会把 AI 工具内容规范为 Markdown bullet list，并对本轮完全重复的工具内容做服务端去重。
 - `appendJournalSection`、`upsertJournalSection`、`reviseAiGeneratedSection` 和 `noOp` 映射到 JMF operation executor，并经过 JMF validation。

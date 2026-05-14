@@ -13,7 +13,7 @@
 ## Delivered Scope
 
 - `JournalHarnessPrompt` 升级为 `journal-harness-v2`，System Instructions 使用 Markdown contract 表达 Core Principle、Priority Order、Protected Context Boundary、Green Path、Red Lines、工具选择、正反例和写作风格。
-- Journal Context 动态携带 mode、historical raw inputs、current draft、confirmed entry、section catalog 和 available tools；section catalog 来自 `JmfSectionCatalog`。
+- Journal Context 动态携带 mode、historical raw inputs、section catalog 和 available tools；append-input 模式额外携带 current draft / confirmed entry，reorganize-existing 模式只提供 raw inputs，不向 LLM 暴露旧日记正文。
 - Harness Run 新增 `append-input` 与 `reorganize-existing` 两种模式；新增输入会保存为后续 raw input，但本轮 planner 只把它当作 user message。
 - `reorganize-existing` 使用服务端固定 user prompt，不追加 raw input，并继续通过 Harness tools 与 SSE 写 draft / audit。
 - 今日页“重新整理”改为调用 `/journal/today/harness/runs` + SSE，普通输入和重新整理都能产生 audit run。

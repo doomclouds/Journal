@@ -53,7 +53,7 @@ Layer 1: System Instructions
 
 Layer 2: Journal Context
   每次 run 动态构建
-  负责当天已有 raw inputs、当前 draft、confirmed entry、section catalog、provenance summary、available tools
+  负责当天已有 raw inputs、section catalog、provenance summary、available tools；append-input 模式额外提供当前 draft 和 confirmed entry
   作为 protected context 传给模型，供 planner 判断事实、重复、可修改范围和 section 分配
 
 User Message
@@ -67,7 +67,7 @@ User Message
 | 层级 | 内容 | 生命周期 | 禁止内容 |
 | --- | --- | --- | --- |
 | System Instructions | Planner 方法论、优先级、绿色通道、红线、工具选择、正反例 | 随 prompt version 变化 | 具体日记原文、API key、用户当天隐私上下文 |
-| Journal Context | historical raw inputs、draft、confirmed entry、section catalog、provenance、tools | 每次 run 重新构建 | 本轮 user message 伪装成历史 raw input |
+| Journal Context | historical raw inputs、section catalog、provenance、tools；append-input 模式额外包含 draft、confirmed entry | 每次 run 重新构建 | 本轮 user message 伪装成历史 raw input；重新整理模式夹带旧日记正文 |
 | User Message | 本轮用户意图 | 每次 run 单独传入 | 历史 raw inputs 拼接、系统规则拼接 |
 
 这样拆分的原因：
@@ -75,7 +75,7 @@ User Message
 - system instructions 是“模型应该如何工作”，不应该被具体日记材料污染。
 - journal context 是“这一天当前有什么材料”，不应该承担长期规则表达。
 - user message 是“这一轮用户想做什么”，优先级高于历史 raw inputs。
-- 重新整理时 user message 是固定意图提示，不是 raw input，也不是日记正文。
+- 重新整理时 user message 是固定意图提示，不是 raw input，也不是日记正文；该模式只把历史 raw inputs 提供给 LLM，不提供当前 draft / confirmed entry。
 
 ### 4.2 Prompt 请求结构
 
@@ -109,13 +109,13 @@ user message = 本轮刚进入 Harness Planner 的用户意图
 
 ### 4.3 Journal Context 构建规则
 
-Journal Context 是第二层动态上下文，推荐包含：
+Journal Context 是第二层动态上下文，append-input 模式推荐包含：
 
 ```json
 {
   "version": "journal-harness-v2",
   "date": "2026-05-13",
-  "mode": "append-input | reorganize-existing",
+  "mode": "append-input",
   "historicalRawInputs": [],
   "currentDraftMarkdown": "",
   "confirmedEntryMarkdown": "",
@@ -132,8 +132,9 @@ Journal Context 是第二层动态上下文，推荐包含：
 构建规则：
 
 - `historicalRawInputs` 只读取本轮 user message 之前已经存在的 raw inputs。
-- `currentDraftMarkdown` 用于判断当前 draft 内容、重复风险和可修改范围。
-- `confirmedEntryMarkdown` 用于理解已确认事实，但不能被 Harness 直接覆盖。
+- `currentDraftMarkdown` 仅用于 append-input 模式，帮助判断当前 draft 内容、重复风险和可修改范围。
+- `confirmedEntryMarkdown` 仅用于 append-input 模式，帮助理解已确认事实，但不能被 Harness 直接覆盖。
+- `reorganize-existing` 模式不提供 `currentDraftMarkdown` 和 `confirmedEntryMarkdown`，只提供 historical raw inputs、section catalog 和工具约束。
 - `sectionCatalog` 必须来自 `JmfSectionCatalog`，不要维护一份和代码分离、可能漂移的旧 catalog。
 - `sectionProvenance` 用于判断 section 是否可 revise，还是只能 append。
 - `availableTools` 必须和真实 Agent Framework tool schema 对齐。
@@ -303,7 +304,7 @@ GET  /journal/audit?date=yyyy-MM-dd
 
 当前 `user message` 是本轮唯一的当前意图来源。即使它会在服务端被保存为 raw input，你在本轮规划时也必须把它当作 current user message，而不是 historical raw input。
 
-如果当前 `user message` 是重新整理指令，它不是日记正文，也不是新的 raw input。你只能基于 protected context 中已有的 raw inputs、current draft 和 confirmed entry 重新规划安全操作。
+如果当前 `user message` 是重新整理指令，它不是日记正文，也不是新的 raw input。你只能基于 protected context 中已有的 raw inputs 重新规划整篇日记结构；reorganize-existing mode 不会提供 current draft 或 confirmed entry。
 
 ## Green Path: What You Should Do
 
@@ -312,7 +313,7 @@ GET  /journal/audit?date=yyyy-MM-dd
 - **一次输入可以影响多个 section。**
 - **如果用户要求改写已有 AI 内容，优先使用 `reviseAiGeneratedSection`。**
 - **如果用户提供新事实，使用 `appendJournalSection` 或 `upsertJournalSection`。**
-- **如果重新整理时发现内容分布不合理，优先 revise 纯 AI section；用户触碰过的 section 只能 append。**
+- **重新整理时放弃现有日记正文，只以历史 raw inputs 作为事实来源重新规划九宫格。**
 - **每个工具调用都必须给出清晰 `reason`。**
 - **保留不确定性。** 例如“可能早点下班”不能写成“一定早点下班”。
 - **保持用户口吻。** 轻度整理可以，但不能把个人晨间日记写成项目周报。
@@ -393,8 +394,8 @@ User message:
 Good plan:
 
 - 把这句话理解为重新整理指令，不写入正文。
-- 基于 historical raw inputs、current draft 和 confirmed entry 重新检查 section 分布。
-- 只 revise 纯 AI section；用户触碰过的 section 只能 append。
+- 只基于 historical raw inputs 重新规划九宫格分布。
+- 使用工具生成新的 reviewing draft，不继承旧 draft / confirmed entry 正文。
 - 如果没有安全改动必要，调用 `noOp`。
 
 ## Negative Examples

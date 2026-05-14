@@ -85,9 +85,9 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - Reorganizing a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
 - The Today compose submit flow and reorganize action should use `POST /journal/today/harness/runs` plus the run SSE stream, so both paths create audit records.
 - Harness append-input runs persist the current user text as raw input for future runs, but the planner prompt must treat it as the current user message, not as historical raw input context.
-- Harness reorganize-existing runs must not append raw input; they use a fixed server-side user prompt to reorganize from existing raw inputs, the current draft, the confirmed entry, and the section catalog.
+- Harness reorganize-existing runs must not append raw input; they use a fixed server-side user prompt and provide only existing raw inputs, the section catalog, and tool constraints to the LLM. Do not provide the current draft or confirmed entry to the planner in this mode.
 - Harness planner section catalog entries include semantic hints and avoid rules. The planner should put one fact in the single best section instead of duplicating it across nearby topics such as `today-focus` and `work`.
-- The Today "reorganize" button is an aggressive full-structure reorganization mode: historical raw inputs are the highest fact source, while the current draft and confirmed entry are reference material only.
+- The Today "reorganize" button is an aggressive full-structure reorganization mode: historical raw inputs are the only journal fact source, existing journal body content is abandoned, and the LLM must not read, reference, or inherit the current draft or confirmed entry.
 - Harness planner content should use Markdown syntax for emphasis, such as `**bold**` on key actions, risks, or top priorities, and order bullets by urgency and importance.
 - Harness execution normalizes AI tool content into Markdown bullet-list section bodies and suppresses exact duplicate facts across competing section operations.
 - Harness execution is draft-only. Executing a run may write a `reviewing` or `attention` draft, never `entries/`.

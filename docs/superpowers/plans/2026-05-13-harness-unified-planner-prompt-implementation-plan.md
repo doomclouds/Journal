@@ -277,7 +277,7 @@ public static class JournalHarnessPrompt
 
 当前 `user message` 是本轮唯一的当前意图来源。即使它会在服务端被保存为 raw input，你在本轮规划时也必须把它当作 current user message，而不是 historical raw input。
 
-如果当前 `user message` 是重新整理指令，它不是日记正文，也不是新的 raw input。你只能基于 protected context 中已有的 raw inputs、current draft 和 confirmed entry 重新规划安全操作。
+如果当前 `user message` 是重新整理指令，它不是日记正文，也不是新的 raw input。你只能基于 protected context 中已有的 raw inputs 重新规划整篇日记结构；reorganize-existing mode 不会提供 current draft 或 confirmed entry。
 
 ## Green Path: What You Should Do
 
@@ -286,7 +286,7 @@ public static class JournalHarnessPrompt
 - **一次输入可以影响多个 section。**
 - **如果用户要求改写已有 AI 内容，优先使用 `reviseAiGeneratedSection`。**
 - **如果用户提供新事实，使用 `appendJournalSection` 或 `upsertJournalSection`。**
-- **如果重新整理时发现内容分布不合理，优先 revise 纯 AI section；用户触碰过的 section 只能 append。**
+- **重新整理时放弃现有日记正文，只以历史 raw inputs 作为事实来源重新规划九宫格。**
 - **每个工具调用都必须给出清晰 `reason`。**
 - **保留不确定性。** 例如“可能早点下班”不能写成“一定早点下班”。
 - **保持用户口吻。** 轻度整理可以，但不能把个人晨间日记写成项目周报。
@@ -353,8 +353,8 @@ User message:
 Good plan:
 
 - 把这句话理解为重新整理指令，不写入正文。
-- 基于 historical raw inputs、current draft 和 confirmed entry 重新检查 section 分布。
-- 只 revise 纯 AI section；用户触碰过的 section 只能 append。
+- 只基于 historical raw inputs 重新规划九宫格分布。
+- 使用工具生成新的 reviewing draft，不继承旧 draft / confirmed entry 正文。
 - 如果没有安全改动必要，调用 `noOp`。
 
 ## Negative Examples
@@ -402,7 +402,7 @@ Bad:
         string confirmedEntryMarkdown) =>
         new(
             SystemInstructions,
-            SerializeContext(date, ReorganizeExistingMode, historicalRawInputs, currentDraftMarkdown, confirmedEntryMarkdown),
+            SerializeReorganizeContext(date, historicalRawInputs),
             ReorganizeExistingUserMessage);
 
     public static JournalHarnessPromptRequest Build(
@@ -434,6 +434,42 @@ Bad:
             }),
             currentDraftMarkdown,
             confirmedEntryMarkdown,
+            sectionCatalog = JmfSectionCatalog.All.Select(section => new
+            {
+                section.Id,
+                section.Title,
+                section.Order,
+                kind = section.Kind.ToString(),
+                section.IsEditableInBlockMode
+            }),
+            availableTools = new[]
+            {
+                "appendJournalSection",
+                "upsertJournalSection",
+                "reviseAiGeneratedSection",
+                "noOp"
+            }
+        };
+
+        return JsonSerializer.Serialize(protectedContext, SerializerOptions);
+    }
+
+    private static string SerializeReorganizeContext(
+        JournalDate date,
+        IReadOnlyList<RawInput> historicalRawInputs)
+    {
+        var protectedContext = new
+        {
+            version = Version,
+            date = date.IsoDate,
+            mode = ReorganizeExistingMode,
+            historicalRawInputs = historicalRawInputs.Select(input => new
+            {
+                id = input.Id,
+                timestamp = input.CreatedAt,
+                source = input.Source,
+                text = input.Text
+            }),
             sectionCatalog = JmfSectionCatalog.All.Select(section => new
             {
                 section.Id,
@@ -772,8 +808,8 @@ private static JournalHarnessPromptRequest BuildPromptForRun(
         return JournalHarnessPrompt.BuildForReorganizeExisting(
             date,
             inputs,
-            authoritativeBaselineMarkdown,
-            confirmedEntryMarkdown);
+            string.Empty,
+            string.Empty);
     }
 
     var currentInput = inputs.FirstOrDefault(input => string.Equals(input.Id, run.CurrentRawInputId, StringComparison.Ordinal))
@@ -1282,7 +1318,7 @@ Update product invariants:
 ```markdown
 - The Today compose submit flow and Today's reorganize action should use `POST /journal/today/harness/runs` plus the run SSE stream, so normal user input and reorganize flows create audit records.
 - Harness append-input runs persist the current user text as a raw input for future runs, but the planner prompt still treats it as the current user message rather than historical raw input.
-- Harness reorganize-existing runs do not append raw input. They use a fixed server-side user prompt to reorganize from existing raw inputs, current draft, and confirmed entry.
+- Harness reorganize-existing runs do not append raw input. They use a fixed server-side user prompt and provide only existing raw inputs, section catalog, and tool constraints to the planner.
 - `POST /journal/today/draft/regenerate` is legacy/internal compatibility and should not be used by the Today UI.
 ```
 
