@@ -14,11 +14,11 @@ public sealed class JournalHarnessPromptTests
         Assert.Equal("reorganize-existing", JournalHarnessPrompt.ReorganizeExistingMode);
         Assert.Contains("# Journal Harness Planner", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("## Core Principle", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("## Priority Order", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("## Protected Context Boundary", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("## Green Path: What You Should Do", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("## Context Contract", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("## Intent Modes", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("## Section Allocation Protocol", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("## Tool Argument Format", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("## Red Lines: What You Must Not Do", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("## Section Catalog", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("## Tool Selection", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("## Positive Examples", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("## Negative Examples", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
@@ -26,6 +26,8 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("只能调用工具", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("不得在重新整理时新增 raw input", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("每条新增内容必须写成 Markdown bullet", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("使用 Markdown 加粗标注重点内容", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("按轻重缓急排序", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("同一事实只能进入一个最合适的 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("today-focus 与 work 的边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("调整日记结构", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
@@ -134,9 +136,34 @@ public sealed class JournalHarnessPromptTests
         Assert.Equal(JournalHarnessPrompt.ReorganizeExistingUserMessage, request.UserMessage);
         Assert.Contains("本次请求不是新的原始输入", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("不要新增、改写或覆盖 raw inputs", request.UserMessage, StringComparison.Ordinal);
-        Assert.Contains("基于 protected context 中已有的 raw inputs、当前 draft 和 confirmed entry", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("protected context", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("全量结构重组", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("历史 raw inputs 是最高事实来源", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("current draft 和 confirmed entry 只是参考材料", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("摈弃当前草稿里已经形成但不合理的旧结构", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("重新规划整篇日记的九宫格分布", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("合并重复、移动错分、压缩冗余表达", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("id", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("raw-1", request.UserMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SystemInstructions_DistinguishLightStructureIntentFromButtonReorganize()
+    {
+        Assert.Contains("轻量结构调整", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("按钮重新整理", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("强结构重组模式", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("current draft / confirmed entry 只作为参考", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不要保守地维持旧 section 分布", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SystemInstructions_RequireMarkdownEmphasisAndPriorityOrdering()
+    {
+        Assert.Contains("重点内容使用 Markdown 加粗", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不要整段都加粗", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("重要且紧急的内容排在前面", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("- **今天最重要**", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]

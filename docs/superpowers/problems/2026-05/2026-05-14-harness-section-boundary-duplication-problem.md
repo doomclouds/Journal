@@ -12,6 +12,8 @@
 
 同一类边界问题也可能反向表现为过度保守：用户只说“调整日记结构”时，Planner 把它当成“不够具体”并 no-op，要求用户说明具体怎么调，而不是主动检查重复、错分、整段内容和相近 section 边界。
 
+后续又明确了按钮“重新整理”的产品语义：它不是轻量结构调整，而是强结构重组模式。Planner 应以历史 raw inputs 为最高事实来源，把 current draft / confirmed entry 仅作为参考材料，重新规划整篇九宫格结构，合并重复、移动错分并压缩冗余表达。
+
 ## Trigger / Context
 
 - Planner prompt 只要求“分配到最合适的 section”，但没有给相近 section 的互斥边界。
@@ -50,6 +52,8 @@
 - `work` 和 `today-focus` 的 tool call `content` 高度相似，甚至完全一样。
 - Prompt 里没有相近 section 的互斥说明，`sectionCatalog` 也没有语义 hint。
 - 用户输入“调整日记结构”“优化分类”“重新分配 section”这类短命令后，audit 显示 no-op 原因是“用户没有说明具体要调整什么”。
+- 按钮“重新整理”后，AI 仍保守维持旧 section 分布，没有以 raw inputs 重新规划整篇结构。
+- 生成内容没有使用 Markdown 语法标注重点，例如缺少 `**关键行动**`、`**风险点**`、`**今天最重要**` 这类重点加粗。
 
 ## Applicability / Non-Applicability
 
