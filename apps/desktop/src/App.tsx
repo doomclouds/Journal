@@ -92,6 +92,7 @@ export default function App() {
   const settingsRequestIdRef = useRef(0);
   const auditRequestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
+  const historyVersionRequestIdRef = useRef(0);
   const harnessEventsRef = useRef<EventSource | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -681,12 +682,27 @@ export default function App() {
   }
 
   async function handleViewHistoryVersion(version: JournalEntryVersion) {
+    const historyRequestId = historyRequestIdRef.current;
+    const historyVersionRequestId = historyVersionRequestIdRef.current + 1;
+    historyVersionRequestIdRef.current = historyVersionRequestId;
     setHistoryError("");
     try {
       const detail = await getJournalHistoryVersion(version.date.isoDate, version.id);
-      setHistoryVersionDetail(detail);
+      if (
+        historyRequestId === historyRequestIdRef.current
+        && historyVersionRequestId === historyVersionRequestIdRef.current
+        && detail.version.date.isoDate === version.date.isoDate
+        && detail.version.id === version.id
+      ) {
+        setHistoryVersionDetail(detail);
+      }
     } catch (caught) {
-      setHistoryError(getErrorMessage(caught));
+      if (
+        historyRequestId === historyRequestIdRef.current
+        && historyVersionRequestId === historyVersionRequestIdRef.current
+      ) {
+        setHistoryError(getErrorMessage(caught));
+      }
     }
   }
 

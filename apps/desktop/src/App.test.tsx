@@ -1056,6 +1056,63 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08", undefined);
   });
 
+  test("ignores stale anniversary version detail after refresh clears the selected snapshot", async () => {
+    const versionDetailDeferred = createDeferred<Response>();
+    const refreshAnniversaryDeferred = createDeferred<Response>();
+    const refreshDetailDeferred = createDeferred<Response>();
+    const refreshVersionsDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 初始同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockReturnValueOnce(versionDetailDeferred.promise)
+      .mockReturnValueOnce(refreshAnniversaryDeferred.promise)
+      .mockReturnValueOnce(refreshDetailDeferred.promise)
+      .mockReturnValueOnce(refreshVersionsDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/history/anniversary/05-08?limit=50",
+        undefined
+      )
+    );
+    expect(within(screen.getByRole("region", { name: "同日年轮预览" })).queryByText("过期版本内容")).not.toBeInTheDocument();
+
+    await act(async () => {
+      versionDetailDeferred.resolve(mockJsonResponse({
+        version: historyVersion,
+        markdown: "# 过期版本\n\n过期版本内容"
+      }));
+      await versionDetailDeferred.promise;
+    });
+
+    const preview = screen.getByRole("region", { name: "同日年轮预览" });
+    expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
+
+    await act(async () => {
+      refreshAnniversaryDeferred.resolve(mockJsonResponse(anniversaryResult));
+      refreshDetailDeferred.resolve(mockJsonResponse(historyDetail(journalDate, "- 刷新后的同日详情")));
+      refreshVersionsDeferred.resolve(mockJsonResponse([historyVersion]));
+      await refreshAnniversaryDeferred.promise;
+      await refreshDetailDeferred.promise;
+      await refreshVersionsDeferred.promise;
+    });
+
+    expect(within(preview).getByText("刷新后的同日详情")).toBeInTheDocument();
+    expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
+  });
+
   test("clears stale history detail and version actions while a new selected date is loading", async () => {
     const nextDate = {
       ...journalDate,
