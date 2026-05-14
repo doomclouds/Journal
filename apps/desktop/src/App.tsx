@@ -133,6 +133,7 @@ export default function App() {
   const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [hasLocalUnsavedChanges, setHasLocalUnsavedChanges] = useState(false);
   const [workbenchView, setWorkbenchView] = useState<"journal" | "assistant">("assistant");
+  const [journalCorridorMenu, setJournalCorridorMenu] = useState<{ x: number; y: number } | null>(null);
   const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit" | "history">("today");
   const [auditDate, setAuditDate] = useState("");
   const [auditRuns, setAuditRuns] = useState<JournalHarnessAuditRun[]>([]);
@@ -684,6 +685,16 @@ export default function App() {
     await refreshAnniversary(monthDay);
   }
 
+  function openHistoryFromJournalCorridor() {
+    setJournalCorridorMenu(null);
+    void openHistoryWorkbench();
+  }
+
+  function openAnniversaryFromJournalCorridor() {
+    setJournalCorridorMenu(null);
+    void openAnniversaryWorkbench();
+  }
+
   function handleAnniversaryMonthDayChange(monthDay: string) {
     setAnniversaryMonthDay(monthDay);
     if (isValidAnniversaryMonthDay(monthDay)) {
@@ -820,7 +831,6 @@ export default function App() {
               onSelectDate={date => void handleHistorySelectDate(date)}
               onViewVersion={version => void handleViewHistoryVersion(version)}
               onClearVersion={clearHistoryVersionDetail}
-              onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
             />
           ) : (
             <HistoryWorkbench
@@ -898,25 +908,70 @@ export default function App() {
             <div className="stage-title">
               <p>日记纸面</p>
             </div>
-            <div className="view-switch" aria-label="视图切换">
+            <div className="stage-actions">
+              <div className="view-switch" aria-label="视图切换">
+                <button
+                  type="button"
+                  aria-pressed={workbenchView === "journal"}
+                  onClick={() => setWorkbenchView("journal")}
+                >
+                  只看日记
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={workbenchView === "assistant"}
+                  onClick={() => setWorkbenchView("assistant")}
+                >
+                  日记 + 助手
+                </button>
+              </div>
               <button
                 type="button"
-                aria-pressed={workbenchView === "journal"}
-                onClick={() => setWorkbenchView("journal")}
+                className="journal-corridor-trigger"
+                aria-label="日记回廊"
+                title="日记回廊"
+                aria-expanded={journalCorridorMenu !== null}
+                onClick={event => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setJournalCorridorMenu({
+                    x: Math.max(12, rect.right - 168),
+                    y: rect.bottom + 8
+                  });
+                }}
               >
-                只看日记
-              </button>
-              <button
-                type="button"
-                aria-pressed={workbenchView === "assistant"}
-                onClick={() => setWorkbenchView("assistant")}
-              >
-                日记 + 助手
+                <History size={16} strokeWidth={2.2} aria-hidden="true" />
               </button>
             </div>
           </div>
 
-          <div className="document-scroll">
+          {journalCorridorMenu ? (
+            <div
+              className="journal-corridor-menu"
+              role="menu"
+              aria-label="日记回廊菜单"
+              style={{ left: journalCorridorMenu.x, top: journalCorridorMenu.y }}
+            >
+              <button type="button" role="menuitem" onClick={openHistoryFromJournalCorridor}>
+                <History size={15} aria-hidden="true" />
+                查看历史
+              </button>
+              <button type="button" role="menuitem" onClick={openAnniversaryFromJournalCorridor}>
+                <History size={15} aria-hidden="true" />
+                同日年轮
+              </button>
+            </div>
+          ) : null}
+
+          <div
+            className="document-scroll"
+            onContextMenu={event => {
+              event.preventDefault();
+              setJournalCorridorMenu({
+                x: event.clientX,
+                y: event.clientY
+              });
+            }}
+          >
             <article className="journal-paper document">
               <header className="document-header">
                 <p className="kicker">Morning Journal</p>
@@ -1112,23 +1167,6 @@ export default function App() {
               ) : (
                 <p className="muted">还没有输入。这里之后会显示原始表达如何进入日记段落。</p>
               )}
-            </section>
-
-            <section className="assistant-card path-panel">
-              <div className="assistant-card-head">
-                <h3>历史与版本</h3>
-                <div className="assistant-card-actions">
-                  <button type="button" className="assistant-inline-action" onClick={openAnniversaryWorkbench}>
-                    <History size={14} aria-hidden="true" />
-                    同日年轮
-                  </button>
-                  <button type="button" className="assistant-inline-action" onClick={openHistoryWorkbench}>
-                    <History size={14} aria-hidden="true" />
-                    查看历史
-                  </button>
-                </div>
-              </div>
-              <p>搜索正式日记、查看覆盖前快照，并把旧版本恢复成待确认草稿。</p>
             </section>
 
             {uniqueAttentionErrors.length > 0 ? (

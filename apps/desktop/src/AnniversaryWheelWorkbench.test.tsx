@@ -97,7 +97,6 @@ describe("AnniversaryWheelWorkbench", () => {
         onSelectDate={vi.fn()}
         onViewVersion={vi.fn()}
         onClearVersion={vi.fn()}
-        onRestoreVersion={vi.fn()}
       />
     );
 
@@ -107,6 +106,31 @@ describe("AnniversaryWheelWorkbench", () => {
     expect(screen.getByRole("button", { name: /2025/ })).toBeInTheDocument();
     expect(within(preview).getByText("打磨同日年轮")).toBeInTheDocument();
     expect(screen.getByText("去年今天只有原始材料")).toBeInTheDocument();
+  });
+
+  test("waits for selected entry detail instead of flashing summary hits", () => {
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={null}
+        versions={[]}
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onViewVersion={vi.fn()}
+        onClearVersion={vi.fn()}
+      />
+    );
+
+    const preview = screen.getByRole("region", { name: "同日年轮预览" });
+    expect(within(preview).getByLabelText("同日当前日记读取中")).toBeInTheDocument();
+    expect(within(preview).getByText("正在铺开这一天的日记")).toBeInTheDocument();
+    expect(within(preview).queryByText("- 打磨同日年轮")).not.toBeInTheDocument();
   });
 
   test("emits month-day changes and selected date changes", () => {
@@ -128,11 +152,13 @@ describe("AnniversaryWheelWorkbench", () => {
         onSelectDate={onSelectDate}
         onViewVersion={vi.fn()}
         onClearVersion={vi.fn()}
-        onRestoreVersion={vi.fn()}
       />
     );
 
-    fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "02-29" } });
+    const dateInput = screen.getByLabelText("选择同日年轮日期");
+    expect(dateInput).toHaveAttribute("type", "date");
+
+    fireEvent.change(dateInput, { target: { value: "2024-02-29" } });
     fireEvent.click(screen.getByRole("button", { name: /2025/ }));
 
     expect(onMonthDayChange).toHaveBeenCalledWith("02-29");
@@ -158,7 +184,6 @@ describe("AnniversaryWheelWorkbench", () => {
         onSelectDate={vi.fn()}
         onViewVersion={vi.fn()}
         onClearVersion={onClearVersion}
-        onRestoreVersion={vi.fn()}
       />
     );
 
@@ -166,5 +191,28 @@ describe("AnniversaryWheelWorkbench", () => {
     expect(within(preview).getByText("历史版本内容")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /查看当前日记/ }));
     expect(onClearVersion).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps anniversary versions read-only without restore actions", () => {
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onViewVersion={vi.fn()}
+        onClearVersion={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /查看版本/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /恢复版本/ })).not.toBeInTheDocument();
   });
 });

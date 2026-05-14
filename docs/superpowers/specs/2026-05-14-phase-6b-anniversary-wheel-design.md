@@ -21,7 +21,7 @@ Phase 4A 已经在 SQLite `entries` 表中保存 `month_day`，也已经有 Hist
 
 Phase 6B 首版目标是 **只读同日年轮 MVP**：
 
-1. **Today Assistant 增加同日年轮入口**：默认打开今天的 `MM-DD`。
+1. **日记纸面增加回廊入口**：默认打开今天的 `MM-DD`，入口包含顶部轻量按钮和日记正文右键菜单。
 2. **History Workbench 增加 anniversary 模式**：沿用现有三栏布局，不创建新的顶层页面。
 3. **按 `MM-DD` 聚合多年日记**：按年份倒序展示年份卡片摘要流。
 4. **保留原始表达价值**：卡片和右侧详情显示 raw inputs 数量与轻量片段。
@@ -36,7 +36,7 @@ Phase 6B 首版目标是 **只读同日年轮 MVP**：
 
 - AI 自动总结多年变化。
 - AI 改写聊天或 follow-up UI。
-- 多日期编辑、非今日确认或跨日期恢复。
+- 多日期编辑、非今日确认或任何版本恢复入口。
 - diff / rollback UI。
 - item 级 provenance。
 - 未来提醒 / Future Notes。
@@ -44,23 +44,24 @@ Phase 6B 首版目标是 **只读同日年轮 MVP**：
 - embedding / 语义搜索。
 - 新的数据库事实源。
 
-同日年轮首版是 **历史只读视图**。所有修改仍回到现有今日写作、历史查看和版本恢复边界。
+同日年轮首版是 **历史只读视图**，产品语义是“记忆回廊”。所有修改仍回到现有今日写作和普通历史工作台边界；同日年轮内部不提供恢复草稿、覆盖 entry 或进入编辑态的动作。
 
 ## 4. 用户入口
 
-入口采用已确认的 A 方案：**Today Assistant 入口，打开 History Workbench 的同日年轮模式**。
+入口采用后续校正方案：**日记回廊菜单入口，打开 History Workbench 的同日年轮模式**。
 
-今日页右侧助手区新增一个低干扰入口：
+今日页日记纸面新增低干扰入口：
 
-- 文案：`同日年轮`
-- 辅助信息：`查看 05-14 的多年回看`
-- 点击后：
+- 顶部工具栏显示一个轻量 `日记回廊` 图标按钮。
+- 日记正文区域支持右键菜单。
+- 菜单项：`查看历史`、`同日年轮`。
+- 点击 `同日年轮` 后：
   - `workspaceMode` 切到 `history`
   - `historyMode` 或等价状态切到 `anniversary`
   - 默认 `monthDay` 使用今天的 `MM-DD`
   - 触发同日年轮查询
 
-入口不放在日记正文区域，不在今日材料区展开，也不新建顶部主导航。它是历史工作台的一个入口，而不是今日写作流程的一部分。
+入口不放在 Today Assistant 底部，不在今日材料区展开，也不新建顶部主导航。它是日记纸面上的回看入口，而不是今日写作流程的一部分。
 
 ## 5. 工作区布局
 
@@ -132,7 +133,7 @@ Phase 6B 首版目标是 **只读同日年轮 MVP**：
   - `打开完整日记`：复用现有 `GET /journal/history/{date}` 和中间完整 Markdown 预览能力。
   - `查看版本`：复用现有版本列表与版本详情。
 
-右侧不提供跨日期恢复按钮。恢复仍受现有“仅今日版本可恢复为 draft”的边界控制。
+右侧不提供任何恢复按钮。版本只允许查看快照内容；即使选中的是今天的同日记录，也不能从同日年轮恢复为 draft。
 
 ## 6. 数据模型
 
@@ -265,7 +266,7 @@ const [anniversarySelectedDate, setAnniversarySelectedDate] = useState("");
 ### 10.1 从今日页打开
 
 ```text
-用户点击 Today Assistant / 同日年轮
+用户点击日记回廊菜单 / 同日年轮
   -> workspaceMode = history
   -> historyMode = anniversary
   -> monthDay = today.monthDay
@@ -339,7 +340,7 @@ const [anniversarySelectedDate, setAnniversarySelectedDate] = useState("");
   - `getAnniversaryWheel("05-14")` 请求正确 endpoint。
 
 - `App.test.tsx`
-  - 从 Today Assistant 打开同日年轮。
+  - 从日记回廊菜单打开同日年轮。
   - 默认请求今天的 `monthDay`。
   - 切换月日后请求新 `monthDay`。
   - 旧请求晚返回不会覆盖新结果。

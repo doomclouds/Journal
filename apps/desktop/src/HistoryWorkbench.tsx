@@ -1,5 +1,6 @@
 import { ArrowLeft, Eye, RefreshCw, RotateCcw, Search } from "lucide-react";
 import type { JournalEntryVersion, JournalHistoryEntryDetail, JournalHistoryEntrySummary, JournalVersionDetail } from "./api";
+import { JournalPaperLoading } from "./JournalPaperLoading";
 import { MarkdownPreview } from "./MarkdownPreview";
 
 type HistoryWorkbenchProps = {
@@ -90,6 +91,8 @@ export function HistoryWorkbench({
   const currentDetailMarkdown = matchingDetail?.markdown?.trim() ?? "";
   const previewSections = matchingDetail?.sections ?? [];
   const isShowingVersion = matchingVersionDetail !== null;
+  const expectsEntryDetail = selected !== null && selected.status !== "missing";
+  const isEntryDetailLoading = expectsEntryDetail && !isShowingVersion && matchingDetail === null;
 
   return (
     <>
@@ -144,7 +147,9 @@ export function HistoryWorkbench({
                 <strong>{entry.hits[0]?.title ?? entry.mood ?? "日记"}</strong>
                 <p>{entry.hits[0]?.snippet ?? `${entry.rawInputCount} 条材料 / ${entry.versionCount} 个版本`}</p>
               </button>
-            )) : (
+            )) : isBusy ? (
+              <p className="muted history-loading-copy">正在检索历史...</p>
+            ) : (
               <p className="muted">没有匹配的历史日记。</p>
             )}
           </div>
@@ -208,6 +213,8 @@ export function HistoryWorkbench({
                   <section className="history-version-main-preview" aria-label="历史版本内容">
                     <MarkdownPreview markdown={matchingVersionDetail.markdown} />
                   </section>
+                ) : isEntryDetailLoading ? (
+                  <JournalPaperLoading label="历史日记读取中" />
                 ) : currentDetailMarkdown ? (
                   <section className="history-current-main-preview" aria-label="当前日记内容">
                     <MarkdownPreview markdown={currentDetailMarkdown} />
@@ -228,6 +235,8 @@ export function HistoryWorkbench({
                   </div>
                 )}
               </>
+            ) : isBusy ? (
+              <JournalPaperLoading label="历史日记读取中" />
             ) : (
               <section className="empty-paper audit-empty-state">
                 <h2>没有历史结果</h2>

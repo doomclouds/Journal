@@ -1682,6 +1682,62 @@ button:focus-visible {
   padding: 16px 26px 12px;
 }
 
+.stage-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.journal-corridor-trigger {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f8f5ed;
+  color: var(--sage);
+}
+
+.journal-corridor-trigger:hover,
+.journal-corridor-trigger[aria-expanded="true"] {
+  border-color: rgba(47, 111, 95, 0.28);
+  background: rgba(230, 243, 235, 0.82);
+}
+
+.journal-corridor-menu {
+  position: fixed;
+  z-index: 80;
+  width: 168px;
+  border: 1px solid rgba(47, 111, 95, 0.18);
+  border-radius: 8px;
+  background: #fffdf8;
+  box-shadow: 0 18px 44px rgba(48, 43, 35, 0.16);
+  padding: 6px;
+}
+
+.journal-corridor-menu button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.journal-corridor-menu button:hover {
+  background: rgba(230, 243, 235, 0.72);
+  color: var(--sage);
+}
+
 .stage-title p {
   margin: 0 0 4px;
   color: var(--muted);
@@ -2787,6 +2843,88 @@ button:focus-visible {
 .history-hit-list {
   display: grid;
   gap: 14px;
+}
+
+.history-loading-copy {
+  padding: 10px 2px;
+}
+
+.paper-loading-state {
+  display: grid;
+  align-content: center;
+  gap: 22px;
+  min-height: 360px;
+  color: var(--muted);
+}
+
+.paper-loading-copy {
+  display: grid;
+  gap: 7px;
+  max-width: 340px;
+}
+
+.paper-loading-copy span {
+  color: rgba(47, 111, 95, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.paper-loading-copy strong {
+  color: #3f5f55;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.paper-loading-copy p {
+  margin: 0;
+  color: rgba(81, 74, 66, 0.68);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.paper-loading-lines {
+  display: grid;
+  gap: 11px;
+  max-width: 560px;
+}
+
+.paper-loading-lines span {
+  width: 78%;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(47, 111, 95, 0.06) 0%,
+    rgba(47, 111, 95, 0.16) 45%,
+    rgba(47, 111, 95, 0.06) 90%
+  );
+  background-size: 220% 100%;
+  animation: paper-loading-shimmer 1.8s ease-in-out infinite;
+}
+
+.paper-loading-lines .wide {
+  width: 94%;
+}
+
+.paper-loading-lines .short {
+  width: 48%;
+}
+
+@keyframes paper-loading-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-loading-lines span {
+    animation: none;
+  }
 }
 
 .history-hit {

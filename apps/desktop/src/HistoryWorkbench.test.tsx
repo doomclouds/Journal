@@ -91,6 +91,73 @@ describe("HistoryWorkbench", () => {
     expect(screen.getByText("sha256:test")).toBeInTheDocument();
   });
 
+  it("shows a quiet loading state while selected entry detail is loading", () => {
+    render(
+      <HistoryWorkbench
+        isBusy={true}
+        query=""
+        status=""
+        entries={[{
+          date: historyDate,
+          status: "processed",
+          mood: "平静",
+          rawInputCount: 2,
+          versionCount: 1,
+          attentionReason: null,
+          hits: [{
+            sourceType: "section",
+            sectionId: "today-focus",
+            rawInputId: null,
+            title: "今天想推进",
+            snippet: "摘要不应冒充正文"
+          }]
+        }]}
+        detail={null}
+        selectedDate="2026-05-13"
+        versions={[]}
+        error=""
+        onBack={vi.fn()}
+        onQueryChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onRefresh={vi.fn()}
+        onRestoreVersion={vi.fn()}
+      />
+    );
+
+    const mainPreview = screen.getByRole("region", { name: "历史日记预览" });
+    expect(within(mainPreview).getByLabelText("历史日记读取中")).toBeInTheDocument();
+    expect(within(mainPreview).getByText("正在铺开这一天的日记")).toBeInTheDocument();
+    expect(within(mainPreview).queryByText("摘要不应冒充正文")).not.toBeInTheDocument();
+  });
+
+  it("shows a quiet loading state while history results are loading", () => {
+    render(
+      <HistoryWorkbench
+        isBusy={true}
+        query=""
+        status=""
+        entries={[]}
+        detail={null}
+        selectedDate=""
+        versions={[]}
+        error=""
+        onBack={vi.fn()}
+        onQueryChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onRefresh={vi.fn()}
+        onRestoreVersion={vi.fn()}
+      />
+    );
+
+    const mainPreview = screen.getByRole("region", { name: "历史日记预览" });
+    expect(within(mainPreview).getByLabelText("历史日记读取中")).toBeInTheDocument();
+    expect(within(mainPreview).getByText("正在铺开这一天的日记")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("历史结果列表")).getByText("正在检索历史...")).toBeInTheDocument();
+    expect(within(mainPreview).queryByText("没有历史结果")).not.toBeInTheDocument();
+  });
+
   it("requests restore for selected version", async () => {
     const onRestoreVersion = vi.fn();
 

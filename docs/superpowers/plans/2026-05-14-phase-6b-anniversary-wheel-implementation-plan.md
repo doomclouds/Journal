@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the Phase 6B same-day anniversary wheel so the Today Assistant can open a history workbench mode that compares entries and raw material from the same month/day across years.
+**Goal:** Build the Phase 6B same-day anniversary wheel so the journal paper's corridor menu can open a history workbench mode that compares entries and raw material from the same month/day across years.
 
 **Architecture:** Reuse the rebuildable SQLite history index as the query boundary, because `entries.month_day` already exists and raw-only days are already represented as indexed entries. Add a focused anniversary query model, service method, API endpoint, TypeScript API client, and a dedicated React workbench that keeps the existing History Workbench visual language without changing the normal Today journal UI.
+
+**Product correction:** 同日年轮是只读“记忆回廊”。本计划早期代码草稿里出现过 `onRestoreVersion` / `恢复为草稿`，那部分已被后续需求校正废弃；实现与后续维护应只保留版本查看，不在 anniversary mode 暴露任何恢复入口。入口也已从 Today Assistant 底部按钮校正为日记纸面的 `日记回廊` 菜单，包括顶部轻量图标按钮和正文右键菜单。
 
 **Tech Stack:** .NET 10 minimal API, `Microsoft.Data.Sqlite`, xUnit, React + TypeScript + Vite, Vitest + Testing Library, existing `MarkdownPreview` renderer.
 
@@ -37,7 +39,7 @@
 - Create `apps/desktop/src/AnniversaryWheelWorkbench.tsx`
   - Dedicated three-column anniversary workbench based on the approved prototype.
 - Modify `apps/desktop/src/App.tsx`
-  - Add anniversary state, load/select handlers, stale request guard, Today Assistant entry button, and conditional workspace rendering.
+  - Add anniversary state, load/select handlers, stale request guard, journal corridor menu entry, and conditional workspace rendering.
 - Modify `apps/desktop/src/styles.css`
   - Add `anniversary-*` styles aligned with the current history workbench.
 - Modify or create tests:
@@ -1099,7 +1101,7 @@ const anniversaryResult = {
 Add these tests near the existing history workbench tests:
 
 ```tsx
-test("opens anniversary wheel from Today Assistant with today's month-day", async () => {
+test("opens anniversary wheel from the journal corridor menu with today's month-day", async () => {
   const fetchMock = vi
     .fn()
     .mockResolvedValueOnce(mockJsonResponse(healthResponse))
@@ -1111,7 +1113,8 @@ test("opens anniversary wheel from Today Assistant with today's month-day", asyn
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: /同日年轮/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "日记回廊" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "同日年轮" }));
 
   await waitFor(() =>
     expect(fetchMock).toHaveBeenCalledWith(
@@ -1346,18 +1349,17 @@ setHistoryViewMode("search");
 setWorkspaceMode("history");
 ```
 
-- [ ] **Step 6: Add Today Assistant entry button**
+- [ ] **Step 6: Add journal corridor menu entry**
 
-Near the existing history entry button in the Today Assistant action area of `apps/desktop/src/App.tsx`, add:
+Near the journal paper view switch in `apps/desktop/src/App.tsx`, add a light `日记回廊` icon button. The same menu should also open from the journal paper context menu:
 
 ```tsx
-<button type="button" className="assistant-inline-action" onClick={openAnniversaryWorkbench}>
-  <History size={14} aria-hidden="true" />
-  同日年轮
+<button type="button" className="journal-corridor-trigger" aria-label="日记回廊">
+  <History size={16} aria-hidden="true" />
 </button>
 ```
 
-`History` is already imported from `lucide-react` in `apps/desktop/src/App.tsx`, so no new icon import is needed.
+The menu contains `查看历史` and `同日年轮`. `History` is already imported from `lucide-react` in `apps/desktop/src/App.tsx`, so no new icon import is needed.
 
 - [ ] **Step 7: Run frontend tests**
 
@@ -1411,7 +1413,7 @@ Expected: all frontend tests pass and Vite build succeeds.
 In `README.md`, add a short Phase 6B bullet under delivered scope:
 
 ```markdown
-- Phase 6B adds the same-day anniversary wheel: Today Assistant can open a history workbench mode for a selected `MM-DD`, compare entries across years, inspect raw material snippets, and open version snapshots without changing the normal Today journal layout.
+- Phase 6B adds the same-day anniversary wheel: the journal paper's corridor menu can open a history workbench mode for a selected `MM-DD`, compare entries across years, inspect raw material snippets, and open version snapshots without changing the normal Today journal layout.
 ```
 
 - [ ] **Step 4: Update AGENTS project orientation**
@@ -1419,13 +1421,14 @@ In `README.md`, add a short Phase 6B bullet under delivered scope:
 In `AGENTS.md`, update the delivered scope paragraph and current invariant list with:
 
 ```markdown
-- Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from Today Assistant, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and preserve existing version restore constraints.
+- Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from the journal paper's corridor menu, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and keep the anniversary surface read-only.
 ```
 
-Keep the existing restore invariant unchanged:
+Keep the existing history restore invariant unchanged, but do not expose restore from anniversary mode:
 
 ```markdown
 - Restoring a version writes a `reviewing` draft only and never writes `entries/` directly.
+- Anniversary mode is a read-only memory corridor; versions can be viewed there, not restored.
 ```
 
 - [ ] **Step 5: Archive the completed requirement**
@@ -1443,8 +1446,8 @@ Create `docs/superpowers/archives/2026-05-14-phase-6b-anniversary-wheel.md`:
 - Added `GET /journal/history/anniversary/{monthDay}` with strict `MM-DD` validation.
 - Reused the rebuildable SQLite history index through `entries.month_day`.
 - Included processed, attention, missing, and raw-only indexed days in anniversary results.
-- Added a Today Assistant entry to open the anniversary workbench for today's month/day.
-- Added a dedicated anniversary workbench with year cards, selected Markdown preview, raw material snippets, version preview, and existing draft-only restore action.
+- Added a journal corridor menu entry to open the anniversary workbench for today's month/day.
+- Added a dedicated anniversary workbench with year cards, selected Markdown preview, raw material snippets, and version preview.
 
 ## Verification
 
@@ -1455,7 +1458,7 @@ Create `docs/superpowers/archives/2026-05-14-phase-6b-anniversary-wheel.md`:
 ## Notes
 
 - SQLite remains a rebuildable cache. Markdown entries, raw-input jsonl files, and version files remain the source material.
-- Version restore remains limited to today's date through the existing history restore guard.
+- Anniversary mode is read-only and does not expose version restore; restore remains part of the ordinary history/editing workflow.
 ```
 
 Add an entry to `docs/superpowers/archives/INDEX.md` in newest-first order:
@@ -1504,7 +1507,7 @@ Expected:
 
 **Spec coverage:**
 
-- Today Assistant entry is covered by Task 5.
+- Journal corridor menu entry is covered by Task 5.
 - Default today `MM-DD` anniversary query is covered by Task 5.
 - Month/day picker and quick dates are covered by Task 4.
 - Year-card summary stream is covered by Task 4.

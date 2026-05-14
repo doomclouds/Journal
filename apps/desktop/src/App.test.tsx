@@ -397,6 +397,16 @@ function createInitialFetchMock() {
     .mockResolvedValueOnce(mockJsonResponse(aiSettings));
 }
 
+async function openJournalCorridorMenu() {
+  fireEvent.click(await screen.findByRole("button", { name: "日记回廊" }));
+  return screen.findByRole("menu", { name: "日记回廊菜单" });
+}
+
+async function clickJournalCorridorItem(name: "查看历史" | "同日年轮") {
+  const menu = await openJournalCorridorMenu();
+  fireEvent.click(within(menu).getByRole("menuitem", { name }));
+}
+
 async function openLlmSettingsFromNativeMenu() {
   fireEvent(window, new CustomEvent("journal:native-menu-command", { detail: "open-llm-settings" }));
   return screen.findByRole("region", { name: "LLM 配置面板" });
@@ -893,7 +903,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history?limit=50", undefined)
@@ -914,6 +924,35 @@ describe("App", () => {
     expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
   });
 
+  test("opens history actions from the journal corridor menu instead of the assistant footer", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByLabelText("日记纸面")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看历史" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "同日年轮" })).not.toBeInTheDocument();
+
+    const menu = await openJournalCorridorMenu();
+
+    expect(within(menu).getByRole("menuitem", { name: "查看历史" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "同日年轮" })).toBeInTheDocument();
+  });
+
+  test("opens the journal corridor menu from the journal paper context menu", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.contextMenu(await screen.findByText("Morning Journal"));
+
+    const menu = await screen.findByRole("menu", { name: "日记回廊菜单" });
+    expect(within(menu).getByRole("menuitem", { name: "查看历史" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "同日年轮" })).toBeInTheDocument();
+  });
+
   test("opens anniversary wheel from Today Assistant and loads selected detail and versions", async () => {
     const fetchMock = vi
       .fn()
@@ -927,7 +966,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    await clickJournalCorridorItem("同日年轮");
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -942,7 +981,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /2025/ })).toBeInTheDocument();
   });
 
-  test("clears anniversary results and blocks invalid month-day requests", async () => {
+  test("clears anniversary results and loads the selected calendar month-day", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(healthResponse))
@@ -950,20 +989,30 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
       .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
-      .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse({
+        ...anniversaryResult,
+        monthDay: "02-29",
+        items: []
+      }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    await clickJournalCorridorItem("同日年轮");
     expect(await screen.findByRole("button", { name: /2025/ })).toBeInTheDocument();
     expect(screen.getByText("去年同一天的原始材料")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "02-30" } });
+    fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "2024-02-29" } });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("monthDay is invalid");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/history/anniversary/02-29?limit=50",
+        undefined
+      )
+    );
     expect(fetchMock).not.toHaveBeenCalledWith(
-      "http://localhost:5057/journal/history/anniversary/02-30?limit=50",
+      "http://localhost:5057/journal/history/anniversary/2024-02-29?limit=50",
       undefined
     );
     expect(screen.queryByRole("button", { name: /2025/ })).not.toBeInTheDocument();
@@ -1011,7 +1060,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
     expect(await screen.findByRole("button", { name: /2026-05-09/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /2026-05-09/ }));
@@ -1058,7 +1107,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    await clickJournalCorridorItem("同日年轮");
     await screen.findByRole("region", { name: "同日年轮预览" });
     expect(await screen.findByRole("button", { name: /2025/ })).toBeInTheDocument();
 
@@ -1106,7 +1155,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    await clickJournalCorridorItem("同日年轮");
     const preview = await screen.findByRole("region", { name: "同日年轮预览" });
     fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
     fireEvent.click(screen.getByRole("button", { name: "刷新" }));
@@ -1161,7 +1210,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    await clickJournalCorridorItem("同日年轮");
     const preview = await screen.findByRole("region", { name: "同日年轮预览" });
     fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
 
@@ -1215,7 +1264,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
     expect(await within(screen.getByRole("region", { name: "历史日记预览" })).findByText("推进 Phase 4A 历史搜索")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "恢复为草稿" })).toBeInTheDocument();
 
@@ -1252,7 +1301,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
     expect(await within(screen.getByRole("region", { name: "历史日记预览" })).findByText("详情内容需要被清空")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "恢复为草稿" })).toBeInTheDocument();
 
@@ -1297,7 +1346,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
     fireEvent.click(await screen.findByRole("button", { name: "恢复为草稿" }));
 
     await waitFor(() =>
@@ -1327,7 +1376,7 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
     fireEvent.click(await screen.findByRole("button", { name: "查看版本" }));
 
     await waitFor(() =>
@@ -1352,7 +1401,7 @@ describe("App", () => {
       target: { value: "还没保存的历史前编辑" }
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "查看历史" }));
+    await clickJournalCorridorItem("查看历史");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();
@@ -1372,7 +1421,7 @@ describe("App", () => {
       target: { value: "还没保存的同日年轮前编辑" }
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "同日年轮" }));
+    await clickJournalCorridorItem("同日年轮");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();

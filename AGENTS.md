@@ -33,8 +33,8 @@ Phase 6B includes the Phase 3 generation/confirmation/editor workflow, Phase 5 r
 - Version snapshots live under `.journal/versions/yyyy/MM/yyyy-MM-dd/` as Markdown plus metadata; first writes do not create snapshots.
 - SQLite lives under `.journal/index/journal.db` and is a rebuildable cache over Markdown, raw-input jsonl, and version files. Do not treat it as durable truth.
 - History APIs expose search, date detail, version list/detail, scan/rebuild, and restore-version-to-draft.
-- The history workbench is a full workspace mode opened from Today Assistant, mirroring audit-style navigation.
-- Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from Today Assistant, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and preserve existing version restore constraints.
+- The history workbench is a full workspace mode opened from the journal paper's corridor menu, mirroring audit-style navigation.
+- Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from the journal paper's corridor menu, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and keep the anniversary surface read-only.
 - Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
 
 Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.

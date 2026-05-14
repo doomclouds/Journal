@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, Eye, RefreshCw, RotateCcw } from "lucide-react";
+import { ArrowLeft, CalendarDays, Eye, RefreshCw } from "lucide-react";
 import type {
   JournalAnniversaryWheelResult,
   JournalEntryVersion,
@@ -6,6 +6,7 @@ import type {
   JournalHistoryEntrySummary,
   JournalVersionDetail
 } from "./api";
+import { JournalPaperLoading } from "./JournalPaperLoading";
 import { MarkdownPreview } from "./MarkdownPreview";
 
 type AnniversaryWheelWorkbenchProps = {
@@ -23,10 +24,22 @@ type AnniversaryWheelWorkbenchProps = {
   onSelectDate: (date: string) => void;
   onViewVersion?: (version: JournalEntryVersion) => void;
   onClearVersion?: () => void;
-  onRestoreVersion: (version: JournalEntryVersion) => void;
 };
 
 const quickMonthDays = ["01-01", "05-14", "10-01", "12-31"];
+
+function toDateInputValue(monthDay: string, selectedDate: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(selectedDate) && selectedDate.slice(5) === monthDay) {
+    return selectedDate;
+  }
+
+  return /^\d{2}-\d{2}$/.test(monthDay) ? `2000-${monthDay}` : "";
+}
+
+function toMonthDay(dateValue: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  return match ? `${match[2]}-${match[3]}` : "";
+}
 
 function getStatusLabel(status: string) {
   switch (status) {
@@ -79,8 +92,7 @@ export function AnniversaryWheelWorkbench({
   onMonthDayChange,
   onSelectDate,
   onViewVersion,
-  onClearVersion,
-  onRestoreVersion
+  onClearVersion
 }: AnniversaryWheelWorkbenchProps) {
   const items = result?.items ?? [];
   const selected = items.find(item => item.date.isoDate === selectedDate) ?? items[0] ?? null;
@@ -93,6 +105,9 @@ export function AnniversaryWheelWorkbench({
     : null;
   const currentDetailMarkdown = matchingDetail?.markdown?.trim() ?? "";
   const isShowingVersion = matchingVersionDetail !== null;
+  const expectsEntryDetail = selected !== null && selected.status !== "missing";
+  const isEntryDetailLoading = expectsEntryDetail && !isShowingVersion && matchingDetail === null;
+  const dateInputValue = toDateInputValue(monthDay, selectedDate);
 
   return (
     <>
@@ -107,12 +122,14 @@ export function AnniversaryWheelWorkbench({
             <CalendarDays size={15} aria-hidden="true" />
             <input
               aria-label="选择同日年轮日期"
-              type="text"
-              inputMode="numeric"
-              pattern="\d{2}-\d{2}"
-              value={monthDay}
-              onChange={event => onMonthDayChange(event.target.value)}
-              placeholder="MM-DD"
+              type="date"
+              value={dateInputValue}
+              onChange={event => {
+                const nextMonthDay = toMonthDay(event.target.value);
+                if (nextMonthDay) {
+                  onMonthDayChange(nextMonthDay);
+                }
+              }}
             />
           </label>
           <div className="anniversary-quick-days" aria-label="快捷日期">
@@ -214,6 +231,8 @@ export function AnniversaryWheelWorkbench({
                   <section className="history-version-main-preview" aria-label="同日版本内容">
                     <MarkdownPreview markdown={matchingVersionDetail.markdown} />
                   </section>
+                ) : isEntryDetailLoading ? (
+                  <JournalPaperLoading label="同日当前日记读取中" />
                 ) : currentDetailMarkdown ? (
                   <section className="history-current-main-preview" aria-label="同日当前日记内容">
                     <MarkdownPreview markdown={currentDetailMarkdown} />
@@ -279,16 +298,6 @@ export function AnniversaryWheelWorkbench({
               >
                 <Eye size={14} aria-hidden="true" />
                 查看版本
-              </button>
-              <button
-                type="button"
-                className="assistant-inline-action"
-                aria-label={`恢复版本 ${version.id} 为草稿`}
-                onClick={() => onRestoreVersion(version)}
-                disabled={isBusy}
-              >
-                <RotateCcw size={14} aria-hidden="true" />
-                恢复为草稿
               </button>
             </section>
           ))}
