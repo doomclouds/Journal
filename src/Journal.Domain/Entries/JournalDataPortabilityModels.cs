@@ -14,3 +14,7 @@ public sealed record JournalDataExportManifest(
 public sealed record JournalDataExportResult(
     string ExportPath,
     JournalDataExportManifest Manifest);
+
+public sealed record JournalDataImportResult(
+    string BackupDirectory,
+    JournalDataExportManifest Manifest);

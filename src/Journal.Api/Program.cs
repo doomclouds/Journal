@@ -57,6 +57,7 @@ builder.Services.AddSingleton<JournalHarnessService>();
 builder.Services.AddSingleton<TodayJournalService>();
 builder.Services.AddSingleton<JournalHistoryService>();
 builder.Services.AddSingleton<JournalDataExportService>();
+builder.Services.AddSingleton<JournalDataImportService>();
 
 var app = builder.Build();
 
@@ -101,6 +102,30 @@ app.MapPost("/journal/data/export", async (
         $"Journal-Export-{clock.Now:yyyy-MM-dd-HHmmss}-{uniqueSuffix}.zip");
 
     return Results.Ok(await service.ExportAsync(exportPath, cancellationToken));
+});
+
+app.MapPost("/journal/data/import", async Task<IResult> (
+    JournalDataImportRequest request,
+    JournalDataImportService service,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.PackagePath))
+    {
+        return Results.BadRequest(new { error = "packagePath is required" });
+    }
+
+    try
+    {
+        return Results.Ok(await service.ImportAsync(request.PackagePath, cancellationToken));
+    }
+    catch (FileNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+    catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
 });
 
 app.MapGet("/settings/ai", async (JournalAiSettingsService service, CancellationToken cancellationToken) =>
@@ -622,6 +647,8 @@ public partial class Program
 public sealed record AddTodayInputRequest(string Text, string? Source);
 
 public sealed record HarnessRunRequest(string? Text, string? Source, string? Mode);
+
+public sealed record JournalDataImportRequest(string? PackagePath);
 
 public sealed record HarnessRunEventView(
     string Type,

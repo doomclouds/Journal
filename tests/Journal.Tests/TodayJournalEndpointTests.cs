@@ -307,6 +307,58 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PostJournalDataImport_WithBlankPackagePathReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/data/import",
+            new { packagePath = "   " });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("packagePath is required", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PostJournalDataImport_WithMalformedZipReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var packagePath = Path.Combine(workspace.Root, "not-a-zip.zip");
+        Directory.CreateDirectory(workspace.Root);
+        await File.WriteAllTextAsync(packagePath, "not a zip", Encoding.UTF8);
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/data/import",
+            new { packagePath });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("error").GetString()));
+    }
+
+    [Fact]
+    public async Task PostJournalDataImport_WithMissingPackagePathReturnsNotFound()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var packagePath = Path.Combine(workspace.Root, "missing.zip");
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/data/import",
+            new { packagePath });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("error").GetString()));
+    }
+
+    [Fact]
     public async Task GetJournalHistory_ReturnsSearchResults()
     {
         using var workspace = TempWorkspace.Create();
