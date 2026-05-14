@@ -290,6 +290,28 @@ export type JournalVersionDetail = {
   markdown: string;
 };
 
+export type JournalDataExportManifest = {
+  format: string;
+  createdAt: string;
+  appVersion: string;
+  backendVersion: string;
+  frontendVersion: string;
+  entryCount: number;
+  rawInputCount: number;
+  versionCount: number;
+  containsFullApiKeys: boolean;
+};
+
+export type JournalDataExportResult = {
+  exportPath: string;
+  manifest: JournalDataExportManifest;
+};
+
+export type JournalDataImportResult = {
+  backupDirectory: string;
+  manifest: JournalDataExportManifest;
+};
+
 export type JournalHistoryEntryDetail = {
   date: JournalDate;
   status: JournalStatus;
@@ -524,6 +546,22 @@ export function getJournalHistoryVersion(date: string, versionId: string): Promi
   return requestJson<JournalVersionDetail>(
     `/journal/history/${encodeURIComponent(date)}/versions/${encodeURIComponent(versionId)}`
   );
+}
+
+export function exportJournalData(): Promise<JournalDataExportResult> {
+  return requestJson<JournalDataExportResult>("/journal/data/export", {
+    method: "POST"
+  });
+}
+
+export function importJournalData(packagePath: string): Promise<JournalDataImportResult> {
+  return requestJson<JournalDataImportResult>("/journal/data/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ packagePath })
+  });
 }
 
 export function restoreJournalHistoryVersionDraft(date: string, versionId: string): Promise<TodayEditorState> {

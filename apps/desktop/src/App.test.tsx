@@ -3,9 +3,11 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
   activateAiSettings,
+  exportJournalData,
   getAiSettings,
   getJournalAudit,
   getTodayEditor,
+  importJournalData,
   openHarnessRunEvents,
   regenerateTodayDraft,
   resetApiBaseUrlForTests,
@@ -1753,6 +1755,269 @@ describe("App", () => {
     expect(screen.getByText("测试会向当前 LLM 发送一次最小请求，可能产生少量 token 消耗。")).toBeInTheDocument();
   });
 
+  test("opens data backup panel and exports a journal data package", async () => {
+    const exportPath = "C:\\Journal\\.journal\\exports\\Journal-Export-2026-05-15.zip";
+    const openPath = vi.fn().mockResolvedValue(true);
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse({
+        exportPath,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 2,
+          rawInputCount: 3,
+          versionCount: 1,
+          containsFullApiKeys: false
+        }
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", { openPath });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/data/export", {
+        method: "POST"
+      })
+    );
+    expect(within(dialog).getByText(exportPath)).toBeInTheDocument();
+    expect(within(dialog).getByText("2 篇日记 · 3 条原始输入 · 1 个版本")).toBeInTheDocument();
+    expect(within(dialog).getByText("导出包不包含完整 API Key。")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "打开导出路径" }));
+
+    expect(openPath).toHaveBeenCalledWith(exportPath);
+  });
+
+  test("selects an import package and imports it from the data backup panel", async () => {
+    const packagePath = "C:\\Backups\\Journal-Export-2026-05-15.zip";
+    const backupDirectory = "C:\\Journal\\.journal\\import-backups\\20260515-083000";
+    const importedToday = {
+      ...reviewingToday,
+      rawInputs: [{
+        id: "raw-imported",
+        date: journalDate,
+        createdAt: "2026-05-08T09:05:00+08:00",
+        source: "text",
+        text: "导入后的今日材料"
+      }]
+    };
+    const selectImportPackage = vi.fn().mockResolvedValue(packagePath);
+    const openPath = vi.fn().mockResolvedValue(true);
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse({
+        backupDirectory,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 4,
+          rawInputCount: 8,
+          versionCount: 2,
+          containsFullApiKeys: false
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState({
+        today: importedToday,
+        sections: [{
+          id: "today-focus",
+          title: "今日重点",
+          content: "导入后的日记段落",
+          kind: "required",
+          isEditableInBlockMode: true
+        }],
+        markdown: "# 2026-05-08\n\n## 今日重点\n\n导入后的日记段落"
+      })))
+      .mockResolvedValueOnce(mockJsonResponse(deepSeekAiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", { selectImportPackage, openPath });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "选择导入包" }));
+
+    const pathInput = await within(dialog).findByLabelText("导入包路径");
+    expect(pathInput).toHaveValue(packagePath);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "导入数据包" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/data/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ packagePath })
+      })
+    );
+    expect(within(dialog).getByText(backupDirectory)).toBeInTheDocument();
+    expect(within(dialog).getByText("4 篇日记 · 8 条原始输入 · 2 个版本")).toBeInTheDocument();
+    expect(await screen.findByText("导入后的日记段落")).toBeInTheDocument();
+    expect(screen.getAllByText("导入后的今日材料").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("LLM：DeepSeek")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "打开备份目录" }));
+
+    expect(openPath).toHaveBeenCalledWith(backupDirectory);
+  });
+
+  test("invalidates stale history refreshes when importing data", async () => {
+    const packagePath = "C:\\Backups\\Journal-Export-2026-05-15.zip";
+    const backupDirectory = "C:\\Journal\\.journal\\import-backups\\20260515-083000";
+    const historyRefreshDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockReturnValueOnce(historyRefreshDeferred.promise)
+      .mockResolvedValueOnce(mockJsonResponse({
+        backupDirectory,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 4,
+          rawInputCount: 8,
+          versionCount: 2,
+          containsFullApiKeys: false
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState({
+        sections: [{
+          id: "today-focus",
+          title: "今日重点",
+          content: "导入后的日记段落",
+          kind: "required",
+          isEditableInBlockMode: true
+        }],
+        markdown: "# 2026-05-08\n\n## 今日重点\n\n导入后的日记段落"
+      })))
+      .mockResolvedValueOnce(mockJsonResponse(deepSeekAiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("查看历史");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/history?limit=50", undefined)
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.change(within(dialog).getByLabelText("导入包路径"), {
+      target: { value: packagePath }
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "导入数据包" }));
+
+    expect(await screen.findByText("导入后的日记段落")).toBeInTheDocument();
+    expect(within(dialog).getByText(backupDirectory)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+
+    await act(async () => {
+      historyRefreshDeferred.resolve(mockJsonResponse({ items: [historySummary] }));
+      await historyRefreshDeferred.promise;
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(screen.queryByRole("region", { name: "历史日记预览" })).not.toBeInTheDocument();
+    expect(screen.getByText("导入后的日记段落")).toBeInTheDocument();
+    expect(screen.getByLabelText("LLM：DeepSeek")).toBeInTheDocument();
+  });
+
+  test("clears stale data backup results on failures and close reopen", async () => {
+    const exportPath = "C:\\Journal\\.journal\\exports\\Journal-Export-old.zip";
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse({
+        exportPath,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 1,
+          rawInputCount: 1,
+          versionCount: 0,
+          containsFullApiKeys: false
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({ error: "export failed" }, false, 500));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    let dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
+    expect(await within(dialog).findByText(exportPath)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("export failed");
+    expect(within(dialog).queryByText(exportPath)).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "数据与备份" }));
+    dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+
+    expect(within(dialog).queryByText(exportPath)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("keeps a single modal open when switching between about llm and data backup", async () => {
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await screen.findByLabelText("LLM：Mock");
+    fireEvent(window, new CustomEvent("journal:native-menu-command", { detail: "open-about" }));
+    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "数据与备份" }));
+
+    expect(await screen.findByRole("dialog", { name: "数据与备份" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "关于 Journal" })).not.toBeInTheDocument();
+
+    fireEvent(window, new CustomEvent("journal:native-menu-command", { detail: "open-llm-settings" }));
+
+    expect(await screen.findByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "数据与备份" })).not.toBeInTheDocument();
+  });
+
+  test("keeps pasted import path when package selection is cancelled", async () => {
+    const existingPath = "C:\\Backups\\existing.zip";
+    const selectImportPackage = vi.fn().mockResolvedValue(null);
+    vi.stubGlobal("fetch", createInitialFetchMock());
+    vi.stubGlobal("journalDesktop", { selectImportPackage });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    const pathInput = within(dialog).getByLabelText("导入包路径");
+    fireEvent.change(pathInput, { target: { value: existingPath } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "选择导入包" }));
+
+    await waitFor(() => expect(selectImportPackage).toHaveBeenCalled());
+    expect(pathInput).toHaveValue(existingPath);
+  });
+
   test("LLM settings shows provider configuration without style selector buttons", async () => {
     vi.stubGlobal("fetch", createInitialFetchMock());
 
@@ -2665,6 +2930,7 @@ describe("App", () => {
     expect(focusEditor).toBeDisabled();
     expect(confirmButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "数据与备份" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
@@ -2674,6 +2940,7 @@ describe("App", () => {
     );
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(confirmButton).toBeEnabled();
+    expect(screen.getByRole("button", { name: "数据与备份" })).toBeEnabled();
   });
 
   test("blocks raw input refresh while inline dirty so local block edits stay visible", async () => {
@@ -3563,6 +3830,60 @@ describe("editor API client", () => {
     await getAiSettings();
 
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
+  });
+
+  test("exportJournalData posts to the data export endpoint", async () => {
+    const body = {
+      exportPath: "C:\\Journal\\.journal\\exports\\Journal.zip",
+      manifest: {
+        format: "journal-export/v1",
+        createdAt: "2026-05-15T08:30:00+08:00",
+        appVersion: "0.1.0",
+        backendVersion: "0.1.0",
+        frontendVersion: "0.1.0",
+        entryCount: 2,
+        rawInputCount: 3,
+        versionCount: 1,
+        containsFullApiKeys: false
+      }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(body));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(exportJournalData()).resolves.toEqual(body);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/data/export", {
+      method: "POST"
+    });
+  });
+
+  test("importJournalData posts the selected package path", async () => {
+    const body = {
+      backupDirectory: "C:\\Journal\\.journal\\import-backups\\20260515-083000",
+      manifest: {
+        format: "journal-export/v1",
+        createdAt: "2026-05-15T08:30:00+08:00",
+        appVersion: "0.1.0",
+        backendVersion: "0.1.0",
+        frontendVersion: "0.1.0",
+        entryCount: 4,
+        rawInputCount: 8,
+        versionCount: 2,
+        containsFullApiKeys: false
+      }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(body));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(importJournalData("C:\\Backups\\Journal.zip")).resolves.toEqual(body);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/data/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ packagePath: "C:\\Backups\\Journal.zip" })
+    });
   });
 
   test("saveAiSettings sends provider settings", async () => {

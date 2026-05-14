@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createBackendRuntime } = require("./backendRuntime.cjs");
+const { createDataBackupIpcHandlers } = require("./dataBackupIpc.cjs");
 const { createApplicationMenuTemplate } = require("./menu.cjs");
 
 const isDev = !app.isPackaged;
@@ -63,6 +64,15 @@ function getTrustedApiBaseUrl() {
 function installLocalServiceIpcHandlers() {
   ipcMain.handle("journal:get-local-service-status", () => localServiceState);
   ipcMain.handle("journal:get-api-base-url", () => getTrustedApiBaseUrl());
+}
+
+function installDataBackupIpcHandlers() {
+  createDataBackupIpcHandlers({
+    ipcMain,
+    dialog,
+    shell,
+    dataRoot: resolveLocalJournalDataRoot()
+  });
 }
 
 async function startPackagedBackendRuntime() {
@@ -152,6 +162,7 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(() => {
     installLocalServiceIpcHandlers();
+    installDataBackupIpcHandlers();
     void createWindow();
 
     app.on("activate", () => {

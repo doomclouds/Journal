@@ -22,6 +22,10 @@ function createApplicationMenuTemplate(options = {}) {
           label: "LLM 配置",
           click: () => sendCommand(mainWindow, "open-llm-settings")
         },
+        {
+          label: "数据与备份",
+          click: () => sendCommand(mainWindow, "open-data-backup")
+        },
         { type: "separator" },
         {
           label: "退出",
