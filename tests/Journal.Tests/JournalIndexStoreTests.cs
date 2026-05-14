@@ -254,6 +254,28 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
+    public async Task ReadAnniversaryAsync_IncludesRawInputWhenSectionsExceedHitLimit()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 14));
+        var sections = Enumerable.Range(1, 6)
+            .Select(index => new JournalIndexedSection(date, $"section-{index:00}", $"Section {index}", index, $"- Section content {index}"))
+            .ToArray();
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(CreateEntry(date), sections, CancellationToken.None);
+        await store.UpsertRawInputAsync(
+            new JournalIndexedRawInput("raw-1", date, DateTimeOffset.Parse("2026-05-14T08:00:00+08:00"), "text", "同一天有很多 section 时，raw input 也要保留"),
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-14", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        Assert.True(item.Hits.Count <= 5);
+    }
+
+    [Fact]
     public async Task ReadSummaryAsync_ReturnsCounts()
     {
         using var workspace = TempWorkspace.Create();

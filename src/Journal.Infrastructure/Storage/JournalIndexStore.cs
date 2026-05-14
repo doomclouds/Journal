@@ -380,7 +380,12 @@ public sealed class JournalIndexStore
                    se.raw_input_count,
                    se.version_count
             FROM selected_entries se
-            LEFT JOIN candidate_hits h ON h.date = se.date AND h.hit_rank <= $hitLimit
+            LEFT JOIN candidate_hits h ON h.date = se.date
+                AND (
+                    (h.source_type = 'section'
+                        AND h.hit_rank <= CASE WHEN se.raw_input_count > 0 THEN $hitLimit - 1 ELSE $hitLimit END)
+                    OR (h.source_type = 'raw-input' AND h.hit_rank <= 1)
+                )
             ORDER BY se.date DESC,
                      CASE h.source_type WHEN 'section' THEN 0 WHEN 'raw-input' THEN 1 ELSE 2 END,
                      h.section_id,
@@ -393,7 +398,7 @@ public sealed class JournalIndexStore
 
         return new JournalAnniversaryWheelResult(
             monthDay,
-            await ReadGroupedHitsAsync(command, normalizedLimit, cancellationToken));
+            await ReadAnniversaryGroupedHitsAsync(command, normalizedLimit, cancellationToken));
     }
 
     public async Task BackupAndResetAsync(DateTimeOffset now, string reason, CancellationToken cancellationToken)
@@ -847,6 +852,51 @@ public sealed class JournalIndexStore
     }
 
     private static async Task<IReadOnlyList<JournalHistoryEntrySummary>> ReadGroupedHitsAsync(
+        SqliteCommand command,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var grouped = new Dictionary<string, MutableSummary>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var date = reader.GetString(0);
+            if (!grouped.TryGetValue(date, out var summary))
+            {
+                if (grouped.Count >= limit)
+                {
+                    break;
+                }
+
+                summary = new MutableSummary(
+                    JournalDate.Parse(date),
+                    reader.GetString(1),
+                    GetNullableString(reader, 2),
+                    reader.GetInt32(9),
+                    reader.GetInt32(10),
+                    GetNullableString(reader, 3));
+                grouped.Add(date, summary);
+            }
+
+            if (summary.Hits.Count >= SearchHitsPerDateLimit)
+            {
+                continue;
+            }
+
+            summary.Hits.Add(new JournalHistoryHit(
+                reader.GetString(4),
+                GetNullableString(reader, 5),
+                GetNullableString(reader, 6),
+                reader.GetString(7),
+                reader.GetString(8)));
+        }
+
+        return grouped.Values
+            .Select(summary => summary.ToImmutable())
+            .ToArray();
+    }
+
+    private static async Task<IReadOnlyList<JournalHistoryEntrySummary>> ReadAnniversaryGroupedHitsAsync(
         SqliteCommand command,
         int limit,
         CancellationToken cancellationToken)
