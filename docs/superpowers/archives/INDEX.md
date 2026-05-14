@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-14-phase-6b-anniversary-wheel-archives.md](./2026-05/2026-05-14-phase-6b-anniversary-wheel-archives.md): 归档同日年轮按 `MM-DD` 回看历年日记、原始材料摘要、版本快照和 Today Assistant 入口的交付。
 - [2026-05-13-harness-unified-planner-prompt-archives.md](./2026-05/2026-05-13-harness-unified-planner-prompt-archives.md): 归档 Harness Run 新增输入与重新整理统一入口、两层 Planner Prompt Context、固定重新整理 user prompt 和今日页 SSE 接线。
 - [2026-05-13-phase-4a-local-history-search-archives.md](./2026-05/2026-05-13-phase-4a-local-history-search-archives.md): 归档 Journal 阶段 4A 的覆盖前版本快照、可重建 SQLite/FTS5 历史索引、History API 和历史与版本工作台。
 - [2026-05-12-journal-harness-core-archives.md](./2026-05/2026-05-12-journal-harness-core-archives.md): 归档 Journal 阶段 6 的 Harness Core、受控 LLM 工具调用、draft-only 执行、section provenance 和 AI 审计工作台。

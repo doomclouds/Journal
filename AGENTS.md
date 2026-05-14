@@ -4,13 +4,13 @@
 
 Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
 
-Current delivered scope is Phase 6 plus Phase 4A local history reliability:
+Current delivered scope is Phase 6B plus Phase 4A local history reliability:
 
 ```text
-Natural language input -> Mock or real LLM JSON or Harness Core tool plan -> JMF Markdown draft -> block/source edit or harness execution with JMF validation -> user confirmation -> version snapshot when overwriting -> formal Markdown file -> rebuildable SQLite/FTS history index -> history search/version restore workbench
+Natural language input -> Mock or real LLM JSON or Harness Core tool plan -> JMF Markdown draft -> block/source edit or harness execution with JMF validation -> user confirmation -> version snapshot when overwriting -> formal Markdown file -> rebuildable SQLite/FTS history index -> history search/same-day anniversary/version restore workbench
 ```
 
-Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 real OpenAI-compatible LLM integration, Harness Core, and Phase 4A local history/search:
+Phase 6B includes the Phase 3 generation/confirmation/editor workflow, Phase 5 real OpenAI-compatible LLM integration, Harness Core, Phase 4A local history/search, and Same-Day Anniversary Wheel:
 
 - Backend parses draft/entry Markdown into a JMF document.
 - Block mode edits known editable sections while preserving protected/system sections.
@@ -34,6 +34,7 @@ Phase 6 includes the Phase 3 generation/confirmation/editor workflow, Phase 5 re
 - SQLite lives under `.journal/index/journal.db` and is a rebuildable cache over Markdown, raw-input jsonl, and version files. Do not treat it as durable truth.
 - History APIs expose search, date detail, version list/detail, scan/rebuild, and restore-version-to-draft.
 - The history workbench is a full workspace mode opened from Today Assistant, mirroring audit-style navigation.
+- Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from Today Assistant, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and preserve existing version restore constraints.
 - Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
 
 Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.

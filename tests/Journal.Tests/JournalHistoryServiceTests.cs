@@ -62,6 +62,21 @@ public sealed class JournalHistoryServiceTests
     }
 
     [Fact]
+    public async Task GetAnniversaryAsync_ScansBeforeReturningSameMonthDayResults()
+    {
+        using var workspace = TempWorkspace.Create();
+        var date = JournalDate.From(new DateOnly(2026, 5, 14));
+        var (paths, service) = CreateSubject(workspace.Root);
+        await WriteEntryAsync(paths, date, CreateMarkdown(date, "同日年轮查询"));
+
+        var anniversary = await service.GetAnniversaryAsync("05-14", 50, CancellationToken.None);
+
+        var item = Assert.Single(anniversary.Items);
+        Assert.Equal(date, item.Date);
+        Assert.Contains(item.Hits, hit => hit.Snippet == "同日年轮查询");
+    }
+
+    [Fact]
     public async Task GetEntryAsync_ReturnsMetadataSectionsAndVersions()
     {
         using var workspace = TempWorkspace.Create();

@@ -198,6 +198,106 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
+    public async Task ReadAnniversaryAsync_ReturnsSameMonthDayEntriesNewestFirst()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var target2026 = JournalDate.From(new DateOnly(2026, 5, 14));
+        var target2025 = JournalDate.From(new DateOnly(2025, 5, 14));
+        var otherDay = JournalDate.From(new DateOnly(2024, 5, 13));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(target2025, mood: "期待"),
+            [new JournalIndexedSection(target2025, "today-focus", "今天想推进", 10, "- 去年也在做日记")],
+            CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(target2026, mood: "平静"),
+            [new JournalIndexedSection(target2026, "work", "工作推进", 20, "- 今年继续打磨同日年轮")],
+            CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(otherDay),
+            [new JournalIndexedSection(otherDay, "today-focus", "今天想推进", 10, "- 不应该出现在 05-14")],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-14", 50, CancellationToken.None);
+
+        Assert.Equal("05-14", result.MonthDay);
+        Assert.Equal([target2026, target2025], result.Items.Select(item => item.Date).ToArray());
+        Assert.Equal("工作推进", result.Items[0].Hits[0].Title);
+        Assert.Equal("今年继续打磨同日年轮", result.Items[0].Hits[0].Snippet);
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_IncludesRawOnlyAndAttentionEntries()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var rawOnlyDate = JournalDate.From(new DateOnly(2028, 2, 29));
+        var attentionDate = JournalDate.From(new DateOnly(2024, 2, 29));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(CreateEntry(rawOnlyDate, status: "raw-only"), [], CancellationToken.None);
+        await store.UpsertRawInputAsync(
+            new JournalIndexedRawInput("raw-1", rawOnlyDate, DateTimeOffset.Parse("2028-02-29T08:00:00+08:00"), "text", "闰日只有原始材料，也要能被年轮看到"),
+            CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(attentionDate, status: "attention", mood: null),
+            [new JournalIndexedSection(attentionDate, "mood", "情绪状态", 10, "格式需要处理")],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("02-29", 50, CancellationToken.None);
+
+        Assert.Equal([rawOnlyDate, attentionDate], result.Items.Select(item => item.Date).ToArray());
+        Assert.Equal("raw-only", result.Items[0].Status);
+        Assert.Equal("raw-input", result.Items[0].Hits[0].SourceType);
+        Assert.Equal("闰日只有原始材料，也要能被年轮看到", result.Items[0].Hits[0].Snippet);
+        Assert.Equal("attention", result.Items[1].Status);
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_IncludesRawInputWhenSectionsExceedHitLimit()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 14));
+        var sections = Enumerable.Range(1, 6)
+            .Select(index => new JournalIndexedSection(date, $"section-{index:00}", $"Section {index}", index, $"- Section content {index}"))
+            .ToArray();
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(CreateEntry(date), sections, CancellationToken.None);
+        await store.UpsertRawInputAsync(
+            new JournalIndexedRawInput("raw-1", date, DateTimeOffset.Parse("2026-05-14T08:00:00+08:00"), "text", "同一天有很多 section 时，raw input 也要保留"),
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-14", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Contains(item.Hits, hit => hit.SourceType == "raw-input" && hit.RawInputId == "raw-1");
+        Assert.True(item.Hits.Count <= 5);
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_ReturnsSectionHitsByDisplayOrder()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 14));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date),
+            [
+                new JournalIndexedSection(date, "a-later", "Later", 20, "- Later content"),
+                new JournalIndexedSection(date, "z-first", "First", 10, "- First content"),
+                new JournalIndexedSection(date, "m-middle", "Middle", 15, "- Middle content")
+            ],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-14", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(["First", "Middle", "Later"], item.Hits.Select(hit => hit.Title).ToArray());
+    }
+
+    [Fact]
     public async Task ReadSummaryAsync_ReturnsCounts()
     {
         using var workspace = TempWorkspace.Create();

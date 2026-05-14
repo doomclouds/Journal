@@ -6,6 +6,7 @@ import {
   getAiSettings,
   getHealth,
   getJournalAudit,
+  getJournalAnniversaryWheel,
   getJournalHistory,
   getJournalHistoryEntry,
   getJournalHistoryVersion,
@@ -26,6 +27,7 @@ import {
   type JournalEntryVersion,
   type JournalHarnessAuditRun,
   type JournalHarnessRunEvent,
+  type JournalAnniversaryWheelResult,
   type JournalHistoryEntryDetail,
   type JournalHistoryEntrySummary,
   type JournalVersionDetail,
@@ -34,6 +36,7 @@ import {
   type TodayEditorState
 } from "./api";
 import { AuditWorkbench } from "./AuditWorkbench";
+import { AnniversaryWheelWorkbench } from "./AnniversaryWheelWorkbench";
 import { HistoryWorkbench } from "./HistoryWorkbench";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
@@ -75,6 +78,32 @@ function getRawInputTags(text: string): string[] {
 
 const localUnsavedChangeMessage = "先保存或取消当前编辑，再继续补充或重新整理。";
 const terminalHarnessStatuses = new Set(["reviewing", "attention", "no-change", "failed", "interrupted"]);
+const daysInMonthByNumber = new Map([
+  [1, 31],
+  [2, 29],
+  [3, 31],
+  [4, 30],
+  [5, 31],
+  [6, 30],
+  [7, 31],
+  [8, 31],
+  [9, 30],
+  [10, 31],
+  [11, 30],
+  [12, 31]
+]);
+
+function isValidAnniversaryMonthDay(monthDay: string) {
+  const match = /^(\d{2})-(\d{2})$/.exec(monthDay);
+  if (!match) {
+    return false;
+  }
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const maxDay = daysInMonthByNumber.get(month);
+  return maxDay !== undefined && day >= 1 && day <= maxDay;
+}
 
 function isTerminalHarnessEvent(event: JournalHarnessRunEvent) {
   return terminalHarnessStatuses.has(event.status)
@@ -89,6 +118,7 @@ export default function App() {
   const settingsRequestIdRef = useRef(0);
   const auditRequestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
+  const historyVersionRequestIdRef = useRef(0);
   const harnessEventsRef = useRef<EventSource | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -106,9 +136,12 @@ export default function App() {
   const [workspaceMode, setWorkspaceMode] = useState<"today" | "audit" | "history">("today");
   const [auditDate, setAuditDate] = useState("");
   const [auditRuns, setAuditRuns] = useState<JournalHarnessAuditRun[]>([]);
+  const [historyViewMode, setHistoryViewMode] = useState<"search" | "anniversary">("search");
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
   const [historyEntries, setHistoryEntries] = useState<JournalHistoryEntrySummary[]>([]);
+  const [anniversaryMonthDay, setAnniversaryMonthDay] = useState("");
+  const [anniversaryResult, setAnniversaryResult] = useState<JournalAnniversaryWheelResult | null>(null);
   const [historyDetail, setHistoryDetail] = useState<JournalHistoryEntryDetail | null>(null);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
   const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
@@ -582,6 +615,41 @@ export default function App() {
     }
   }
 
+  async function refreshAnniversary(monthDay = anniversaryMonthDay) {
+    const historyRequestId = historyRequestIdRef.current + 1;
+    historyRequestIdRef.current = historyRequestId;
+    setHistoryError("");
+    setAnniversaryResult(null);
+    setHistorySelectedDate("");
+    setHistoryDetail(null);
+    setHistoryVersions([]);
+    setHistoryVersionDetail(null);
+
+    try {
+      const result = await getJournalAnniversaryWheel(monthDay, 50);
+      if (historyRequestId !== historyRequestIdRef.current) {
+        return;
+      }
+
+      const selectedStillExists = result.items.some(item => item.date.isoDate === historySelectedDate);
+      const selectedDate = selectedStillExists
+        ? historySelectedDate
+        : result.items[0]?.date.isoDate ?? "";
+      setAnniversaryResult(result);
+      setHistorySelectedDate(selectedDate);
+
+      if (!selectedDate) {
+        return;
+      }
+
+      await loadHistoryEntryForRequest(selectedDate, historyRequestId);
+    } catch (caught) {
+      if (historyRequestId === historyRequestIdRef.current) {
+        setHistoryError(getErrorMessage(caught));
+      }
+    }
+  }
+
   async function openHistoryWorkbench() {
     if (hasLocalUnsavedChanges) {
       resetPendingRegenerateDraft();
@@ -591,8 +659,51 @@ export default function App() {
 
     resetPendingRegenerateDraft();
     setValidationError("");
+    setHistoryViewMode("search");
     setWorkspaceMode("history");
     await refreshHistory(historyQuery, historyStatus);
+  }
+
+  async function openAnniversaryWorkbench() {
+    if (hasLocalUnsavedChanges) {
+      resetPendingRegenerateDraft();
+      setValidationError(localUnsavedChangeMessage);
+      return;
+    }
+
+    const monthDay = editor?.today.date.monthDay ?? today?.date.monthDay ?? "";
+    if (!monthDay) {
+      return;
+    }
+
+    resetPendingRegenerateDraft();
+    setValidationError("");
+    setHistoryViewMode("anniversary");
+    setAnniversaryMonthDay(monthDay);
+    setWorkspaceMode("history");
+    await refreshAnniversary(monthDay);
+  }
+
+  function handleAnniversaryMonthDayChange(monthDay: string) {
+    setAnniversaryMonthDay(monthDay);
+    if (isValidAnniversaryMonthDay(monthDay)) {
+      void refreshAnniversary(monthDay);
+      return;
+    }
+
+    historyRequestIdRef.current += 1;
+    historyVersionRequestIdRef.current += 1;
+    setAnniversaryResult(null);
+    setHistorySelectedDate("");
+    setHistoryDetail(null);
+    setHistoryVersions([]);
+    setHistoryVersionDetail(null);
+    setHistoryError("monthDay is invalid");
+  }
+
+  function clearHistoryVersionDetail() {
+    historyVersionRequestIdRef.current += 1;
+    setHistoryVersionDetail(null);
   }
 
   async function handleHistorySelectDate(date: string) {
@@ -614,12 +725,27 @@ export default function App() {
   }
 
   async function handleViewHistoryVersion(version: JournalEntryVersion) {
+    const historyRequestId = historyRequestIdRef.current;
+    const historyVersionRequestId = historyVersionRequestIdRef.current + 1;
+    historyVersionRequestIdRef.current = historyVersionRequestId;
     setHistoryError("");
     try {
       const detail = await getJournalHistoryVersion(version.date.isoDate, version.id);
-      setHistoryVersionDetail(detail);
+      if (
+        historyRequestId === historyRequestIdRef.current
+        && historyVersionRequestId === historyVersionRequestIdRef.current
+        && detail.version.date.isoDate === version.date.isoDate
+        && detail.version.id === version.id
+      ) {
+        setHistoryVersionDetail(detail);
+      }
     } catch (caught) {
-      setHistoryError(getErrorMessage(caught));
+      if (
+        historyRequestId === historyRequestIdRef.current
+        && historyVersionRequestId === historyVersionRequestIdRef.current
+      ) {
+        setHistoryError(getErrorMessage(caught));
+      }
     }
   }
 
@@ -678,31 +804,51 @@ export default function App() {
             onReturnToday={() => setWorkspaceMode("today")}
           />
         ) : workspaceMode === "history" ? (
-          <HistoryWorkbench
-            isBusy={isBusy}
-            query={historyQuery}
-            status={historyStatus}
-            entries={historyEntries}
-            detail={historyDetail}
-            selectedDate={historySelectedDate}
-            versions={historyVersions}
-            selectedVersionDetail={historyVersionDetail}
-            error={historyError}
-            onBack={() => setWorkspaceMode("today")}
-            onQueryChange={value => {
-              setHistoryQuery(value);
-              void refreshHistory(value, historyStatus);
-            }}
-            onStatusChange={value => {
-              setHistoryStatus(value);
-              void refreshHistory(historyQuery, value);
-            }}
-            onSelectDate={date => void handleHistorySelectDate(date)}
-            onRefresh={() => void refreshHistory()}
-            onViewVersion={version => void handleViewHistoryVersion(version)}
-            onClearVersion={() => setHistoryVersionDetail(null)}
-            onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
-          />
+          historyViewMode === "anniversary" ? (
+            <AnniversaryWheelWorkbench
+              isBusy={isBusy}
+              monthDay={anniversaryMonthDay}
+              result={anniversaryResult}
+              selectedDate={historySelectedDate}
+              detail={historyDetail}
+              versions={historyVersions}
+              selectedVersionDetail={historyVersionDetail}
+              error={historyError}
+              onBack={() => setWorkspaceMode("today")}
+              onRefresh={() => void refreshAnniversary()}
+              onMonthDayChange={handleAnniversaryMonthDayChange}
+              onSelectDate={date => void handleHistorySelectDate(date)}
+              onViewVersion={version => void handleViewHistoryVersion(version)}
+              onClearVersion={clearHistoryVersionDetail}
+              onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
+            />
+          ) : (
+            <HistoryWorkbench
+              isBusy={isBusy}
+              query={historyQuery}
+              status={historyStatus}
+              entries={historyEntries}
+              detail={historyDetail}
+              selectedDate={historySelectedDate}
+              versions={historyVersions}
+              selectedVersionDetail={historyVersionDetail}
+              error={historyError}
+              onBack={() => setWorkspaceMode("today")}
+              onQueryChange={value => {
+                setHistoryQuery(value);
+                void refreshHistory(value, historyStatus);
+              }}
+              onStatusChange={value => {
+                setHistoryStatus(value);
+                void refreshHistory(historyQuery, value);
+              }}
+              onSelectDate={date => void handleHistorySelectDate(date)}
+              onRefresh={() => void refreshHistory()}
+              onViewVersion={version => void handleViewHistoryVersion(version)}
+              onClearVersion={clearHistoryVersionDetail}
+              onRestoreVersion={version => void handleRestoreHistoryVersion(version)}
+            />
+          )
         ) : (
         <>
         <aside className="context-rail" aria-label="今日上下文">
@@ -971,10 +1117,16 @@ export default function App() {
             <section className="assistant-card path-panel">
               <div className="assistant-card-head">
                 <h3>历史与版本</h3>
-                <button type="button" className="assistant-inline-action" onClick={openHistoryWorkbench}>
-                  <History size={14} aria-hidden="true" />
-                  查看历史
-                </button>
+                <div className="assistant-card-actions">
+                  <button type="button" className="assistant-inline-action" onClick={openAnniversaryWorkbench}>
+                    <History size={14} aria-hidden="true" />
+                    同日年轮
+                  </button>
+                  <button type="button" className="assistant-inline-action" onClick={openHistoryWorkbench}>
+                    <History size={14} aria-hidden="true" />
+                    查看历史
+                  </button>
+                </div>
               </div>
               <p>搜索正式日记、查看覆盖前快照，并把旧版本恢复成待确认草稿。</p>
             </section>

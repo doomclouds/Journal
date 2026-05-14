@@ -3,6 +3,7 @@ using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Journal.Domain.Application;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Ai;
@@ -302,6 +303,23 @@ app.MapGet("/journal/history", async Task<IResult> (
     return Results.Ok(await service.SearchAsync(request, cancellationToken));
 });
 
+app.MapGet("/journal/history/anniversary/{monthDay}", async Task<IResult> (
+    string monthDay,
+    int? limit,
+    JournalHistoryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseMonthDay(monthDay, out var normalizedMonthDay, out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    return Results.Ok(await service.GetAnniversaryAsync(
+        normalizedMonthDay,
+        limit.GetValueOrDefault(50),
+        cancellationToken));
+});
+
 app.MapGet("/journal/history/{date}", async Task<IResult> (
     string date,
     JournalHistoryService service,
@@ -486,6 +504,36 @@ static bool TryParseJournalDate(string? value, out JournalDate date)
 
     date = default!;
     return false;
+}
+
+static bool TryParseMonthDay(string? value, out string monthDay, out string error)
+{
+    monthDay = "";
+    error = "";
+    if (string.IsNullOrWhiteSpace(value)
+        || !Regex.IsMatch(value, "^\\d{2}-\\d{2}$", RegexOptions.CultureInvariant))
+    {
+        error = "monthDay must use MM-dd";
+        return false;
+    }
+
+    var month = int.Parse(value[..2], CultureInfo.InvariantCulture);
+    var day = int.Parse(value[3..], CultureInfo.InvariantCulture);
+    if (month is < 1 or > 12)
+    {
+        error = "monthDay is invalid";
+        return false;
+    }
+
+    var maxDay = month == 2 ? 29 : DateTime.DaysInMonth(2000, month);
+    if (day < 1 || day > maxDay)
+    {
+        error = "monthDay is invalid";
+        return false;
+    }
+
+    monthDay = value;
+    return true;
 }
 
 static bool TryParseOptionalJournalDate(string? value, out DateOnly? date)
