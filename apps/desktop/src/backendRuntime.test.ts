@@ -12,6 +12,53 @@ describe("backend runtime classification", () => {
     expect(typeof runtime.createBackendRuntime).toBe("function");
   });
 
+  test("resolves installer sibling backend before resources backend", () => {
+    const resourcesPath = path.join("C:\\Program Files\\Journal", "app", "resources");
+    const siblingBackendPath = path.join("C:\\Program Files\\Journal", "backend", "Journal.Api.exe");
+    const resourcesBackendPath = path.join(resourcesPath, "backend", "Journal.Api.exe");
+
+    const resolved = runtime.resolvePackagedBackendExePath(
+      resourcesPath,
+      (candidatePath: string) => candidatePath === siblingBackendPath || candidatePath === resourcesBackendPath
+    );
+
+    expect(resolved).toBe(siblingBackendPath);
+  });
+
+  test("falls back to resources backend when sibling backend is absent", () => {
+    const resourcesPath = path.join("C:\\Program Files\\Journal", "app", "resources");
+    const resourcesBackendPath = path.join(resourcesPath, "backend", "Journal.Api.exe");
+
+    const resolved = runtime.resolvePackagedBackendExePath(
+      resourcesPath,
+      (candidatePath: string) => candidatePath === resourcesBackendPath
+    );
+
+    expect(resolved).toBe(resourcesBackendPath);
+  });
+
+  test("reads packaged build metadata env file", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "journal-runtime-test-"));
+    const metadataPath = path.join(root, "build-metadata.env");
+    await writeFile(metadataPath, [
+      "JOURNAL_RELEASE_VERSION=2.3.4",
+      "JOURNAL_BUILD_COMMIT=abc1234",
+      "JOURNAL_BUILD_TIME_UTC=2026-05-14T18:30:00Z",
+      "VITE_JOURNAL_RELEASE_VERSION=2.3.4"
+    ].join("\n"), "utf8");
+
+    try {
+      expect(runtime.readBuildMetadataFile(metadataPath)).toEqual({
+        JOURNAL_RELEASE_VERSION: "2.3.4",
+        JOURNAL_BUILD_COMMIT: "abc1234",
+        JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z",
+        VITE_JOURNAL_RELEASE_VERSION: "2.3.4"
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("treats mismatched app-info as uncertain without termination", () => {
     const result = runtime.classifyReusableBackendAppInfo(
       {
@@ -239,6 +286,62 @@ describe("backend runtime classification", () => {
       expect(result.apiBaseUrl).toBeNull();
       expect(result.reason).toBe("Spawned backend /app/info did not match the current packaged backend.");
       expect(terminatedPids).toEqual([9876]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("passes build metadata to the spawned backend process", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "journal-runtime-test-"));
+    const runtimeDirectory = path.join(root, "runtime");
+    const logDirectory = path.join(root, "logs");
+    const dataRoot = path.join(root, "data");
+    const backendExePath = "C:\\Program Files\\Journal\\backend\\Journal.Api.exe";
+    let capturedEnv: Record<string, string> | null = null;
+
+    try {
+      const backend = runtime.createBackendRuntime({
+        backendExePath,
+        dataRoot,
+        runtimeDirectory,
+        logDirectory,
+        releaseVersion: "2.3.4",
+        buildMetadata: {
+          JOURNAL_RELEASE_VERSION: "2.3.4",
+          JOURNAL_BUILD_COMMIT: "abc1234",
+          JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z"
+        },
+        processTools: {
+          chooseFreePort: async () => 61234,
+          spawnBackend: (_exePath: string, spawnOptions: { env: Record<string, string> }) => {
+            capturedEnv = spawnOptions.env;
+            return {
+              pid: 9876,
+              stdout: null,
+              stderr: null,
+              once: () => undefined
+            };
+          },
+          waitForAppInfo: async () => ({
+            name: "Journal.Api",
+            version: "0.1.0",
+            releaseVersion: "2.3.4",
+            dataRoot
+          }),
+          isProcessAlive: (pid: number) => pid === 9876
+        }
+      });
+
+      const result = await backend.start();
+
+      expect(result.status).toBe("connected");
+      expect(capturedEnv).toMatchObject({
+        ASPNETCORE_URLS: "http://127.0.0.1:61234",
+        JOURNAL_DATA_ROOT: dataRoot,
+        JOURNAL_RELEASE_VERSION: "2.3.4",
+        JOURNAL_BUILD_COMMIT: "abc1234",
+        JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z"
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

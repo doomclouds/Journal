@@ -1,7 +1,11 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createBackendRuntime } = require("./backendRuntime.cjs");
+const {
+  createBackendRuntime,
+  readBuildMetadataFile,
+  resolvePackagedBackendExePath: resolveBackendExePathFromResources
+} = require("./backendRuntime.cjs");
 const { createDataBackupIpcHandlers } = require("./dataBackupIpc.cjs");
 const { createApplicationMenuTemplate } = require("./menu.cjs");
 
@@ -30,8 +34,18 @@ function resolveLocalJournalDataRoot() {
 }
 
 function resolvePackagedBackendExePath() {
-  // The Windows installer staging places the published API beside app resources.
-  return path.join(process.resourcesPath, "backend", "Journal.Api.exe");
+  return resolveBackendExePathFromResources(process.resourcesPath);
+}
+
+function resolvePackagedBuildMetadata() {
+  const metadata = readBuildMetadataFile(path.join(process.resourcesPath, "build-metadata.env"));
+  const releaseVersion = metadata.JOURNAL_RELEASE_VERSION || app.getVersion();
+
+  return {
+    JOURNAL_RELEASE_VERSION: releaseVersion,
+    JOURNAL_BUILD_COMMIT: metadata.JOURNAL_BUILD_COMMIT,
+    JOURNAL_BUILD_TIME_UTC: metadata.JOURNAL_BUILD_TIME_UTC
+  };
 }
 
 function resolveAppIconPath() {
@@ -86,12 +100,14 @@ async function startPackagedBackendRuntime() {
   const dataRoot = resolveLocalJournalDataRoot();
   const runtimeDirectory = path.join(dataRoot, ".journal", "runtime");
   const logDirectory = path.join(dataRoot, ".journal", "logs");
+  const buildMetadata = resolvePackagedBuildMetadata();
   backendRuntime = createBackendRuntime({
     backendExePath: resolvePackagedBackendExePath(),
     dataRoot,
     runtimeDirectory,
     logDirectory,
-    releaseVersion: app.getVersion(),
+    releaseVersion: buildMetadata.JOURNAL_RELEASE_VERSION,
+    buildMetadata,
     onStateChange: setLocalServiceState
   });
 

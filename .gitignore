@@ -13,6 +13,12 @@ coverage/
 *.tsbuildinfo
 output/
 
+# Installer staging / distribution artifacts
+artifacts/installer/publish/
+artifacts/installer/dist/
+artifacts/installer/electron/
+artifacts/installer/build-metadata.env
+
 # Environment and secrets
 .env
 .env.*

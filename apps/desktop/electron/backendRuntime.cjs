@@ -36,6 +36,60 @@ function sameRequiredVersion(left, right) {
   return Boolean(left) && Boolean(right) && String(left) === String(right);
 }
 
+function resolvePackagedBackendExePath(resourcesPath, existsSync = fs.existsSync) {
+  const siblingBackendPath = path.resolve(resourcesPath, "..", "..", "backend", "Journal.Api.exe");
+  const resourcesBackendPath = path.join(resourcesPath, "backend", "Journal.Api.exe");
+  const candidates = [siblingBackendPath, resourcesBackendPath];
+
+  return candidates.find(candidatePath => existsSync(candidatePath)) ?? siblingBackendPath;
+}
+
+function parseBuildMetadata(content) {
+  const metadata = {};
+  for (const rawLine of String(content ?? "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    metadata[line.slice(0, separatorIndex)] = line.slice(separatorIndex + 1);
+  }
+
+  return metadata;
+}
+
+function readBuildMetadataFile(metadataPath) {
+  try {
+    return parseBuildMetadata(fs.readFileSync(metadataPath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return {};
+    }
+
+    throw error;
+  }
+}
+
+function createBackendProcessEnv(baseEnv, apiBaseUrl, dataRoot, buildMetadata = {}) {
+  const env = {
+    ...baseEnv,
+    ASPNETCORE_URLS: apiBaseUrl,
+    JOURNAL_DATA_ROOT: dataRoot
+  };
+  for (const name of ["JOURNAL_RELEASE_VERSION", "JOURNAL_BUILD_COMMIT", "JOURNAL_BUILD_TIME_UTC"]) {
+    if (buildMetadata[name]) {
+      env[name] = buildMetadata[name];
+    }
+  }
+
+  return env;
+}
+
 function classifyReusableBackendAppInfo(appInfo, lock, expected) {
   const matches =
     appInfo?.name === "Journal.Api"
@@ -301,6 +355,7 @@ function createBackendRuntime(options) {
   const runtimeDirectory = path.resolve(options.runtimeDirectory);
   const logDirectory = path.resolve(options.logDirectory);
   const releaseVersion = options.releaseVersion ?? null;
+  const buildMetadata = options.buildMetadata ?? {};
   const healthTimeoutMs = options.healthTimeoutMs ?? 15000;
   const processTools = options.processTools ?? {};
   const isAlive = processTools.isProcessAlive ?? isProcessAlive;
@@ -366,11 +421,7 @@ function createBackendRuntime(options) {
 
     child = spawnBackend(backendExePath, {
       cwd: path.dirname(backendExePath),
-      env: {
-        ...process.env,
-        ASPNETCORE_URLS: apiBaseUrl,
-        JOURNAL_DATA_ROOT: dataRoot
-      },
+      env: createBackendProcessEnv(process.env, apiBaseUrl, dataRoot, buildMetadata),
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -602,6 +653,10 @@ module.exports = {
   classifyReusableBackendAppInfo,
   classifyReusableBackendLock,
   classifySpawnedBackendAppInfo,
+  createBackendProcessEnv,
   createBackendRuntime,
-  isProcessAlive
+  isProcessAlive,
+  parseBuildMetadata,
+  readBuildMetadataFile,
+  resolvePackagedBackendExePath
 };
