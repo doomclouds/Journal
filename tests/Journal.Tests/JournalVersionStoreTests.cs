@@ -280,10 +280,7 @@ public sealed class JournalVersionStoreTests
         public static TempWorkspace Create() => new();
         public void Dispose()
         {
-            if (Directory.Exists(Root))
-            {
-                Directory.Delete(Root, recursive: true);
-            }
+            TestWorkspaceCleanup.DeleteDirectory(Root);
         }
     }
 }

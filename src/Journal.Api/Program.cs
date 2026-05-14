@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -13,6 +15,7 @@ using Journal.Infrastructure.Storage;
 using Journal.Infrastructure.Today;
 
 var builder = WebApplication.CreateBuilder(args);
+const string DesktopAccessTokenHeaderName = "X-Journal-Desktop-Token";
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -24,12 +27,20 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("DesktopDevelopment", policy =>
     {
+        var allowedOrigins = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "null"
+        };
+        if (builder.Environment.IsDevelopment())
+        {
+            allowedOrigins.Add("http://localhost:5173");
+            allowedOrigins.Add("http://127.0.0.1:5173");
+        }
+
         policy
-            .WithOrigins(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+            .SetIsOriginAllowed(origin => allowedOrigins.Contains(origin))
+            .WithHeaders("Content-Type", DesktopAccessTokenHeaderName)
+            .WithMethods("GET", "POST", "PUT");
     });
 });
 
@@ -56,10 +67,23 @@ builder.Services.AddSingleton<JournalHarnessAuditStore>();
 builder.Services.AddSingleton<JournalHarnessService>();
 builder.Services.AddSingleton<TodayJournalService>();
 builder.Services.AddSingleton<JournalHistoryService>();
+builder.Services.AddSingleton<JournalDataExportService>();
+builder.Services.AddSingleton<JournalDataImportService>();
 
 var app = builder.Build();
 
 app.UseCors("DesktopDevelopment");
+app.Use(async (context, next) =>
+{
+    if (RequiresDesktopAccessToken(context, app.Environment) && !HasValidDesktopAccessToken(context))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { error = "desktop access token is invalid" });
+        return;
+    }
+
+    await next();
+});
 
 app.MapGet("/health", (IHostEnvironment environment) =>
 {
@@ -69,6 +93,61 @@ app.MapGet("/health", (IHostEnvironment environment) =>
         ApplicationInfo.Version,
         environment.EnvironmentName,
         DateTimeOffset.Now));
+});
+
+app.MapGet("/app/info", (
+    IHostEnvironment environment,
+    JournalStorageOptions storageOptions,
+    LocalJournalPaths paths) =>
+{
+    var build = ApplicationBuildInfo.Current;
+    return Results.Ok(new AppInfoResponse(
+        ApplicationInfo.Name,
+        ApplicationInfo.Version,
+        build.ReleaseVersion,
+        build.Commit,
+        build.BuildTimeUtc,
+        environment.EnvironmentName,
+        storageOptions.RootDirectory,
+        paths.IndexPath()));
+});
+
+app.MapPost("/journal/data/export", async (
+    JournalDataExportService service,
+    LocalJournalPaths paths,
+    IJournalClock clock,
+    CancellationToken cancellationToken) =>
+{
+    var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
+    var exportPath = Path.Combine(
+        paths.ExportDirectory(),
+        $"Journal-Export-{clock.Now:yyyy-MM-dd-HHmmss}-{uniqueSuffix}.zip");
+
+    return Results.Ok(await service.ExportAsync(exportPath, cancellationToken));
+});
+
+app.MapPost("/journal/data/import", async Task<IResult> (
+    JournalDataImportRequest request,
+    JournalDataImportService service,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.PackagePath))
+    {
+        return Results.BadRequest(new { error = "packagePath is required" });
+    }
+
+    try
+    {
+        return Results.Ok(await service.ImportAsync(request.PackagePath, cancellationToken));
+    }
+    catch (FileNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+    catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
 });
 
 app.MapGet("/settings/ai", async (JournalAiSettingsService service, CancellationToken cancellationToken) =>
@@ -581,6 +660,64 @@ static bool TryParseHarnessRunDate(string? runId, out JournalDate date)
     return false;
 }
 
+static bool RequiresDesktopAccessToken(HttpContext context, IHostEnvironment environment)
+{
+    if (HttpMethods.IsOptions(context.Request.Method))
+    {
+        return false;
+    }
+
+    var origin = context.Request.Headers.Origin.ToString();
+    if (string.IsNullOrWhiteSpace(origin))
+    {
+        return false;
+    }
+
+    return IsDesktopAccessTokenConfigured()
+        || !environment.IsDevelopment()
+        || string.Equals(origin, "null", StringComparison.Ordinal);
+}
+
+static bool HasValidDesktopAccessToken(HttpContext context)
+{
+    var expected = Environment.GetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN");
+    if (string.IsNullOrWhiteSpace(expected))
+    {
+        return false;
+    }
+
+    var provided = context.Request.Headers["X-Journal-Desktop-Token"].ToString();
+    if (string.IsNullOrWhiteSpace(provided) && IsHarnessEventStreamRequest(context))
+    {
+        provided = context.Request.Query["desktopAccessToken"].ToString();
+    }
+
+    return FixedTimeEquals(provided, expected);
+}
+
+static bool IsDesktopAccessTokenConfigured() =>
+    !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN"));
+
+static bool IsHarnessEventStreamRequest(HttpContext context)
+{
+    return HttpMethods.IsGet(context.Request.Method)
+        && context.Request.Path.StartsWithSegments("/journal/harness/runs", StringComparison.Ordinal)
+        && context.Request.Path.Value?.EndsWith("/events", StringComparison.Ordinal) == true;
+}
+
+static bool FixedTimeEquals(string? left, string? right)
+{
+    if (string.IsNullOrEmpty(left) || string.IsNullOrEmpty(right))
+    {
+        return false;
+    }
+
+    var leftBytes = Encoding.UTF8.GetBytes(left);
+    var rightBytes = Encoding.UTF8.GetBytes(right);
+    return leftBytes.Length == rightBytes.Length
+        && CryptographicOperations.FixedTimeEquals(leftBytes, rightBytes);
+}
+
 app.Run();
 
 public partial class Program
@@ -590,6 +727,8 @@ public partial class Program
 public sealed record AddTodayInputRequest(string Text, string? Source);
 
 public sealed record HarnessRunRequest(string? Text, string? Source, string? Mode);
+
+public sealed record JournalDataImportRequest(string? PackagePath);
 
 public sealed record HarnessRunEventView(
     string Type,
@@ -609,3 +748,13 @@ public sealed record HealthResponse(
     string Version,
     string Environment,
     DateTimeOffset ServerTime);
+
+public sealed record AppInfoResponse(
+    string Name,
+    string Version,
+    string ReleaseVersion,
+    string Commit,
+    string BuildTimeUtc,
+    string Environment,
+    string DataRoot,
+    string IndexPath);

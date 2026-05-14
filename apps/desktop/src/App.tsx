@@ -1,10 +1,15 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { History, RefreshCw, Save, SendHorizontal } from "lucide-react";
+import { DatabaseBackup, FolderOpen, History, RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   activateAiSettings,
   confirmTodayDraft,
+  exportJournalData,
+  frontendBuildInfo,
   getAiSettings,
+  getAppInfo,
   getHealth,
+  initializeApiBaseUrlFromDesktop,
+  importJournalData,
   getJournalAudit,
   getJournalAnniversaryWheel,
   getJournalHistory,
@@ -19,6 +24,7 @@ import {
   startAppendHarnessRun,
   startReorganizeHarnessRun,
   testAiProvider,
+  type AppInfo,
   type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
   type AiProviderHealthResult,
@@ -28,6 +34,9 @@ import {
   type JournalHarnessAuditRun,
   type JournalHarnessRunEvent,
   type JournalAnniversaryWheelResult,
+  type JournalDataExportManifest,
+  type JournalDataExportResult,
+  type JournalDataImportResult,
   type JournalHistoryEntryDetail,
   type JournalHistoryEntrySummary,
   type JournalVersionDetail,
@@ -41,6 +50,10 @@ import { HistoryWorkbench } from "./HistoryWorkbench";
 import { JournalEditor } from "./JournalEditor";
 import { LlmSettingsPanel } from "./LlmSettingsPanel";
 import {
+  getLocalServiceStatusLabel,
+  type LocalServiceState
+} from "./serviceStatus";
+import {
   getAssistantSummary,
   getProductJournalStatus,
   getRawInputPreview,
@@ -50,13 +63,18 @@ import {
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
-type NativeMenuCommand = "open-llm-settings";
+type NativeMenuCommand = "open-llm-settings" | "open-about" | "open-data-backup";
 const nativeMenuDomEventName = "journal:native-menu-command";
 
 declare global {
   interface Window {
     journalDesktop?: {
       platform?: string;
+      getLocalServiceStatus?: () => Promise<LocalServiceState>;
+      getApiBaseUrl?: () => Promise<string | null>;
+      getDesktopAccessToken?: () => Promise<string | null>;
+      selectImportPackage?: () => Promise<string | null>;
+      openPath?: (targetPath: string) => Promise<boolean>;
       onNativeMenuCommand?: (handler: (command: NativeMenuCommand) => void) => () => void;
     };
   }
@@ -64,6 +82,16 @@ declare global {
 
 function getErrorMessage(caught: unknown) {
   return caught instanceof Error ? caught.message : "unknown error";
+}
+
+function formatDataManifestCounts(manifest: JournalDataExportManifest) {
+  return `${manifest.entryCount} 篇日记 · ${manifest.rawInputCount} 条原始输入 · ${manifest.versionCount} 个版本`;
+}
+
+function getApiKeyManifestNotice(manifest: JournalDataExportManifest) {
+  return manifest.containsFullApiKeys
+    ? "导入包声明包含完整 API Key，请确认来源。"
+    : "导出包不包含完整 API Key。";
 }
 
 function formatRawInputTime(value: string) {
@@ -113,18 +141,49 @@ function isTerminalHarnessEvent(event: JournalHarnessRunEvent) {
     || event.type === "run-interrupted";
 }
 
+function isTrustedLocalServiceState(state: LocalServiceState | null) {
+  return state?.status === "connected" || state?.status === "reused";
+}
+
+function getBlockedLocalServiceMessage(state: LocalServiceState | null) {
+  if (state?.reason) {
+    return state.reason;
+  }
+
+  return "本地服务启动失败，暂时无法读取今天的状态。";
+}
+
 export default function App() {
   const requestIdRef = useRef(0);
   const settingsRequestIdRef = useRef(0);
   const auditRequestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
   const historyVersionRequestIdRef = useRef(0);
+  const aboutRequestIdRef = useRef(0);
+  const aboutInFlightRef = useRef<Promise<AppInfo> | null>(null);
+  const aboutCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const aboutDialogRef = useRef<HTMLElement | null>(null);
+  const aboutPreviousFocusRef = useRef<HTMLElement | null>(null);
+  const dataBackupCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dataBackupDialogRef = useRef<HTMLElement | null>(null);
+  const dataBackupPreviousFocusRef = useRef<HTMLElement | null>(null);
+  const dataBackupEntryDisabledRef = useRef(false);
   const harnessEventsRef = useRef<EventSource | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettingsView | null>(null);
   const [isLlmPanelOpen, setIsLlmPanelOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [aboutError, setAboutError] = useState("");
+  const [dataBackupError, setDataBackupError] = useState("");
+  const [importPackagePath, setImportPackagePath] = useState("");
+  const [dataExportResult, setDataExportResult] = useState<JournalDataExportResult | null>(null);
+  const [dataImportResult, setDataImportResult] = useState<JournalDataImportResult | null>(null);
+  const [isDataExporting, setIsDataExporting] = useState(false);
+  const [isDataImporting, setIsDataImporting] = useState(false);
   const [input, setInput] = useState("");
   const [apiError, setApiError] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -148,6 +207,7 @@ export default function App() {
   const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
   const [historyVersionDetail, setHistoryVersionDetail] = useState<JournalVersionDetail | null>(null);
   const [historyError, setHistoryError] = useState("");
+  const [localServiceState, setLocalServiceState] = useState<LocalServiceState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,6 +216,41 @@ export default function App() {
 
     async function load() {
       try {
+        const hasDesktopBridge = Boolean(window.journalDesktop);
+        const getDesktopServiceState = window.journalDesktop?.getLocalServiceStatus;
+        let desktopServiceState: LocalServiceState | null = null;
+        if (getDesktopServiceState) {
+          desktopServiceState = await getDesktopServiceState().catch(() => null);
+          if (!cancelled && requestId === requestIdRef.current && desktopServiceState) {
+            setLocalServiceState(desktopServiceState);
+          }
+        }
+
+        if (hasDesktopBridge) {
+          if (desktopServiceState && !isTrustedLocalServiceState(desktopServiceState)) {
+            if (!cancelled && requestId === requestIdRef.current) {
+              setLoadState("error");
+              setApiError(getBlockedLocalServiceMessage(desktopServiceState));
+            }
+            return;
+          }
+
+          const trustedApiBaseUrl = await initializeApiBaseUrlFromDesktop();
+          if (!trustedApiBaseUrl) {
+            if (!cancelled && requestId === requestIdRef.current) {
+              setLoadState("error");
+              setApiError(getBlockedLocalServiceMessage(desktopServiceState));
+            }
+            return;
+          }
+        } else {
+          await initializeApiBaseUrlFromDesktop();
+        }
+
+        if (cancelled || requestId !== requestIdRef.current) {
+          return;
+        }
+
         const [healthResult, editorResult, aiSettingsResult] = await Promise.all([
           getHealth(),
           getTodayEditor(),
@@ -200,10 +295,94 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const getDesktopServiceState = window.journalDesktop?.getLocalServiceStatus;
+    if (!getDesktopServiceState) {
+      return undefined;
+    }
+
+    const refreshLocalServiceState = () => {
+      void getDesktopServiceState()
+        .then(setLocalServiceState)
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(refreshLocalServiceState, 5000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAboutOpen) {
+      return undefined;
+    }
+
+    aboutPreviousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    function handleAboutKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeAboutPanel();
+      }
+    }
+
+    document.addEventListener("keydown", handleAboutKeyDown);
+    (aboutCloseButtonRef.current ?? aboutDialogRef.current)?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", handleAboutKeyDown);
+      const previousFocus = aboutPreviousFocusRef.current;
+      aboutPreviousFocusRef.current = null;
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus();
+      }
+    };
+  }, [isAboutOpen]);
+
+  useEffect(() => {
+    if (!isDataBackupOpen) {
+      return undefined;
+    }
+
+    dataBackupPreviousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    function handleDataBackupKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeDataBackupPanel();
+      }
+    }
+
+    document.addEventListener("keydown", handleDataBackupKeyDown);
+    (dataBackupCloseButtonRef.current ?? dataBackupDialogRef.current)?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", handleDataBackupKeyDown);
+      const previousFocus = dataBackupPreviousFocusRef.current;
+      dataBackupPreviousFocusRef.current = null;
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus();
+      }
+    };
+  }, [isDataBackupOpen]);
+
+  useEffect(() => {
     function handleNativeMenuCommand(command: NativeMenuCommand) {
       if (command === "open-llm-settings") {
         resetPendingRegenerateDraft();
+        closeAboutPanel();
+        closeDataBackupPanel();
         setIsLlmPanelOpen(true);
+      }
+      if (command === "open-about") {
+        void openAboutPanel();
+      }
+      if (command === "open-data-backup") {
+        openDataBackupPanel();
       }
     }
 
@@ -244,6 +423,10 @@ export default function App() {
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
+  const isDataBusy = isDataExporting || isDataImporting;
+  const isDataBackupEntryDisabled = isBusy || isSettingsSubmitting || isDataBusy;
+  const isDataBackupActionDisabled = isDataBackupEntryDisabled;
+  dataBackupEntryDisabledRef.current = isDataBackupEntryDisabled;
   const editableSectionCount = editor?.sections.filter(section => section.isEditableInBlockMode).length ?? 0;
   const assistantSummary = getAssistantSummary({
     rawInputCount: inputCount,
@@ -279,6 +462,14 @@ export default function App() {
   const latestRawInputTime = latestRawInput?.createdAt
     ? formatRawInputTime(latestRawInput.createdAt)
     : "--:--";
+  const localServiceDetail = localServiceState
+    ? [
+        isTrustedLocalServiceState(localServiceState)
+          ? localServiceState.apiBaseUrl ?? (localServiceState.port ? `127.0.0.1:${localServiceState.port}` : "")
+          : "",
+        localServiceState.pid ? `PID ${localServiceState.pid}` : ""
+      ].filter(Boolean).join(" · ")
+    : "";
   const sectionTargets = editor?.sections
     .filter(section => section.id !== "raw-inputs")
     .map(section => getSectionDisplayTitle(section.id, section.title)) ?? [];
@@ -299,6 +490,192 @@ export default function App() {
 
   function resetPendingRegenerateDraft() {
     setIsRegenerateConfirmOpen(false);
+  }
+
+  function closeAboutPanel() {
+    aboutRequestIdRef.current += 1;
+    aboutInFlightRef.current = null;
+    setIsAboutOpen(false);
+    setAboutError("");
+  }
+
+  function resetDataBackupPanelState() {
+    setDataBackupError("");
+    setImportPackagePath("");
+    setDataExportResult(null);
+    setDataImportResult(null);
+  }
+
+  function openDataBackupPanel() {
+    if (dataBackupEntryDisabledRef.current) {
+      return;
+    }
+
+    resetPendingRegenerateDraft();
+    closeAboutPanel();
+    setIsLlmPanelOpen(false);
+    resetDataBackupPanelState();
+    setIsDataBackupOpen(true);
+  }
+
+  function closeDataBackupPanel() {
+    setIsDataBackupOpen(false);
+    resetDataBackupPanelState();
+  }
+
+  async function openAboutPanel() {
+    closeDataBackupPanel();
+    setIsLlmPanelOpen(false);
+    setIsAboutOpen(true);
+    setAboutError("");
+    if (aboutInFlightRef.current) {
+      return;
+    }
+
+    const requestId = aboutRequestIdRef.current + 1;
+    aboutRequestIdRef.current = requestId;
+    const request = getAppInfo();
+    aboutInFlightRef.current = request;
+    try {
+      const result = await request;
+      if (requestId === aboutRequestIdRef.current) {
+        setAppInfo(result);
+        setAboutError("");
+      }
+    } catch (caught) {
+      if (requestId === aboutRequestIdRef.current) {
+        setAboutError(getErrorMessage(caught));
+      }
+    } finally {
+      if (aboutInFlightRef.current === request) {
+        aboutInFlightRef.current = null;
+      }
+    }
+  }
+
+  async function handleExportJournalData() {
+    if (isDataBackupActionDisabled) {
+      return;
+    }
+
+    setDataBackupError("");
+    setDataExportResult(null);
+    setDataImportResult(null);
+    setIsDataExporting(true);
+    try {
+      const result = await exportJournalData();
+      setDataExportResult(result);
+    } catch (caught) {
+      setDataBackupError(getErrorMessage(caught));
+    } finally {
+      setIsDataExporting(false);
+    }
+  }
+
+  async function handleSelectImportPackage() {
+    if (isDataBackupActionDisabled) {
+      return;
+    }
+
+    setDataBackupError("");
+    try {
+      const selectedPath = await window.journalDesktop?.selectImportPackage?.();
+      if (selectedPath) {
+        setImportPackagePath(selectedPath);
+      }
+    } catch (caught) {
+      setDataBackupError(getErrorMessage(caught));
+    }
+  }
+
+  async function handleImportJournalData() {
+    if (isDataBackupActionDisabled) {
+      return;
+    }
+
+    const packagePath = importPackagePath.trim();
+    if (!packagePath) {
+      return;
+    }
+
+    invalidateInFlightRequestsForDataImport();
+    setDataBackupError("");
+    setDataExportResult(null);
+    setDataImportResult(null);
+    setIsDataImporting(true);
+    try {
+      const result = await importJournalData(packagePath);
+      const [nextEditor, nextAiSettings] = await Promise.all([
+        getTodayEditor(),
+        getAiSettings()
+      ]);
+      setDataImportResult(result);
+      setEditor(nextEditor);
+      setAiSettings(nextAiSettings);
+      setLoadState("ready");
+      setApiError("");
+      resetWorkspaceStateAfterDataImport();
+    } catch (caught) {
+      setDataBackupError(getErrorMessage(caught));
+    } finally {
+      setIsDataImporting(false);
+    }
+  }
+
+  function invalidateInFlightRequestsForDataImport() {
+    requestIdRef.current += 1;
+    settingsRequestIdRef.current += 1;
+    auditRequestIdRef.current += 1;
+    historyRequestIdRef.current += 1;
+    historyVersionRequestIdRef.current += 1;
+    aboutRequestIdRef.current += 1;
+    aboutInFlightRef.current = null;
+    harnessEventsRef.current?.close();
+    harnessEventsRef.current = null;
+    setIsSubmitting(false);
+    setIsSettingsSubmitting(false);
+  }
+
+  function resetWorkspaceStateAfterDataImport() {
+    setWorkspaceMode("today");
+    setWorkbenchView("assistant");
+    setJournalCorridorMenu(null);
+    setAuditDate("");
+    setAuditRuns([]);
+    setHistoryViewMode("search");
+    setHistoryQuery("");
+    setHistoryStatus("");
+    setHistoryEntries([]);
+    setAnniversaryMonthDay("");
+    setAnniversaryResult(null);
+    setHistoryDetail(null);
+    setHistorySelectedDate("");
+    setHistoryVersions([]);
+    setHistoryVersionDetail(null);
+    setHistoryError("");
+  }
+
+  async function handleOpenDataPath(targetPath: string) {
+    setDataBackupError("");
+    if (!targetPath.trim()) {
+      setDataBackupError("路径为空，无法打开。");
+      return;
+    }
+
+    const openPath = window.journalDesktop?.openPath;
+    if (!openPath) {
+      setDataBackupError("当前环境不支持打开本地路径。");
+      return;
+    }
+
+    try {
+      const opened = await openPath(targetPath);
+      if (!opened) {
+        setDataBackupError("系统没有打开这个路径，请手动复制路径查看。");
+      }
+    } catch (caught) {
+      setDataBackupError(getErrorMessage(caught));
+    }
   }
 
   async function runHarnessAndRefresh(
@@ -790,6 +1167,25 @@ export default function App() {
           ></span>
           <span><strong>{zhDateLabel}</strong> · {weekdayLabel} · {inputCount > 0 ? "原始表达已保留" : "等待第一句原始表达"}</span>
         </div>
+        <div className="top-actions">
+          {localServiceState ? (
+            <div className="local-service-line" aria-label="本地服务状态">
+              <span>{getLocalServiceStatusLabel(localServiceState.status)}</span>
+              {localServiceDetail ? <span>{localServiceDetail}</span> : null}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="top-tool-button"
+            aria-label="数据与备份"
+            title="数据与备份"
+            onClick={openDataBackupPanel}
+            disabled={isDataBackupEntryDisabled}
+          >
+            <DatabaseBackup size={15} strokeWidth={2.2} aria-hidden="true" />
+            <span>数据与备份</span>
+          </button>
+        </div>
       </header>
 
       <section className="feedback-row" aria-label="提示信息">
@@ -1212,6 +1608,165 @@ export default function App() {
           onTest={handleTestAiProvider}
           onRevealApiKey={handleRevealAiProviderKey}
         />
+      ) : null}
+      {isDataBackupOpen ? (
+        <div className="llm-settings-backdrop" role="presentation">
+          <section
+            className="data-backup-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="数据与备份"
+            ref={dataBackupDialogRef}
+            tabIndex={-1}
+          >
+            <header className="data-backup-head">
+              <div>
+                <strong>数据与备份</strong>
+                <span>导出、迁移和恢复本地 Journal 数据</span>
+              </div>
+              <button type="button" ref={dataBackupCloseButtonRef} onClick={closeDataBackupPanel}>
+                关闭
+              </button>
+            </header>
+
+            <div className="data-backup-body">
+              <section className="data-backup-section">
+                <div className="data-backup-section-head">
+                  <div>
+                    <h2>导出</h2>
+                    <p>生成一个本地数据包，默认不包含完整 API Key。</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={() => void handleExportJournalData()}
+                    disabled={isDataBackupActionDisabled}
+                  >
+                    {isDataExporting ? "正在导出" : "导出数据包"}
+                  </button>
+                </div>
+
+                {dataExportResult ? (
+                  <div className="data-backup-result" aria-label="导出结果">
+                    <span>导出路径</span>
+                    <p>{dataExportResult.exportPath}</p>
+                    <div className="data-backup-meta">
+                      <span>{formatDataManifestCounts(dataExportResult.manifest)}</span>
+                      <span>{getApiKeyManifestNotice(dataExportResult.manifest)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => void handleOpenDataPath(dataExportResult.exportPath)}
+                    >
+                      <FolderOpen size={15} aria-hidden="true" />
+                      打开导出路径
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="data-backup-section">
+                <div className="data-backup-section-head">
+                  <div>
+                    <h2>导入</h2>
+                    <p>导入会先备份当前数据；导出默认不包含完整 API Key。</p>
+                  </div>
+                </div>
+                <form className="data-import-form" onSubmit={event => {
+                  event.preventDefault();
+                  void handleImportJournalData();
+                }}>
+                  <label>
+                    <span>导入包路径</span>
+                    <input
+                      value={importPackagePath}
+                      onChange={event => setImportPackagePath(event.target.value)}
+                      placeholder="C:\\Backups\\Journal-Export.zip"
+                      disabled={isDataBackupActionDisabled}
+                    />
+                  </label>
+                  <div className="data-import-actions">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => void handleSelectImportPackage()}
+                      disabled={isDataBackupActionDisabled}
+                    >
+                      选择导入包
+                    </button>
+                    <button
+                      type="submit"
+                      className="primary-action"
+                      disabled={isDataBackupActionDisabled || !importPackagePath.trim()}
+                    >
+                      {isDataImporting ? "正在导入" : "导入数据包"}
+                    </button>
+                  </div>
+                </form>
+
+                {dataImportResult ? (
+                  <div className="data-backup-result" aria-label="导入结果">
+                    <span>当前数据备份目录</span>
+                    <p>{dataImportResult.backupDirectory}</p>
+                    <div className="data-backup-meta">
+                      <span>{formatDataManifestCounts(dataImportResult.manifest)}</span>
+                      <span>{getApiKeyManifestNotice(dataImportResult.manifest)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => void handleOpenDataPath(dataImportResult.backupDirectory)}
+                    >
+                      <FolderOpen size={15} aria-hidden="true" />
+                      打开备份目录
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+            </div>
+
+            {dataBackupError ? <p className="api-error data-backup-alert" role="alert">{dataBackupError}</p> : null}
+          </section>
+        </div>
+      ) : null}
+      {isAboutOpen ? (
+        <div className="llm-settings-backdrop" role="presentation">
+          <section
+            className="about-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="关于 Journal"
+            ref={aboutDialogRef}
+            tabIndex={-1}
+          >
+            <header>
+              <h2>关于 Journal</h2>
+              <button type="button" ref={aboutCloseButtonRef} onClick={closeAboutPanel}>关闭</button>
+            </header>
+            <dl>
+              <dt>Release</dt>
+              <dd>{appInfo?.releaseVersion ?? frontendBuildInfo.releaseVersion}</dd>
+              <dt>前端</dt>
+              <dd>Frontend {frontendBuildInfo.frontendVersion}</dd>
+              <dt>Backend</dt>
+              <dd>{appInfo ? `Backend ${appInfo.version}` : "Backend 未连接"}</dd>
+              <dt>Commit</dt>
+              <dd>{appInfo?.commit ?? frontendBuildInfo.commit}</dd>
+              <dt>Build</dt>
+              <dd>{appInfo?.buildTimeUtc ?? frontendBuildInfo.buildTimeUtc}</dd>
+              <dt>Data</dt>
+              <dd>{appInfo?.dataRoot ?? "本地服务未连接"}</dd>
+            </dl>
+            {aboutError ? <p className="api-error" role="alert">{aboutError}</p> : null}
+            <footer>
+              <span>License</span>
+              <span>Privacy</span>
+              <span>Data Safety</span>
+              <span>AI Notice</span>
+            </footer>
+          </section>
+        </div>
       ) : null}
     </main>
   );

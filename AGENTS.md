@@ -38,7 +38,7 @@ Phase 6B includes the Phase 3 generation/confirmation/editor workflow, Phase 5 r
 - Anniversary mode is a read-only memory corridor; versions can be viewed there, not restored.
 - Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
 
-Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, installers, production Electron hosting of the .NET backend, delete flows, item-level provenance, draft diff, rollback.
+Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, delete flows, item-level provenance, draft diff, or entry rollback UI. GitHub Actions Windows release workflow is wired: manual `workflow_dispatch` only builds GitHub-hosted installer artifacts, and actual GitHub Release publishing only comes from a pushed `v*` tag.
 
 ## Tech Stack
 
@@ -69,6 +69,7 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - History workbench UI: `apps/desktop/src/HistoryWorkbench.tsx`.
 - Same-day anniversary workbench UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
 - API client and shared frontend contracts: `apps/desktop/src/api.ts`.
+- Windows release workflow: `.github/workflows/release-windows.yml`; manual `workflow_dispatch` builds installer artifacts from `release_version` without publishing a GitHub Release, and pushed `v*` tags build and publish GitHub Release assets.
 - Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
 ## Product Invariants
@@ -95,7 +96,7 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - Harness execution normalizes AI tool content into Markdown bullet-list section bodies and suppresses exact duplicate facts across competing section operations.
 - Harness execution is draft-only. Executing a run may write a `reviewing` or `attention` draft, never `entries/`.
 - Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
-- Harness provenance is section-level. Do not claim item-level provenance, diff, or rollback unless those features are added.
+- Harness provenance is section-level. Do not claim item-level provenance, draft diff, or entry rollback UI unless those features are added.
 - Anniversary mode is read-only. Do not expose restore, delete, diff, or edit actions there unless the product direction changes explicitly.
 - Restoring a version is draft-only. It must create a `reviewing` draft and must not write `entries/` directly.
 - Current version restore is limited to today's date; avoid exposing non-today restore until date-aware editor/confirm behavior exists.
@@ -132,7 +133,23 @@ npm install --prefix apps/desktop
 npm run desktop --prefix apps/desktop
 ```
 
-The development flow is two-process: start the .NET API first, then start the Electron/Vite desktop app. Vite is configured for `127.0.0.1:5173` with `strictPort`; backend CORS currently allows `http://localhost:5173` and `http://127.0.0.1:5173`.
+The development flow is two-process: start the .NET API first, then start the Electron/Vite desktop app. Vite is configured for `127.0.0.1:5173` with `strictPort`; backend CORS currently allows `http://localhost:5173`, `http://127.0.0.1:5173`, and packaged Electron `null` origins.
+
+Focused release commands:
+
+```powershell
+.\scripts\release\build-installer.ps1 -ReleaseVersion 0.1.0 -SkipInno
+.\scripts\release\build-installer.ps1 -ReleaseVersion 0.1.0
+.\scripts\release\verify-installer.ps1 -ReleaseVersion 0.1.0
+```
+
+GitHub Actions release workflow:
+
+```text
+.github/workflows/release-windows.yml
+workflow_dispatch release_version=0.1.0 -> installer artifact
+push tag v0.1.0 -> GitHub Release assets
+```
 
 ## Data Locations
 

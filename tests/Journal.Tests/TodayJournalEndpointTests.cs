@@ -287,6 +287,78 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PostJournalDataExport_ReturnsExportUnderConfiguredWorkspace()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/journal/data/export", content: null);
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var exportPath = document.RootElement.GetProperty("exportPath").GetString();
+
+        Assert.NotNull(exportPath);
+        Assert.StartsWith(Path.Combine(workspace.Root, ".journal", "exports"), exportPath, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("Journal-Export-2026-05-08-080500-", Path.GetFileName(exportPath), StringComparison.Ordinal);
+        Assert.EndsWith(".zip", exportPath, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(exportPath));
+    }
+
+    [Fact]
+    public async Task PostJournalDataImport_WithBlankPackagePathReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/data/import",
+            new { packagePath = "   " });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("packagePath is required", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PostJournalDataImport_WithMalformedZipReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var packagePath = Path.Combine(workspace.Root, "not-a-zip.zip");
+        Directory.CreateDirectory(workspace.Root);
+        await File.WriteAllTextAsync(packagePath, "not a zip", Encoding.UTF8);
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/data/import",
+            new { packagePath });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("error").GetString()));
+    }
+
+    [Fact]
+    public async Task PostJournalDataImport_WithMissingPackagePathReturnsNotFound()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var packagePath = Path.Combine(workspace.Root, "missing.zip");
+
+        using var response = await client.PostAsJsonAsync(
+            "/journal/data/import",
+            new { packagePath });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("error").GetString()));
+    }
+
+    [Fact]
     public async Task GetJournalHistory_ReturnsSearchResults()
     {
         using var workspace = TempWorkspace.Create();
@@ -1280,6 +1352,9 @@ public sealed class TodayJournalEndpointTests
 
         return JmfMarkdownRenderer.Render(aiJson, DateTimeOffset.Parse($"{date.IsoDate}T09:00:00+08:00"));
     }
+
+    internal static WebApplicationFactory<Program> CreateFactory(string root) =>
+        CreateFactory(root, env: null, runtime: null);
 
     private static WebApplicationFactory<Program> CreateFactory(
         string root,

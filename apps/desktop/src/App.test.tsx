@@ -3,14 +3,18 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import {
   activateAiSettings,
-  getJournalAudit,
+  exportJournalData,
   getAiSettings,
+  getJournalAudit,
   getTodayEditor,
+  importJournalData,
   openHarnessRunEvents,
   regenerateTodayDraft,
+  resetApiBaseUrlForTests,
   revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
+  setDesktopAccessToken,
   startAppendHarnessRun,
   startHarnessRun,
   startReorganizeHarnessRun,
@@ -47,6 +51,17 @@ const healthResponse = {
   version: "0.1.0",
   environment: "Development",
   serverTime: "2026-05-08T08:00:00+08:00"
+};
+
+const appInfo = {
+  name: "Journal.Api",
+  version: "0.1.0",
+  releaseVersion: "0.1.0",
+  commit: "abc1234",
+  buildTimeUtc: "2026-05-14T12:00:00Z",
+  environment: "Production",
+  dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+  indexPath: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\index\\journal.db"
 };
 
 const aiSettings = {
@@ -414,10 +429,125 @@ async function openLlmSettingsFromNativeMenu() {
 
 afterEach(() => {
   cleanup();
+  resetApiBaseUrlForTests();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  delete window.journalDesktop;
+  delete (globalThis as typeof globalThis & { journalDesktop?: Window["journalDesktop"] }).journalDesktop;
 });
 describe("App", () => {
+  test("initializes the API client from the desktop bridge before loading today", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: vi.fn().mockResolvedValue("http://127.0.0.1:61234"),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "reused",
+        apiBaseUrl: "http://127.0.0.1:61234",
+        port: 61234,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: null
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByLabelText("今日助手");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:61234/health", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:61234/journal/today/editor", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:61234/settings/ai", undefined);
+    expect(screen.getByText("复用上次残留进程")).toBeInTheDocument();
+    expect(screen.getByText(/127\.0\.0\.1:61234/)).toBeInTheDocument();
+    expect(screen.getByText(/PID 4321/)).toBeInTheDocument();
+  });
+
+  test("does not use a failed local service URL for business API requests", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: vi.fn().mockResolvedValue("http://127.0.0.1:61234"),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "failed",
+        apiBaseUrl: null,
+        port: 61234,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: "Existing backend lock points to a live process, but ownership could not be verified."
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByText("连接失败");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("连接失败")).toBeInTheDocument();
+    expect(screen.queryByText(/127\.0\.0\.1:61234/)).not.toBeInTheDocument();
+  });
+
+  test("blocks desktop startup when the bridge has no trusted API base URL", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: vi.fn().mockResolvedValue(null),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "connected",
+        apiBaseUrl: null,
+        port: 61234,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: null
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByText("本地服务启动失败，暂时无法读取今天的状态。");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("已连接")).toBeInTheDocument();
+  });
+
+  test("awaits a desktop bridge thenable before loading today", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: healthResponse },
+      { body: createEditorState() },
+      { body: aiSettings }
+    ]);
+    vi.stubGlobal("journalDesktop", {
+      getApiBaseUrl: () => ({
+        then: (resolve: (value: string) => void) => {
+          setTimeout(() => resolve("http://127.0.0.1:62345"), 0);
+        }
+      }),
+      getLocalServiceStatus: vi.fn().mockResolvedValue({
+        status: "connected",
+        apiBaseUrl: "http://127.0.0.1:62345",
+        port: 62345,
+        pid: 4321,
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        logDirectory: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\logs",
+        reason: null
+      })
+    });
+
+    render(<App />);
+
+    await screen.findByLabelText("今日助手");
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:62345/health", undefined)
+    );
+  });
+
   test("prevents stale initial load race by disabling submit until editor state resolves", async () => {
     const eventSource = createEventSourceMock();
     const healthDeferred = createDeferred<Response>();
@@ -443,7 +573,7 @@ describe("App", () => {
     fireEvent.click(submitButton);
 
     expect(submitButton).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
 
     healthDeferred.resolve({
       ok: true,
@@ -612,6 +742,104 @@ describe("App", () => {
     await waitFor(() =>
       expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument()
     );
+  });
+
+  test("opens about panel from native menu and shows frontend and backend versions", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => handlers[0]("open-about"));
+
+    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
+    expect(screen.getByText("Backend 0.1.0")).toBeInTheDocument();
+    expect(screen.getByText(/Frontend/)).toBeInTheDocument();
+    expect(screen.getByText(/abc1234/)).toBeInTheDocument();
+    expect(screen.getByText(/AppData\\Local\\Journal/)).toBeInTheDocument();
+  });
+
+  test("deduplicates duplicate about menu commands while app info is loading", async () => {
+    const appInfoDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockReturnValueOnce(appInfoDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => {
+      handlers[0]("open-about");
+      handlers[0]("open-about");
+    });
+
+    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/app/info"))).toHaveLength(1);
+
+    appInfoDeferred.resolve(mockJsonResponse(appInfo));
+
+    expect(await screen.findByText("Backend 0.1.0")).toBeInTheDocument();
+  });
+
+  test("focuses about close button and closes about panel on Escape", async () => {
+    const previousFocus = document.createElement("button");
+    previousFocus.textContent = "Before About";
+    document.body.appendChild(previousFocus);
+    previousFocus.focus();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => handlers[0]("open-about"));
+
+    const closeButton = await screen.findByRole("button", { name: "关闭" });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "关于 Journal" })).not.toBeInTheDocument()
+    );
+    expect(previousFocus).toHaveFocus();
   });
 
   test("opens LLM settings panel from the native menu DOM fallback event", async () => {
@@ -1528,6 +1756,269 @@ describe("App", () => {
     expect(screen.getByText("测试会向当前 LLM 发送一次最小请求，可能产生少量 token 消耗。")).toBeInTheDocument();
   });
 
+  test("opens data backup panel and exports a journal data package", async () => {
+    const exportPath = "C:\\Journal\\.journal\\exports\\Journal-Export-2026-05-15.zip";
+    const openPath = vi.fn().mockResolvedValue(true);
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse({
+        exportPath,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 2,
+          rawInputCount: 3,
+          versionCount: 1,
+          containsFullApiKeys: false
+        }
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", { openPath });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/data/export", {
+        method: "POST"
+      })
+    );
+    expect(within(dialog).getByText(exportPath)).toBeInTheDocument();
+    expect(within(dialog).getByText("2 篇日记 · 3 条原始输入 · 1 个版本")).toBeInTheDocument();
+    expect(within(dialog).getByText("导出包不包含完整 API Key。")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "打开导出路径" }));
+
+    expect(openPath).toHaveBeenCalledWith(exportPath);
+  });
+
+  test("selects an import package and imports it from the data backup panel", async () => {
+    const packagePath = "C:\\Backups\\Journal-Export-2026-05-15.zip";
+    const backupDirectory = "C:\\Journal\\.journal\\import-backups\\20260515-083000";
+    const importedToday = {
+      ...reviewingToday,
+      rawInputs: [{
+        id: "raw-imported",
+        date: journalDate,
+        createdAt: "2026-05-08T09:05:00+08:00",
+        source: "text",
+        text: "导入后的今日材料"
+      }]
+    };
+    const selectImportPackage = vi.fn().mockResolvedValue(packagePath);
+    const openPath = vi.fn().mockResolvedValue(true);
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse({
+        backupDirectory,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 4,
+          rawInputCount: 8,
+          versionCount: 2,
+          containsFullApiKeys: false
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState({
+        today: importedToday,
+        sections: [{
+          id: "today-focus",
+          title: "今日重点",
+          content: "导入后的日记段落",
+          kind: "required",
+          isEditableInBlockMode: true
+        }],
+        markdown: "# 2026-05-08\n\n## 今日重点\n\n导入后的日记段落"
+      })))
+      .mockResolvedValueOnce(mockJsonResponse(deepSeekAiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("journalDesktop", { selectImportPackage, openPath });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "选择导入包" }));
+
+    const pathInput = await within(dialog).findByLabelText("导入包路径");
+    expect(pathInput).toHaveValue(packagePath);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "导入数据包" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/data/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ packagePath })
+      })
+    );
+    expect(within(dialog).getByText(backupDirectory)).toBeInTheDocument();
+    expect(within(dialog).getByText("4 篇日记 · 8 条原始输入 · 2 个版本")).toBeInTheDocument();
+    expect(await screen.findByText("导入后的日记段落")).toBeInTheDocument();
+    expect(screen.getAllByText("导入后的今日材料").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("LLM：DeepSeek")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "打开备份目录" }));
+
+    expect(openPath).toHaveBeenCalledWith(backupDirectory);
+  });
+
+  test("invalidates stale history refreshes when importing data", async () => {
+    const packagePath = "C:\\Backups\\Journal-Export-2026-05-15.zip";
+    const backupDirectory = "C:\\Journal\\.journal\\import-backups\\20260515-083000";
+    const historyRefreshDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockReturnValueOnce(historyRefreshDeferred.promise)
+      .mockResolvedValueOnce(mockJsonResponse({
+        backupDirectory,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 4,
+          rawInputCount: 8,
+          versionCount: 2,
+          containsFullApiKeys: false
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState({
+        sections: [{
+          id: "today-focus",
+          title: "今日重点",
+          content: "导入后的日记段落",
+          kind: "required",
+          isEditableInBlockMode: true
+        }],
+        markdown: "# 2026-05-08\n\n## 今日重点\n\n导入后的日记段落"
+      })))
+      .mockResolvedValueOnce(mockJsonResponse(deepSeekAiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("查看历史");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/history?limit=50", undefined)
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.change(within(dialog).getByLabelText("导入包路径"), {
+      target: { value: packagePath }
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "导入数据包" }));
+
+    expect(await screen.findByText("导入后的日记段落")).toBeInTheDocument();
+    expect(within(dialog).getByText(backupDirectory)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+
+    await act(async () => {
+      historyRefreshDeferred.resolve(mockJsonResponse({ items: [historySummary] }));
+      await historyRefreshDeferred.promise;
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(screen.queryByRole("region", { name: "历史日记预览" })).not.toBeInTheDocument();
+    expect(screen.getByText("导入后的日记段落")).toBeInTheDocument();
+    expect(screen.getByLabelText("LLM：DeepSeek")).toBeInTheDocument();
+  });
+
+  test("clears stale data backup results on failures and close reopen", async () => {
+    const exportPath = "C:\\Journal\\.journal\\exports\\Journal-Export-old.zip";
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse({
+        exportPath,
+        manifest: {
+          format: "journal-export/v1",
+          createdAt: "2026-05-15T08:30:00+08:00",
+          appVersion: "0.1.0",
+          backendVersion: "0.1.0",
+          frontendVersion: "0.1.0",
+          entryCount: 1,
+          rawInputCount: 1,
+          versionCount: 0,
+          containsFullApiKeys: false
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({ error: "export failed" }, false, 500));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    let dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
+    expect(await within(dialog).findByText(exportPath)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("export failed");
+    expect(within(dialog).queryByText(exportPath)).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "数据与备份" }));
+    dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+
+    expect(within(dialog).queryByText(exportPath)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("keeps a single modal open when switching between about llm and data backup", async () => {
+    const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await screen.findByLabelText("LLM：Mock");
+    fireEvent(window, new CustomEvent("journal:native-menu-command", { detail: "open-about" }));
+    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "数据与备份" }));
+
+    expect(await screen.findByRole("dialog", { name: "数据与备份" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "关于 Journal" })).not.toBeInTheDocument();
+
+    fireEvent(window, new CustomEvent("journal:native-menu-command", { detail: "open-llm-settings" }));
+
+    expect(await screen.findByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "数据与备份" })).not.toBeInTheDocument();
+  });
+
+  test("keeps pasted import path when package selection is cancelled", async () => {
+    const existingPath = "C:\\Backups\\existing.zip";
+    const selectImportPackage = vi.fn().mockResolvedValue(null);
+    vi.stubGlobal("fetch", createInitialFetchMock());
+    vi.stubGlobal("journalDesktop", { selectImportPackage });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
+    const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    const pathInput = within(dialog).getByLabelText("导入包路径");
+    fireEvent.change(pathInput, { target: { value: existingPath } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "选择导入包" }));
+
+    await waitFor(() => expect(selectImportPackage).toHaveBeenCalled());
+    expect(pathInput).toHaveValue(existingPath);
+  });
+
   test("LLM settings shows provider configuration without style selector buttons", async () => {
     vi.stubGlobal("fetch", createInitialFetchMock());
 
@@ -2440,6 +2931,7 @@ describe("App", () => {
     expect(focusEditor).toBeDisabled();
     expect(confirmButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "数据与备份" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
@@ -2449,6 +2941,7 @@ describe("App", () => {
     );
     expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
     expect(confirmButton).toBeEnabled();
+    expect(screen.getByRole("button", { name: "数据与备份" })).toBeEnabled();
   });
 
   test("blocks raw input refresh while inline dirty so local block edits stay visible", async () => {
@@ -3321,6 +3814,16 @@ describe("LlmSettingsPanel", () => {
 });
 
 describe("editor API client", () => {
+  test("getAiSettings uses the configured desktop API base URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resetApiBaseUrlForTests("http://127.0.0.1:61234");
+    await getAiSettings();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:61234/settings/ai", undefined);
+  });
+
   test("getAiSettings calls settings endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
     vi.stubGlobal("fetch", fetchMock);
@@ -3328,6 +3831,74 @@ describe("editor API client", () => {
     await getAiSettings();
 
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
+  });
+
+  test("requests include desktop access token when packaged bridge provides one", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    setDesktopAccessToken("desktop-token-123");
+    await getAiSettings();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", {
+      headers: {
+        "X-Journal-Desktop-Token": "desktop-token-123"
+      }
+    });
+  });
+
+  test("exportJournalData posts to the data export endpoint", async () => {
+    const body = {
+      exportPath: "C:\\Journal\\.journal\\exports\\Journal.zip",
+      manifest: {
+        format: "journal-export/v1",
+        createdAt: "2026-05-15T08:30:00+08:00",
+        appVersion: "0.1.0",
+        backendVersion: "0.1.0",
+        frontendVersion: "0.1.0",
+        entryCount: 2,
+        rawInputCount: 3,
+        versionCount: 1,
+        containsFullApiKeys: false
+      }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(body));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(exportJournalData()).resolves.toEqual(body);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/data/export", {
+      method: "POST"
+    });
+  });
+
+  test("importJournalData posts the selected package path", async () => {
+    const body = {
+      backupDirectory: "C:\\Journal\\.journal\\import-backups\\20260515-083000",
+      manifest: {
+        format: "journal-export/v1",
+        createdAt: "2026-05-15T08:30:00+08:00",
+        appVersion: "0.1.0",
+        backendVersion: "0.1.0",
+        frontendVersion: "0.1.0",
+        entryCount: 4,
+        rawInputCount: 8,
+        versionCount: 2,
+        containsFullApiKeys: false
+      }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(body));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(importJournalData("C:\\Backups\\Journal.zip")).resolves.toEqual(body);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/data/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ packagePath: "C:\\Backups\\Journal.zip" })
+    });
   });
 
   test("saveAiSettings sends provider settings", async () => {
@@ -3601,6 +4172,23 @@ describe("editor API client", () => {
     completedListener?.({ data: JSON.stringify(event) } as MessageEvent);
 
     expect(onEvent).toHaveBeenCalledWith(event);
+  });
+
+  test("openHarnessRunEvents uses the configured desktop API base URL", () => {
+    const addEventListener = vi.fn();
+    const eventSource = { addEventListener } as unknown as EventSource;
+    const EventSourceMock = vi.fn(function () {
+      return eventSource;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+    resetApiBaseUrlForTests("http://127.0.0.1:61234");
+    setDesktopAccessToken("desktop-token-123");
+
+    openHarnessRunEvents("run id", vi.fn());
+
+    expect(EventSourceMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:61234/journal/harness/runs/run%20id/events?desktopAccessToken=desktop-token-123"
+    );
   });
 
   test("openHarnessRunEvents reports invalid event JSON without throwing", () => {

@@ -12,7 +12,7 @@ function sendCommand(mainWindow, command) {
 }
 
 function createApplicationMenuTemplate(options = {}) {
-  const { app, mainWindow, showAbout } = options;
+  const { app, mainWindow } = options;
 
   return [
     {
@@ -21,6 +21,10 @@ function createApplicationMenuTemplate(options = {}) {
         {
           label: "LLM 配置",
           click: () => sendCommand(mainWindow, "open-llm-settings")
+        },
+        {
+          label: "数据与备份",
+          click: () => sendCommand(mainWindow, "open-data-backup")
         },
         { type: "separator" },
         {
@@ -47,7 +51,7 @@ function createApplicationMenuTemplate(options = {}) {
       submenu: [
         {
           label: "关于 Journal",
-          click: () => showAbout?.()
+          click: () => sendCommand(mainWindow, "open-about")
         }
       ]
     }

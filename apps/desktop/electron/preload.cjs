@@ -4,5 +4,10 @@ const { nativeMenuChannel } = require("./menu.cjs");
 
 contextBridge.exposeInMainWorld("journalDesktop", {
   platform: process.platform,
+  getLocalServiceStatus: () => ipcRenderer.invoke("journal:get-local-service-status"),
+  getApiBaseUrl: () => ipcRenderer.invoke("journal:get-api-base-url"),
+  getDesktopAccessToken: () => ipcRenderer.invoke("journal:get-desktop-access-token"),
+  selectImportPackage: () => ipcRenderer.invoke("journal:select-import-package"),
+  openPath: targetPath => ipcRenderer.invoke("journal:open-path", targetPath),
   ...createNativeMenuBridge(ipcRenderer, nativeMenuChannel)
 });

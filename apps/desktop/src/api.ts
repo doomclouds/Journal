@@ -102,6 +102,17 @@ export type HealthResponse = {
   serverTime: string;
 };
 
+export type AppInfo = {
+  name: string;
+  version: string;
+  releaseVersion: string;
+  commit: string;
+  buildTimeUtc: string;
+  environment: string;
+  dataRoot: string;
+  indexPath: string;
+};
+
 export type AiProviderView = {
   id: string;
   type: string;
@@ -279,6 +290,28 @@ export type JournalVersionDetail = {
   markdown: string;
 };
 
+export type JournalDataExportManifest = {
+  format: string;
+  createdAt: string;
+  appVersion: string;
+  backendVersion: string;
+  frontendVersion: string;
+  entryCount: number;
+  rawInputCount: number;
+  versionCount: number;
+  containsFullApiKeys: boolean;
+};
+
+export type JournalDataExportResult = {
+  exportPath: string;
+  manifest: JournalDataExportManifest;
+};
+
+export type JournalDataImportResult = {
+  backupDirectory: string;
+  manifest: JournalDataExportManifest;
+};
+
 export type JournalHistoryEntryDetail = {
   date: JournalDate;
   status: JournalStatus;
@@ -288,7 +321,58 @@ export type JournalHistoryEntryDetail = {
   versions: JournalEntryVersion[];
 };
 
-const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
+const defaultApiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
+let apiBaseUrl = defaultApiBaseUrl;
+let desktopAccessToken: string | null = null;
+
+function normalizeApiBaseUrl(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+export function setApiBaseUrl(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  apiBaseUrl = normalizeApiBaseUrl(value.trim());
+  return apiBaseUrl;
+}
+
+export function setDesktopAccessToken(value: string | null | undefined) {
+  const normalized = value?.trim() ?? "";
+  desktopAccessToken = normalized.length > 0 ? normalized : null;
+  return desktopAccessToken;
+}
+
+export function initializeApiBaseUrlFromDesktop() {
+  const desktop = globalThis.window?.journalDesktop;
+  if (!desktop?.getApiBaseUrl && !desktop?.getDesktopAccessToken) {
+    return apiBaseUrl;
+  }
+
+  return Promise.all([
+    Promise.resolve(desktop.getApiBaseUrl?.()),
+    Promise.resolve(desktop.getDesktopAccessToken?.())
+  ])
+    .then(([apiBase, token]) => {
+      setDesktopAccessToken(token);
+      return setApiBaseUrl(apiBase);
+    })
+    .catch(() => null);
+}
+
+export function resetApiBaseUrlForTests(nextApiBaseUrl = defaultApiBaseUrl) {
+  apiBaseUrl = normalizeApiBaseUrl(nextApiBaseUrl);
+  desktopAccessToken = null;
+  return apiBaseUrl;
+}
+
+export const frontendBuildInfo = {
+  frontendVersion: import.meta.env.VITE_JOURNAL_FRONTEND_VERSION ?? "0.1.0-dev",
+  releaseVersion: import.meta.env.VITE_JOURNAL_RELEASE_VERSION ?? "0.1.0-dev",
+  commit: import.meta.env.VITE_JOURNAL_COMMIT ?? "dev",
+  buildTimeUtc: import.meta.env.VITE_JOURNAL_BUILD_TIME_UTC ?? "local"
+};
 
 type ErrorResponse = {
   error?: unknown;
@@ -304,7 +388,8 @@ async function readErrorMessage(response: Response): Promise<string | null> {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, init);
+  const requestInit = withDesktopAccessToken(init);
+  const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
   if (!response.ok) {
     const errorMessage = await readErrorMessage(response);
     throw new Error(errorMessage ?? `${path} failed: ${response.status}`);
@@ -315,6 +400,33 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
+}
+
+function withDesktopAccessToken(init?: RequestInit): RequestInit | undefined {
+  if (!desktopAccessToken) {
+    return init;
+  }
+
+  return {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      "X-Journal-Desktop-Token": desktopAccessToken
+    }
+  };
+}
+
+function withDesktopAccessTokenQuery(url: string) {
+  if (!desktopAccessToken) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}desktopAccessToken=${encodeURIComponent(desktopAccessToken)}`;
+}
+
+export function getAppInfo(): Promise<AppInfo> {
+  return requestJson<AppInfo>("/app/info");
 }
 
 export function getTodayEditor(): Promise<TodayEditorState> {
@@ -395,7 +507,9 @@ export function openHarnessRunEvents(
   onEvent: (event: JournalHarnessRunEvent) => void,
   onError?: (error: Error) => void
 ): EventSource {
-  const events = new EventSource(`${apiBaseUrl}/journal/harness/runs/${encodeURIComponent(runId)}/events`);
+  const events = new EventSource(withDesktopAccessTokenQuery(
+    `${apiBaseUrl}/journal/harness/runs/${encodeURIComponent(runId)}/events`
+  ));
   const eventNames = [
     "run-started",
     "run-status",
@@ -472,6 +586,22 @@ export function getJournalHistoryVersion(date: string, versionId: string): Promi
   return requestJson<JournalVersionDetail>(
     `/journal/history/${encodeURIComponent(date)}/versions/${encodeURIComponent(versionId)}`
   );
+}
+
+export function exportJournalData(): Promise<JournalDataExportResult> {
+  return requestJson<JournalDataExportResult>("/journal/data/export", {
+    method: "POST"
+  });
+}
+
+export function importJournalData(packagePath: string): Promise<JournalDataImportResult> {
+  return requestJson<JournalDataImportResult>("/journal/data/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ packagePath })
+  });
 }
 
 export function restoreJournalHistoryVersionDraft(date: string, versionId: string): Promise<TodayEditorState> {
