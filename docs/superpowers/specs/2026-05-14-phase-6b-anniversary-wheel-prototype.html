@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 6B 同日年轮工作台原型</title>
+  <style>
+    :root {
+      --paper: #fffdf7;
+      --bg: #eef1eb;
+      --rail: #f2efe7;
+      --assistant: #efeadd;
+      --ink: #25211d;
+      --ink-soft: #4d463e;
+      --muted: #746d63;
+      --line: rgba(52, 45, 36, 0.13);
+      --sage: #2f6f5f;
+      --sage-dark: #24584c;
+      --gold: #b57f30;
+      --danger: #9d5146;
+      --blue: #346b86;
+      --soft-green: rgba(230, 243, 235, 0.72);
+      --soft-gold: rgba(255, 250, 240, 0.82);
+      --soft-red: rgba(246, 230, 226, 0.82);
+      --soft-blue: rgba(226, 239, 245, 0.82);
+      --shadow-paper: 0 18px 42px rgba(52, 43, 31, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1180px;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select { font: inherit; }
+
+    button { cursor: pointer; }
+
+    .desktop-shell {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .top-context {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.88);
+      padding: 12px 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .brand strong { font-size: 18px; }
+
+    .brand span,
+    .today-line {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .today-line {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .top-action {
+      min-height: 30px;
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.9);
+      color: var(--sage);
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 268px minmax(640px, 1fr) minmax(326px, 0.46fr);
+      grid-template-areas: "rail main inspector";
+      background: rgba(248, 246, 239, 0.84);
+    }
+
+    .rail {
+      grid-area: rail;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(247, 244, 236, 0.86), rgba(238, 232, 219, 0.82)), var(--rail);
+    }
+
+    .main-stage {
+      grid-area: main;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: rgba(248, 246, 239, 0.74);
+    }
+
+    .inspector {
+      grid-area: inspector;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      border-left: 1px solid rgba(52, 45, 36, 0.13);
+      background: linear-gradient(180deg, rgba(255, 253, 247, 0.84), rgba(239, 234, 222, 0.9)), var(--assistant);
+    }
+
+    .date-card {
+      border-bottom: 1px solid var(--line);
+      padding: 22px 20px 18px;
+    }
+
+    .date-card p {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .date-card h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .date-card h1 span {
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    .rail-section {
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    .section-head,
+    .panel-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2,
+    .panel-head h2 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .section-head span,
+    .panel-head span {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .month-day-picker {
+      display: grid;
+      gap: 10px;
+    }
+
+    .picker-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .picker-field {
+      display: grid;
+      gap: 5px;
+    }
+
+    .picker-field span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .picker-field select,
+    .month-day-input {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid rgba(70, 66, 59, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.82);
+      color: var(--ink);
+      padding: 0 9px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .picker-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .small-action {
+      min-height: 30px;
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      color: var(--sage);
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .small-action.primary {
+      border-color: rgba(47, 111, 95, 0.28);
+      background: rgba(230, 243, 235, 0.84);
+      color: var(--sage-dark);
+    }
+
+    .quick-days {
+      display: grid;
+      gap: 8px;
+    }
+
+    .quick-day {
+      width: 100%;
+      border: 1px solid rgba(52, 45, 36, 0.11);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.62);
+      color: inherit;
+      padding: 10px;
+      text-align: left;
+    }
+
+    .quick-day.is-active {
+      border-color: rgba(47, 111, 95, 0.28);
+      background: rgba(242, 248, 243, 0.82);
+    }
+
+    .quick-day strong {
+      display: block;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .quick-day span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .year-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .year-button {
+      width: 100%;
+      display: grid;
+      gap: 6px;
+      border: 1px solid rgba(47, 111, 95, 0.13);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.66);
+      color: inherit;
+      padding: 11px;
+      text-align: left;
+    }
+
+    .year-button.is-active {
+      border-color: rgba(47, 111, 95, 0.3);
+      background: rgba(242, 248, 243, 0.84);
+    }
+
+    .year-button .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .year-button strong {
+      color: #3d372f;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid rgba(52, 45, 36, 0.12);
+      padding: 16px 24px;
+      background: rgba(255, 253, 247, 0.68);
+    }
+
+    .stage-title p {
+      margin: 0 0 4px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .stage-title h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .stage-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .stage-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      color: var(--sage);
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .document-scroll {
+      overflow: auto;
+      padding: 22px 30px 32px;
+    }
+
+    .anniversary-paper {
+      width: min(980px, 100%);
+      min-height: 760px;
+      margin: 0 auto;
+      display: grid;
+      align-content: start;
+      gap: 18px;
+      border: 1px solid rgba(52, 45, 36, 0.1);
+      background: var(--paper);
+      box-shadow: var(--shadow-paper);
+      padding: 40px 46px;
+    }
+
+    .anniversary-head {
+      border-bottom: 1px solid rgba(52, 45, 36, 0.14);
+      padding-bottom: 20px;
+    }
+
+    .anniversary-head .kicker {
+      margin: 0 0 8px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .anniversary-head h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 32px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .summary-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .summary-pills span,
+    .tag {
+      border-radius: 999px;
+      background: rgba(47, 111, 95, 0.1);
+      color: var(--sage);
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .summary-pills span:nth-child(2n),
+    .tag.gold {
+      background: rgba(181, 127, 48, 0.12);
+      color: var(--gold);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 16px;
+    }
+
+    .year-card {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      gap: 18px;
+      border: 1px solid rgba(52, 45, 36, 0.11);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      padding: 18px;
+    }
+
+    .year-card.is-active {
+      border-color: rgba(47, 111, 95, 0.34);
+      background: linear-gradient(180deg, rgba(242, 248, 243, 0.86), rgba(255, 253, 247, 0.84));
+    }
+
+    .year-mark {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      border-right: 1px solid rgba(52, 45, 36, 0.1);
+      padding-right: 16px;
+    }
+
+    .year-mark strong {
+      color: var(--sage-dark);
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .year-mark span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status {
+      justify-self: start;
+      border-radius: 999px;
+      background: rgba(230, 243, 235, 0.86);
+      color: var(--sage);
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .status.attention {
+      background: var(--soft-red);
+      color: var(--danger);
+    }
+
+    .status.reviewing {
+      background: var(--soft-blue);
+      color: var(--blue);
+    }
+
+    .year-content {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .year-card-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .year-card-head h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    .raw-count {
+      flex: none;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .year-card p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.72;
+      overflow-wrap: anywhere;
+    }
+
+    .section-snippets {
+      display: grid;
+      gap: 8px;
+    }
+
+    .snippet {
+      border-left: 3px solid rgba(47, 111, 95, 0.34);
+      padding-left: 10px;
+    }
+
+    .snippet span {
+      display: block;
+      color: var(--sage);
+      font-size: 12px;
+      font-weight: 900;
+      margin-bottom: 3px;
+    }
+
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .link-action {
+      min-height: 30px;
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      color: var(--sage);
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .assistant-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid rgba(52, 45, 36, 0.13);
+      padding: 18px 20px;
+    }
+
+    .assistant-head p {
+      margin: 0 0 5px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .assistant-head h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .assistant-time {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .assistant-body {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+      padding: 16px 18px 28px;
+    }
+
+    .assistant-card {
+      border: 1px solid rgba(52, 45, 36, 0.11);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.62);
+      padding: 14px;
+    }
+
+    .assistant-card h3 {
+      margin: 0 0 8px;
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .assistant-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .metric {
+      border-radius: 8px;
+      background: rgba(230, 243, 235, 0.62);
+      padding: 10px;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--sage-dark);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .raw-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .raw-item {
+      border-left: 3px solid rgba(181, 127, 48, 0.34);
+      background: rgba(255, 250, 240, 0.62);
+      padding: 8px 10px;
+    }
+
+    .raw-item strong {
+      display: block;
+      color: var(--gold);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .raw-item p {
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .notice {
+      border-left: 4px solid rgba(47, 111, 95, 0.34);
+      background: var(--soft-green);
+    }
+
+    @media (max-width: 1280px) {
+      .workspace {
+        grid-template-columns: 240px minmax(560px, 1fr) 300px;
+      }
+
+      .anniversary-paper {
+        padding-inline: 34px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="desktop-shell">
+    <header class="top-context">
+      <div class="brand">
+        <strong>Journal</strong>
+        <span>Morning archive</span>
+      </div>
+      <div class="today-line">
+        <span>2026-05-14</span>
+        <span>同日年轮模式</span>
+        <span>只读回看</span>
+      </div>
+      <button class="top-action" type="button">返回今日</button>
+    </header>
+
+    <main class="workspace">
+      <aside class="rail" aria-label="同日年轮日期选择">
+        <section class="date-card">
+          <p>Anniversary</p>
+          <h1>05-14<span>查看不同年份的今天。默认打开今天的月日，也可以切换到生日、纪念日或任意月日。</span></h1>
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>月日选择</h2>
+            <span>MM-DD</span>
+          </div>
+          <div class="month-day-picker">
+            <div class="picker-row">
+              <label class="picker-field">
+                <span>月份</span>
+                <select aria-label="月份">
+                  <option>05 月</option>
+                  <option>01 月</option>
+                  <option>02 月</option>
+                  <option>03 月</option>
+                  <option>04 月</option>
+                  <option>06 月</option>
+                  <option>07 月</option>
+                  <option>08 月</option>
+                  <option>09 月</option>
+                  <option>10 月</option>
+                  <option>11 月</option>
+                  <option>12 月</option>
+                </select>
+              </label>
+              <label class="picker-field">
+                <span>日期</span>
+                <select aria-label="日期">
+                  <option>14 日</option>
+                  <option>01 日</option>
+                  <option>07 日</option>
+                  <option>13 日</option>
+                  <option>31 日</option>
+                </select>
+              </label>
+            </div>
+            <label class="picker-field">
+              <span>快速输入</span>
+              <input class="month-day-input" value="05-14" aria-label="快速输入月日">
+            </label>
+            <div class="picker-actions">
+              <button class="small-action primary" type="button">查看年轮</button>
+              <button class="small-action" type="button">回到今天</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>常看日期</h2>
+            <span>3 个</span>
+          </div>
+          <div class="quick-days">
+            <button class="quick-day is-active" type="button">
+              <strong>05-14 今天</strong>
+              <span>3 年记录，12 条原始材料</span>
+            </button>
+            <button class="quick-day" type="button">
+              <strong>05-07 项目启动日</strong>
+              <span>2 年记录，6 条原始材料</span>
+            </button>
+            <button class="quick-day" type="button">
+              <strong>12-31 年末复盘</strong>
+              <span>1 年记录，4 条原始材料</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="rail-section">
+          <div class="section-head">
+            <h2>年份</h2>
+            <span>3 年</span>
+          </div>
+          <div class="year-list">
+            <button class="year-button is-active" type="button">
+              <span class="meta"><span>2026</span><span>已更新</span></span>
+              <strong>Journal 进入可用阶段，开始处理 Harness 边界</strong>
+            </button>
+            <button class="year-button" type="button">
+              <span class="meta"><span>2025</span><span>已保存</span></span>
+              <strong>记录工作节奏和长期工具想法</strong>
+            </button>
+            <button class="year-button" type="button">
+              <span class="meta"><span>2024</span><span>需处理</span></span>
+              <strong>只有原始输入，需要重新整理</strong>
+            </button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="main-stage" aria-label="同日年轮摘要">
+        <div class="stage-toolbar">
+          <div class="stage-title">
+            <p>Same Day Wheel</p>
+            <h2>05-14 的多年回看</h2>
+          </div>
+          <div class="stage-actions">
+            <button class="stage-action" type="button">刷新索引</button>
+            <button class="stage-action" type="button">返回历史搜索</button>
+          </div>
+        </div>
+
+        <div class="document-scroll">
+          <article class="anniversary-paper">
+            <header class="anniversary-head">
+              <p class="kicker">Anniversary Wheel</p>
+              <h1>05-14 同日年轮</h1>
+              <div class="summary-pills">
+                <span>3 年记录</span>
+                <span>12 条原始材料</span>
+                <span>2 个正式日记</span>
+                <span>1 个需处理</span>
+              </div>
+            </header>
+
+            <section class="timeline" aria-label="年份卡片摘要流">
+              <article class="year-card is-active">
+                <div class="year-mark">
+                  <strong>2026</strong>
+                  <span>05-14</span>
+                  <span class="status">已更新</span>
+                </div>
+                <div class="year-content">
+                  <div class="year-card-head">
+                    <h2>Journal 架构走到最后阶段，开始修正 AI 整理边界</h2>
+                    <span class="raw-count">5 条原始材料</span>
+                  </div>
+                  <div class="summary-pills">
+                    <span>情绪：开心且兴奋</span>
+                    <span>关键词：Harness</span>
+                    <span>主题：工作推进</span>
+                  </div>
+                  <div class="section-snippets">
+                    <p class="snippet"><span>今日重点</span>继续看笔记软件，并处理 Harness 提示词边界问题。</p>
+                    <p class="snippet"><span>工作推进</span>修复重新整理只基于 raw inputs 的合同，避免继承旧草稿。</p>
+                    <p class="snippet"><span>灵感</span>长期日记要能让人看到每年同一天的自己，而不是只保存今天。</p>
+                  </div>
+                  <div class="card-actions">
+                    <button class="link-action" type="button">查看完整日记</button>
+                    <button class="link-action" type="button">查看版本</button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="year-card">
+                <div class="year-mark">
+                  <strong>2025</strong>
+                  <span>05-14</span>
+                  <span class="status">已保存</span>
+                </div>
+                <div class="year-content">
+                  <div class="year-card-head">
+                    <h2>工作节奏有点紧，但开始意识到长期记录的重要性</h2>
+                    <span class="raw-count">3 条原始材料</span>
+                  </div>
+                  <div class="summary-pills">
+                    <span>情绪：疲惫但踏实</span>
+                    <span>关键词：工具</span>
+                    <span>主题：学习</span>
+                  </div>
+                  <div class="section-snippets">
+                    <p class="snippet"><span>昨日回顾</span>处理了一些零散任务，晚上还有点加班。</p>
+                    <p class="snippet"><span>今日重点</span>把手头项目稳定下来，不要被小问题拖散注意力。</p>
+                  </div>
+                  <div class="card-actions">
+                    <button class="link-action" type="button">查看完整日记</button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="year-card">
+                <div class="year-mark">
+                  <strong>2024</strong>
+                  <span>05-14</span>
+                  <span class="status attention">需处理</span>
+                </div>
+                <div class="year-content">
+                  <div class="year-card-head">
+                    <h2>只有原始输入，还没有形成可读日记</h2>
+                    <span class="raw-count">4 条原始材料</span>
+                  </div>
+                  <div class="summary-pills">
+                    <span>状态：attention</span>
+                    <span>原因：invalid_jmf</span>
+                  </div>
+                  <div class="section-snippets">
+                    <p class="snippet"><span>原始材料</span>提到想做一个能长期使用的个人记录工具，但当时还没有明确形态。</p>
+                    <p class="snippet"><span>系统提示</span>这一天可在历史工作台中查看原始材料，暂不做跨日期编辑。</p>
+                  </div>
+                  <div class="card-actions">
+                    <button class="link-action" type="button">查看历史详情</button>
+                  </div>
+                </div>
+              </article>
+            </section>
+          </article>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-label="年轮详情">
+        <div class="assistant-head">
+          <div>
+            <p>Selected Year</p>
+            <h2>2026-05-14</h2>
+          </div>
+          <span class="assistant-time">已更新</span>
+        </div>
+
+        <div class="assistant-body">
+          <section class="assistant-card notice">
+            <h3>首版边界</h3>
+            <p>同日年轮只读展示，不做跨日期编辑、不做 AI 总结、不做 rollback。点击年份后复用历史工作台的完整日记和版本查看能力。</p>
+          </section>
+
+          <section class="assistant-card">
+            <h3>年轮摘要</h3>
+            <p>这一天从“长期工具想法”逐步走到“Journal 可用性和 Harness 边界修正”。今年记录更工程化，情绪也更积极。</p>
+            <div class="metrics">
+              <div class="metric">
+                <strong>3</strong>
+                <span>年份</span>
+              </div>
+              <div class="metric">
+                <strong>12</strong>
+                <span>原始材料</span>
+              </div>
+              <div class="metric">
+                <strong>2</strong>
+                <span>版本</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="assistant-card">
+            <h3>原始材料轻量摘要</h3>
+            <p>只显示片段和数量，完整原始表达仍在历史详情里查看。</p>
+            <div class="raw-list">
+              <div class="raw-item">
+                <strong>08:12 text</strong>
+                <p>今天下雨了，但心情不会很差。</p>
+              </div>
+              <div class="raw-item">
+                <strong>08:19 text</strong>
+                <p>发现重新整理应该只基于 raw inputs，不应该参考旧草稿。</p>
+              </div>
+              <div class="raw-item">
+                <strong>08:31 text</strong>
+                <p>同日年轮应该先做只读 MVP，看多年同一天的自己。</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="assistant-card">
+            <h3>完整历史入口</h3>
+            <p>从这里进入现有历史日记预览，右侧继续展示版本快照和恢复草稿动作。</p>
+            <div class="picker-actions" style="margin-top: 12px;">
+              <button class="small-action primary" type="button">打开完整日记</button>
+              <button class="small-action" type="button">查看版本</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>
