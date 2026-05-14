@@ -51,7 +51,7 @@
 
 - Phase 6B adds the same-day anniversary wheel: the journal paper's corridor menu can open a read-only history workbench mode for a selected `MM-DD`, compare entries across years, inspect raw material snippets, and open version snapshots without changing the normal Today journal layout.
 
-仍未交付：非今日版本直接恢复/确认、AI 改写聊天、自动保存、应用内录音/语音转写、GitHub Actions 自动发布、删除流程、item 级 provenance、draft diff 和 rollback。
+仍未交付：非今日版本直接恢复/确认、AI 改写聊天、自动保存、应用内录音/语音转写、删除流程、item 级 provenance、draft diff 和 rollback。
 
 ## Release Identity
 
@@ -68,7 +68,15 @@
 
 安装包和 SHA256 校验文件输出到 `artifacts/installer/dist/`。卸载默认保留 `%LocalAppData%/Journal` 下的本地日记、草稿、设置、审计和索引数据。
 
-GitHub Actions 自动构建与发布会在后续 Task 12 接入；当前本地验证脚本只校验安装包 artifact 与 checksum，不执行真实安装或卸载。
+当前本地验证脚本只校验安装包 artifact 与 checksum，不执行真实安装或卸载。
+
+## GitHub Actions 发布
+
+首版完整 Windows 安装包不在每次 push 构建，避免把免费 GitHub Actions 额度烧在普通提交上。发布 workflow 已接入 `.github/workflows/release-windows.yml`：
+
+- `workflow_dispatch` 手动输入 `release_version`，用于构建测试安装包 artifact。
+- `v*` tag push 会构建安装包并创建 GitHub Release assets。
+- Release version 应与 tag 对齐，例如 `v0.1.0` 对应 `0.1.0`，产物为 `Journal-Setup-0.1.0.exe` 和 `Journal-Setup-0.1.0.sha256`。
 
 ## 法律与数据声明
 

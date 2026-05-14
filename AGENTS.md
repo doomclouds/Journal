@@ -38,7 +38,7 @@ Phase 6B includes the Phase 3 generation/confirmation/editor workflow, Phase 5 r
 - Anniversary mode is a read-only memory corridor; versions can be viewed there, not restored.
 - Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
 
-Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, GitHub Actions automated release publishing, delete flows, item-level provenance, draft diff, rollback.
+Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, delete flows, item-level provenance, draft diff, rollback. GitHub Actions Windows release workflow is wired: manual `workflow_dispatch` only builds GitHub-hosted installer artifacts, and actual GitHub Release publishing only comes from a pushed `v*` tag.
 
 ## Tech Stack
 
@@ -69,6 +69,7 @@ Do not assume these are implemented yet unless the code or docs say so: non-toda
 - History workbench UI: `apps/desktop/src/HistoryWorkbench.tsx`.
 - Same-day anniversary workbench UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
 - API client and shared frontend contracts: `apps/desktop/src/api.ts`.
+- Windows release workflow: `.github/workflows/release-windows.yml`; manual `workflow_dispatch` builds installer artifacts from `release_version` without publishing a GitHub Release, and pushed `v*` tags build and publish GitHub Release assets.
 - Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
 
 ## Product Invariants
@@ -140,6 +141,14 @@ Focused release commands:
 .\scripts\release\build-installer.ps1 -ReleaseVersion 0.1.0 -SkipInno
 .\scripts\release\build-installer.ps1 -ReleaseVersion 0.1.0
 .\scripts\release\verify-installer.ps1 -ReleaseVersion 0.1.0
+```
+
+GitHub Actions release workflow:
+
+```text
+.github/workflows/release-windows.yml
+workflow_dispatch release_version=0.1.0 -> installer artifact
+push tag v0.1.0 -> GitHub Release assets
 ```
 
 ## Data Locations

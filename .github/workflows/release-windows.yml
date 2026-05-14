@@ -1,0 +1,118 @@
+name: Windows Release
+
+"on":
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version"
+        required: true
+        default: "0.1.0"
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: "apps/desktop/package-lock.json"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix apps/desktop
+
+      - name: Test backend
+        run: dotnet test Journal.slnx
+
+      - name: Test frontend
+        run: npm test --prefix apps/desktop
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          DISPATCH_RELEASE_VERSION: ${{ inputs.release_version || '' }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          $version = $env:DISPATCH_RELEASE_VERSION
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $refName = $env:GITHUB_REF_NAME
+            if ($refName.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
+              $version = $refName.Substring(1)
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Release version could not be resolved from workflow input or tag ref."
+          }
+
+          .\scripts\release\build-installer.ps1 -ReleaseVersion $version
+
+      - name: Verify installer
+        shell: pwsh
+        env:
+          DISPATCH_RELEASE_VERSION: ${{ inputs.release_version || '' }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          $version = $env:DISPATCH_RELEASE_VERSION
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $refName = $env:GITHUB_REF_NAME
+            if ($refName.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
+              $version = $refName.Substring(1)
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Release version could not be resolved from workflow input or tag ref."
+          }
+
+          .\scripts\release\verify-installer.ps1 -ReleaseVersion $version
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: journal-windows-installer
+          path: |
+            artifacts/installer/dist/*.exe
+            artifacts/installer/dist/*.sha256
+          retention-days: 14
+
+  create-github-release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build-windows-installer
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: journal-windows-installer
+          path: artifacts/installer/release-assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            artifacts/installer/release-assets/*.exe
+            artifacts/installer/release-assets/*.sha256
+          body_path: docs/release/GITHUB_RELEASE_TEMPLATE.md

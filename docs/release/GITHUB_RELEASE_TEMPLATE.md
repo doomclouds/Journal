@@ -1,13 +1,13 @@
-# Journal v0.1.0
+# Journal Windows Release
 
 ## Assets
 
-- `Journal-Setup-0.1.0.exe`
-- `Journal-Setup-0.1.0.sha256`
+- `Journal-Setup-<release-version>.exe`
+- `Journal-Setup-<release-version>.sha256`
 
 ## Install
 
-Download `Journal-Setup-0.1.0.exe` and run it on Windows x64.
+Download the setup executable for this release and run it on Windows x64. For example, tag `v0.1.0` publishes `Journal-Setup-0.1.0.exe`.
 
 ## Data Safety
 
@@ -15,4 +15,4 @@ The installer preserves `%LocalAppData%/Journal` during upgrade and uninstall. U
 
 ## Verification
 
-After downloading both assets, compare the SHA-256 hash of `Journal-Setup-0.1.0.exe` with the value in `Journal-Setup-0.1.0.sha256`.
+After downloading both assets, compare the SHA-256 hash of the setup executable with the value in the matching `.sha256` file.
