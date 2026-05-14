@@ -1031,6 +1031,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    await screen.findByRole("region", { name: "同日年轮预览" });
     expect(await screen.findByRole("button", { name: /2025/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /2025/ }));
@@ -1078,6 +1079,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    const preview = await screen.findByRole("region", { name: "同日年轮预览" });
     fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
     fireEvent.click(screen.getByRole("button", { name: "刷新" }));
 
@@ -1087,7 +1089,7 @@ describe("App", () => {
         undefined
       )
     );
-    expect(within(screen.getByRole("region", { name: "同日年轮预览" })).queryByText("过期版本内容")).not.toBeInTheDocument();
+    expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
 
     await act(async () => {
       versionDetailDeferred.resolve(mockJsonResponse({
@@ -1097,7 +1099,6 @@ describe("App", () => {
       await versionDetailDeferred.promise;
     });
 
-    const preview = screen.getByRole("region", { name: "同日年轮预览" });
     expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
 
     await act(async () => {
@@ -1133,9 +1134,9 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "同日年轮" }));
+    const preview = await screen.findByRole("region", { name: "同日年轮预览" });
     fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
 
-    const preview = screen.getByRole("region", { name: "同日年轮预览" });
     expect(await within(preview).findByText("已打开版本内容")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /查看版本/ }));
