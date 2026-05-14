@@ -446,7 +446,7 @@ npm run desktop
 ```text
 Journal.exe
   -> Electron main process
-  -> spawn bundled backend/Journal.Api.exe
+  -> detect reusable owned backend or spawn bundled backend/Journal.Api.exe
   -> wait for /health
   -> renderer loadFile(dist/index.html)
   -> renderer API baseUrl from preload bridge
@@ -469,6 +469,7 @@ Journal.exe
 Electron main process 负责：
 
 - 启动后端进程。
+- 检测上次残留的自有后端进程。
 - 捕获 stdout/stderr 写日志。
 - 轮询 `/health`。
 - renderer ready 前显示 loading 或错误页。
@@ -482,6 +483,93 @@ Electron main process 负责：
   app-YYYY-MM-DD.log
   backend-YYYY-MM-DD.log
 ```
+
+### 10.4 残留后端恢复
+
+生产态后端是 Electron 拥有的 child process。正常关闭时，Electron 应终止后端；但如果 Electron 崩溃、机器断电或被任务管理器强杀，`Journal.Api.exe` 可能残留。下一次启动不能盲目再开一个新后端，也不能随便复用端口上任意服务。
+
+新增运行期 lock 文件：
+
+```text
+%LocalAppData%/Journal/.journal/runtime/backend.lock.json
+```
+
+内容建议：
+
+```json
+{
+  "pid": 12345,
+  "port": 51234,
+  "startedAtUtc": "2026-05-14T12:00:00Z",
+  "backendVersion": "0.1.0",
+  "releaseVersion": "0.1.0",
+  "dataRoot": "C:\\Users\\小陌\\AppData\\Local\\Journal",
+  "owner": "electron",
+  "exePath": "C:\\Program Files\\Journal\\backend\\Journal.Api.exe"
+}
+```
+
+启动策略：
+
+```text
+Electron 启动
+  -> 读取 backend.lock.json
+  -> 如果 pid 不存在或进程已退出
+      -> 启动新的后端
+  -> 如果 pid 仍存活
+      -> 请求 lock.port 上的 /app/info
+      -> 校验身份、版本、数据目录和 exePath
+      -> 满足条件则复用
+      -> 不满足且确认是安装目录里的自有 Journal.Api.exe，则终止残留并启动新的后端
+      -> 无法确认归属则不杀进程，启动失败并提示用户处理
+```
+
+复用条件必须同时满足：
+
+- `pid` 仍存在。
+- `exePath` 指向当前安装目录下的 `backend/Journal.Api.exe`。
+- `owner = "electron"`。
+- lock 文件中的 `port` 可访问。
+- `/app/info` 返回 `name = "Journal.Api"`。
+- `backendVersion` 与当前 release 兼容。
+- `dataRoot` 与当前用户数据目录一致。
+
+不能只因为端口可访问就复用。端口上可能是开发态 API，也可能是其他程序。必须通过 `/app/info` 和 lock 文件共同确认身份。
+
+生产态可以清理自己上次留下的残留后端；开发态不应杀死手动启动的 `dotnet run` 或其他 Journal.Api 进程。
+
+### 10.5 前端本地服务状态
+
+前端需要把后端连接状态作为“本地服务状态”展示，而不是让用户只能看到 API 失败。
+
+建议状态：
+
+```text
+启动中
+已连接
+复用上次残留进程
+连接失败
+后端异常退出
+```
+
+显示内容：
+
+- 本地服务状态。
+- API 地址。
+- PID。
+- 后端版本。
+- 数据目录。
+- 最近健康检查时间。
+- 日志路径。
+
+失败操作：
+
+- 重试启动。
+- 查看日志。
+- 打开数据目录。
+- 打开诊断说明。
+
+这块状态可以出现在顶部状态区、About 面板和错误页中。首版不做常驻托盘，也不做 Windows Service。
 
 ## 11. Export / Import / Backup
 
@@ -731,12 +819,25 @@ Electron 显示错误页：
 - 后端未启动。
 - 端口绑定失败。
 - `/health` timeout。
+- 检测到旧后端进程仍在运行但无法确认归属。
+- 旧后端属于当前安装版但无法终止。
 - 日志路径。
 - 重新启动按钮。
 
 不能让用户只看到空白窗口。
 
-### 15.2 导入失败
+### 15.2 残留后端处理失败
+
+如果检测到 lock 文件中的 pid 仍存活，但 `/app/info` 不可访问或身份不匹配：
+
+- 若 `exePath` 不是当前安装目录下的 `Journal.Api.exe`，不终止该进程。
+- 若无法确认 owner，不终止该进程。
+- 若确认是自有残留进程但终止失败，显示诊断错误和 pid。
+- UI 提供 `重试`、`查看日志`、`打开数据目录`，并提示用户可在任务管理器中结束旧进程。
+
+这条规则优先保护用户机器上的其他进程，避免安装版误杀开发态服务或无关程序。
+
+### 15.3 导入失败
 
 导入失败时必须保护当前数据：
 
@@ -744,11 +845,11 @@ Electron 显示错误页：
 - 解压中途失败：恢复导入前备份。
 - rebuild 失败：保留源材料，给出 index warning。
 
-### 15.3 安装失败
+### 15.4 安装失败
 
 安装失败不应删除用户数据。升级安装失败时，应避免破坏旧版本已安装程序；如果无法保证 rollback，至少要在安装前关闭应用并清晰提示失败。
 
-### 15.4 卸载
+### 15.5 卸载
 
 卸载默认保留 `%LocalAppData%/Journal`。任何删除个人数据的动作都必须显式、二次确认，并且首版不实现这个选项。
 
@@ -777,9 +878,13 @@ Electron 显示错误页：
 
 - 开发态继续 load Vite。
 - 生产态 spawn backend。
+- 生产态发现可复用的自有残留 backend 时复用。
+- 生产态发现不兼容的自有残留 backend 时清理并重启。
+- 生产态发现无法确认归属的进程时不误杀。
 - backend ready 后 renderer 获得 API base URL。
 - app quit 时终止 backend。
 - backend 启动失败显示错误页。
+- 前端显示本地服务状态、PID、端口和日志路径。
 
 ### 16.4 Installer 验证
 
@@ -799,14 +904,17 @@ Phase 7 完成后必须满足：
 2. 安装包有正式图标、License 页、隐私/数据安全说明和完成页。
 3. 安装后能从开始菜单启动 Journal。
 4. Electron 生产态能自动启动 `.NET` 后端。
-5. About 面板能看到前端版本、后端版本、release、commit、build time 和数据目录。
-6. 用户能导出完整 Journal 数据包。
-7. 用户能导入数据包，导入前自动备份当前数据。
-8. 导入后 SQLite index 从源材料重建。
-9. 升级安装保留用户数据。
-10. 卸载默认保留用户数据。
-11. GitHub Actions 能在 `windows-latest` 上生成安装包 artifact。
-12. `v0.1.0` tag 能生成 GitHub Release assets。
+5. Electron 启动时能检测、复用或清理上次残留的自有后端。
+6. Electron 不会误杀开发态 API 或无法确认归属的进程。
+7. 前端能显示本地服务状态、PID、端口、后端版本、日志路径和数据目录。
+8. About 面板能看到前端版本、后端版本、release、commit、build time 和数据目录。
+9. 用户能导出完整 Journal 数据包。
+10. 用户能导入数据包，导入前自动备份当前数据。
+11. 导入后 SQLite index 从源材料重建。
+12. 升级安装保留用户数据。
+13. 卸载默认保留用户数据。
+14. GitHub Actions 能在 `windows-latest` 上生成安装包 artifact。
+15. `v0.1.0` tag 能生成 GitHub Release assets。
 
 ## 18. 后续扩展
 
@@ -825,4 +933,4 @@ Phase 7 完成后，可以继续：
 - Placeholder scan：无待补占位、未完成标记或空章节。
 - Internal consistency：安装、版本、导入导出、GitHub Actions 都围绕 Windows 本地生产可用；卸载默认保留用户数据。
 - Scope check：范围包含安装包和发布流水线，但排除云同步、自动更新、加密、代码签名和 Windows Service。
-- Ambiguity check：版本来源、图标路径、声明文档、安装目录、用户数据目录、导入失败策略、CI 触发策略均已明确。
+- Ambiguity check：版本来源、图标路径、声明文档、安装目录、用户数据目录、后端残留恢复、导入失败策略、CI 触发策略均已明确。
