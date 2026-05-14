@@ -47,7 +47,7 @@ function createApplicationMenuTemplate(options = {}) {
       submenu: [
         {
           label: "关于 Journal",
-          click: () => showAbout?.()
+          click: () => sendCommand(mainWindow, "open-about")
         }
       ]
     }

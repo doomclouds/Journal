@@ -3022,6 +3022,42 @@ button:focus-visible {
   white-space: pre-wrap;
 }
 
+.about-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  margin: 8vh auto;
+  max-width: 620px;
+  padding: 22px;
+}
+
+.about-panel header,
+.about-panel footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.about-panel dl {
+  display: grid;
+  gap: 10px 16px;
+  grid-template-columns: 120px minmax(0, 1fr);
+  margin: 18px 0;
+}
+
+.about-panel dt {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.about-panel dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1280px) {
   .command-workspace {
     grid-template-columns: 230px minmax(560px, 1fr) 300px;

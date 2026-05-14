@@ -77,8 +77,11 @@ describe("Electron native menu", () => {
       .submenu.find((item: { label?: string }) => item.label === "关于 Journal")
       .click();
 
-    expect(sent).toEqual([[nativeMenuChannel, "open-llm-settings"]]);
+    expect(sent).toEqual([
+      [nativeMenuChannel, "open-llm-settings"],
+      [nativeMenuChannel, "open-about"]
+    ]);
     expect(app.quit).toHaveBeenCalledTimes(1);
-    expect(showAbout).toHaveBeenCalledTimes(1);
+    expect(showAbout).not.toHaveBeenCalled();
   });
 });

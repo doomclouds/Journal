@@ -49,6 +49,17 @@ const healthResponse = {
   serverTime: "2026-05-08T08:00:00+08:00"
 };
 
+const appInfo = {
+  name: "Journal.Api",
+  version: "0.1.0",
+  releaseVersion: "0.1.0",
+  commit: "abc1234",
+  buildTimeUtc: "2026-05-14T12:00:00Z",
+  environment: "Production",
+  dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+  indexPath: "C:\\Users\\10062\\AppData\\Local\\Journal\\.journal\\index\\journal.db"
+};
+
 const aiSettings = {
   activeProviderId: "mock",
   runtime: "OpenAI-compatible runtime · Agent Framework 1.5.0",
@@ -612,6 +623,104 @@ describe("App", () => {
     await waitFor(() =>
       expect(screen.getByRole("region", { name: "LLM 配置面板" })).toBeInTheDocument()
     );
+  });
+
+  test("opens about panel from native menu and shows frontend and backend versions", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => handlers[0]("open-about"));
+
+    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
+    expect(screen.getByText("Backend 0.1.0")).toBeInTheDocument();
+    expect(screen.getByText(/Frontend/)).toBeInTheDocument();
+    expect(screen.getByText(/abc1234/)).toBeInTheDocument();
+    expect(screen.getByText(/AppData\\Local\\Journal/)).toBeInTheDocument();
+  });
+
+  test("deduplicates duplicate about menu commands while app info is loading", async () => {
+    const appInfoDeferred = createDeferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockReturnValueOnce(appInfoDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => {
+      handlers[0]("open-about");
+      handlers[0]("open-about");
+    });
+
+    expect(await screen.findByRole("dialog", { name: "关于 Journal" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/app/info"))).toHaveLength(1);
+
+    appInfoDeferred.resolve(mockJsonResponse(appInfo));
+
+    expect(await screen.findByText("Backend 0.1.0")).toBeInTheDocument();
+  });
+
+  test("focuses about close button and closes about panel on Escape", async () => {
+    const previousFocus = document.createElement("button");
+    previousFocus.textContent = "Before About";
+    document.body.appendChild(previousFocus);
+    previousFocus.focus();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => handlers[0]("open-about"));
+
+    const closeButton = await screen.findByRole("button", { name: "关闭" });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "关于 Journal" })).not.toBeInTheDocument()
+    );
+    expect(previousFocus).toHaveFocus();
   });
 
   test("opens LLM settings panel from the native menu DOM fallback event", async () => {

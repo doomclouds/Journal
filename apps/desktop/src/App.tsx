@@ -3,7 +3,9 @@ import { History, RefreshCw, Save, SendHorizontal } from "lucide-react";
 import {
   activateAiSettings,
   confirmTodayDraft,
+  frontendBuildInfo,
   getAiSettings,
+  getAppInfo,
   getHealth,
   getJournalAudit,
   getJournalAnniversaryWheel,
@@ -19,6 +21,7 @@ import {
   startAppendHarnessRun,
   startReorganizeHarnessRun,
   testAiProvider,
+  type AppInfo,
   type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
   type AiProviderHealthResult,
@@ -50,7 +53,7 @@ import {
 import "./styles.css";
 
 type LoadState = "loading" | "ready" | "error";
-type NativeMenuCommand = "open-llm-settings";
+type NativeMenuCommand = "open-llm-settings" | "open-about";
 const nativeMenuDomEventName = "journal:native-menu-command";
 
 declare global {
@@ -119,12 +122,20 @@ export default function App() {
   const auditRequestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
   const historyVersionRequestIdRef = useRef(0);
+  const aboutRequestIdRef = useRef(0);
+  const aboutInFlightRef = useRef<Promise<AppInfo> | null>(null);
+  const aboutCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const aboutDialogRef = useRef<HTMLElement | null>(null);
+  const aboutPreviousFocusRef = useRef<HTMLElement | null>(null);
   const harnessEventsRef = useRef<EventSource | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettingsView | null>(null);
   const [isLlmPanelOpen, setIsLlmPanelOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [aboutError, setAboutError] = useState("");
   const [input, setInput] = useState("");
   const [apiError, setApiError] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -200,10 +211,42 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isAboutOpen) {
+      return undefined;
+    }
+
+    aboutPreviousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    function handleAboutKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeAboutPanel();
+      }
+    }
+
+    document.addEventListener("keydown", handleAboutKeyDown);
+    (aboutCloseButtonRef.current ?? aboutDialogRef.current)?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", handleAboutKeyDown);
+      const previousFocus = aboutPreviousFocusRef.current;
+      aboutPreviousFocusRef.current = null;
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus();
+      }
+    };
+  }, [isAboutOpen]);
+
+  useEffect(() => {
     function handleNativeMenuCommand(command: NativeMenuCommand) {
       if (command === "open-llm-settings") {
         resetPendingRegenerateDraft();
         setIsLlmPanelOpen(true);
+      }
+      if (command === "open-about") {
+        void openAboutPanel();
       }
     }
 
@@ -299,6 +342,41 @@ export default function App() {
 
   function resetPendingRegenerateDraft() {
     setIsRegenerateConfirmOpen(false);
+  }
+
+  function closeAboutPanel() {
+    aboutRequestIdRef.current += 1;
+    aboutInFlightRef.current = null;
+    setIsAboutOpen(false);
+    setAboutError("");
+  }
+
+  async function openAboutPanel() {
+    setIsAboutOpen(true);
+    setAboutError("");
+    if (aboutInFlightRef.current) {
+      return;
+    }
+
+    const requestId = aboutRequestIdRef.current + 1;
+    aboutRequestIdRef.current = requestId;
+    const request = getAppInfo();
+    aboutInFlightRef.current = request;
+    try {
+      const result = await request;
+      if (requestId === aboutRequestIdRef.current) {
+        setAppInfo(result);
+        setAboutError("");
+      }
+    } catch (caught) {
+      if (requestId === aboutRequestIdRef.current) {
+        setAboutError(getErrorMessage(caught));
+      }
+    } finally {
+      if (aboutInFlightRef.current === request) {
+        aboutInFlightRef.current = null;
+      }
+    }
   }
 
   async function runHarnessAndRefresh(
@@ -1212,6 +1290,44 @@ export default function App() {
           onTest={handleTestAiProvider}
           onRevealApiKey={handleRevealAiProviderKey}
         />
+      ) : null}
+      {isAboutOpen ? (
+        <div className="llm-settings-backdrop" role="presentation">
+          <section
+            className="about-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="关于 Journal"
+            ref={aboutDialogRef}
+            tabIndex={-1}
+          >
+            <header>
+              <h2>关于 Journal</h2>
+              <button type="button" ref={aboutCloseButtonRef} onClick={closeAboutPanel}>关闭</button>
+            </header>
+            <dl>
+              <dt>Release</dt>
+              <dd>{appInfo?.releaseVersion ?? frontendBuildInfo.releaseVersion}</dd>
+              <dt>前端</dt>
+              <dd>Frontend {frontendBuildInfo.frontendVersion}</dd>
+              <dt>Backend</dt>
+              <dd>{appInfo ? `Backend ${appInfo.version}` : "Backend 未连接"}</dd>
+              <dt>Commit</dt>
+              <dd>{appInfo?.commit ?? frontendBuildInfo.commit}</dd>
+              <dt>Build</dt>
+              <dd>{appInfo?.buildTimeUtc ?? frontendBuildInfo.buildTimeUtc}</dd>
+              <dt>Data</dt>
+              <dd>{appInfo?.dataRoot ?? "本地服务未连接"}</dd>
+            </dl>
+            {aboutError ? <p className="api-error" role="alert">{aboutError}</p> : null}
+            <footer>
+              <span>License</span>
+              <span>Privacy</span>
+              <span>Data Safety</span>
+              <span>AI Notice</span>
+            </footer>
+          </section>
+        </div>
       ) : null}
     </main>
   );

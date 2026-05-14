@@ -102,6 +102,17 @@ export type HealthResponse = {
   serverTime: string;
 };
 
+export type AppInfo = {
+  name: string;
+  version: string;
+  releaseVersion: string;
+  commit: string;
+  buildTimeUtc: string;
+  environment: string;
+  dataRoot: string;
+  indexPath: string;
+};
+
 export type AiProviderView = {
   id: string;
   type: string;
@@ -290,6 +301,13 @@ export type JournalHistoryEntryDetail = {
 
 const apiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
 
+export const frontendBuildInfo = {
+  frontendVersion: import.meta.env.VITE_JOURNAL_FRONTEND_VERSION ?? "0.1.0-dev",
+  releaseVersion: import.meta.env.VITE_JOURNAL_RELEASE_VERSION ?? "0.1.0-dev",
+  commit: import.meta.env.VITE_JOURNAL_COMMIT ?? "dev",
+  buildTimeUtc: import.meta.env.VITE_JOURNAL_BUILD_TIME_UTC ?? "local"
+};
+
 type ErrorResponse = {
   error?: unknown;
 };
@@ -315,6 +333,10 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
+}
+
+export function getAppInfo(): Promise<AppInfo> {
+  return requestJson<AppInfo>("/app/info");
 }
 
 export function getTodayEditor(): Promise<TodayEditorState> {
