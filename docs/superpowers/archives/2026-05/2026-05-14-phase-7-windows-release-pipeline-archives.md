@@ -10,12 +10,13 @@
 
 Phase 7 把 Journal 从开发态双进程应用推进到 Windows 本地发布闭环：安装版 Electron 能加载打包前端、托管内置 `.NET` backend，并通过 About、导入导出、法律声明、图标资产、Inno Setup 和 GitHub Actions release workflow 形成可验证的 0.1.0 发布路径。
 
-最终验收修复补齐了 packaged Electron 的两个阻塞点：Vite 产物使用相对 `./assets/...` 路径，`file://` renderer 的 `Origin: null` CORS 预检被后端精确允许，同时 release metadata 注入真实 frontend version，避免 About 面板显示 `0.1.0-dev`。
+最终验收修复补齐了 packaged Electron 的发布阻塞点：Vite 产物使用相对 `./assets/...` 路径，`file://` renderer 的 `Origin: null` 预检被后端精确允许，实际请求必须携带本次 Electron 启动分配的 desktop access token。Electron 主窗口禁止外链导航接管 renderer，packaged backend 启动时强制 `ASPNETCORE_ENVIRONMENT=Production`，同时 release metadata 注入真实 frontend version，避免 About 面板和导出 manifest 显示漂移版本。
 
 ## Delivered Scope
 
 - About 面板展示 release、frontend、backend、commit、build time 和数据目录，前后端都从 release metadata 读取构建身份。
-- Electron 生产态拥有本机 backend lifecycle：安装包携带 self-contained `Journal.Api.exe`，renderer 通过受信任 bridge 使用本次启动的 loopback API。
+- Electron 生产态拥有本机 backend lifecycle：安装包携带 self-contained `Journal.Api.exe`，renderer 通过受信任 bridge 使用本次启动的 loopback API，并对 packaged `Origin: null` 实际请求加 desktop access token 防护。
+- Packaged renderer 安全边界收口：token IPC 校验 sender frame URL，Markdown 外链和新窗口交给系统浏览器，主窗口不允许外部页面接管 preload bridge。
 - Windows release package 使用提交的图标、legal/privacy/data-safety/AI notice 资料和 Inno Setup 生成 `Journal-Setup-0.1.0.exe` 与 `.sha256`。
 - 数据导出/导入提供本地迁移闭环：导出完整本地数据包，导入前备份当前 source material，导入失败时不破坏原数据。
 - GitHub Actions release workflow 接入：`workflow_dispatch` 构建安装包 artifact，推送 `v*` tag 才发布 GitHub Release assets。
@@ -30,8 +31,8 @@ Phase 7 把 Journal 从开发态双进程应用推进到 Windows 本地发布闭
 
 ## Verification Snapshot
 
-- `dotnet test Journal.slnx`：312/312 backend tests passed。
-- `npm test --prefix apps/desktop`：193/193 frontend tests passed。
+- `dotnet test Journal.slnx`：317/317 backend tests passed。
+- `npm test --prefix apps/desktop`：201/201 frontend tests passed。
 - `npm run build --prefix apps/desktop`：TypeScript build 和 Vite production build passed，`dist/index.html` 使用 `./assets/...`。
 - `.\scripts\release\build-installer.ps1 -ReleaseVersion 0.1.0`：Inno Setup compile successful，生成 `artifacts/installer/dist/Journal-Setup-0.1.0.exe` 与 `.sha256`。
 - `.\scripts\release\verify-installer.ps1 -ReleaseVersion 0.1.0`：installer artifact verified。
@@ -49,5 +50,6 @@ Phase 7 把 Journal 从开发态双进程应用推进到 Windows 本地发布闭
 
 ## Notes
 
-- Packaged Electron keeps `webSecurity` enabled. The production fix is not `AllowAnyOrigin`; it is a narrow CORS predicate for the two dev origins plus packaged `null` origin.
+- Packaged Electron keeps `webSecurity` enabled. The production fix is not `AllowAnyOrigin`; it is a narrow CORS predicate: dev origins are development-only, packaged `null` preflight is allowed, and actual browser `Origin` requests require the Electron-owned desktop access token whenever that token is configured.
+- `JOURNAL_DESKTOP_ACCESS_TOKEN` is an internal packaged runtime variable. If it is manually left in a development shell, dev browser requests without the token will be rejected by design.
 - Release staging now treats frontend asset path shape and frontend version metadata as build-time gates, so future installer builds fail before shipping a white-screen package.

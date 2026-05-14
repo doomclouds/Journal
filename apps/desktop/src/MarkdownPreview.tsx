@@ -16,7 +16,14 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
 
   return (
     <div className="markdown-preview" data-testid="markdown-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewMarkdown}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: props => <a {...props} target="_blank" rel="noopener noreferrer" />
+        }}
+      >
+        {previewMarkdown}
+      </ReactMarkdown>
     </div>
   );
 }

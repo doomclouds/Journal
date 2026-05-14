@@ -32,6 +32,7 @@ $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 $metadata = @(
   "JOURNAL_RELEASE_VERSION=$ReleaseVersion"
+  "JOURNAL_FRONTEND_VERSION=$ReleaseVersion"
   "JOURNAL_BUILD_COMMIT=$commit"
   "JOURNAL_BUILD_TIME_UTC=$buildTime"
   "VITE_JOURNAL_FRONTEND_VERSION=$ReleaseVersion"

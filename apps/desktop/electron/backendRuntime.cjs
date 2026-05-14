@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
+const crypto = require("node:crypto");
 const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
@@ -34,6 +35,10 @@ function samePath(left, right) {
 
 function sameRequiredVersion(left, right) {
   return Boolean(left) && Boolean(right) && String(left) === String(right);
+}
+
+function createDesktopAccessToken() {
+  return crypto.randomBytes(32).toString("base64url");
 }
 
 function resolvePackagedBackendExePath(resourcesPath, existsSync = fs.existsSync) {
@@ -75,16 +80,25 @@ function readBuildMetadataFile(metadataPath) {
   }
 }
 
-function createBackendProcessEnv(baseEnv, apiBaseUrl, dataRoot, buildMetadata = {}) {
+function createBackendProcessEnv(baseEnv, apiBaseUrl, dataRoot, buildMetadata = {}, desktopAccessToken = null) {
   const env = {
     ...baseEnv,
+    ASPNETCORE_ENVIRONMENT: "Production",
     ASPNETCORE_URLS: apiBaseUrl,
     JOURNAL_DATA_ROOT: dataRoot
   };
-  for (const name of ["JOURNAL_RELEASE_VERSION", "JOURNAL_BUILD_COMMIT", "JOURNAL_BUILD_TIME_UTC"]) {
+  for (const name of [
+    "JOURNAL_RELEASE_VERSION",
+    "JOURNAL_FRONTEND_VERSION",
+    "JOURNAL_BUILD_COMMIT",
+    "JOURNAL_BUILD_TIME_UTC"
+  ]) {
     if (buildMetadata[name]) {
       env[name] = buildMetadata[name];
     }
+  }
+  if (desktopAccessToken) {
+    env.JOURNAL_DESKTOP_ACCESS_TOKEN = desktopAccessToken;
   }
 
   return env;
@@ -158,6 +172,14 @@ function classifyReusableBackendLock(lock, expected) {
       action: "restart-stale",
       apiBaseUrl,
       reason: "Existing backend lock is self-owned but belongs to an older release or data root."
+    };
+  }
+
+  if (!lock.desktopAccessToken) {
+    return {
+      action: "restart-stale",
+      apiBaseUrl,
+      reason: "Existing backend lock is self-owned but does not contain a desktop access token."
     };
   }
 
@@ -356,6 +378,7 @@ function createBackendRuntime(options) {
   const logDirectory = path.resolve(options.logDirectory);
   const releaseVersion = options.releaseVersion ?? null;
   const buildMetadata = options.buildMetadata ?? {};
+  let desktopAccessToken = options.desktopAccessToken ?? null;
   const healthTimeoutMs = options.healthTimeoutMs ?? 15000;
   const processTools = options.processTools ?? {};
   const isAlive = processTools.isProcessAlive ?? isProcessAlive;
@@ -394,12 +417,17 @@ function createBackendRuntime(options) {
     return { ...state };
   }
 
+  function getDesktopAccessToken() {
+    return desktopAccessToken;
+  }
+
   async function startNewBackend() {
     await ensureDirectories(runtimeDirectory, logDirectory, dataRoot);
     const port = await selectFreePort();
     const apiBaseUrl = `http://${loopbackHost}:${port}`;
     const logPath = path.join(logDirectory, todayLogFileName("backend"));
     const startedAtUtc = new Date().toISOString();
+    desktopAccessToken = desktopAccessToken || createDesktopAccessToken();
 
     if (stopping) {
       return setState({
@@ -421,7 +449,7 @@ function createBackendRuntime(options) {
 
     child = spawnBackend(backendExePath, {
       cwd: path.dirname(backendExePath),
-      env: createBackendProcessEnv(process.env, apiBaseUrl, dataRoot, buildMetadata),
+      env: createBackendProcessEnv(process.env, apiBaseUrl, dataRoot, buildMetadata, desktopAccessToken),
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -493,7 +521,8 @@ function createBackendRuntime(options) {
         releaseVersion: appInfo.releaseVersion,
         dataRoot,
         owner: "electron",
-        exePath: backendExePath
+        exePath: backendExePath,
+        desktopAccessToken
       };
       await writeJson(lockPath, lock);
       return setState({
@@ -584,6 +613,7 @@ function createBackendRuntime(options) {
 
       if (classification.action === "reuse") {
         ownedBackendPid = lock.pid;
+        desktopAccessToken = lock.desktopAccessToken;
         return setState({
           status: "reused",
           apiBaseUrl,
@@ -645,7 +675,8 @@ function createBackendRuntime(options) {
   return {
     start,
     stop,
-    getState
+    getState,
+    getDesktopAccessToken
   };
 }
 
@@ -653,6 +684,7 @@ module.exports = {
   classifyReusableBackendAppInfo,
   classifyReusableBackendLock,
   classifySpawnedBackendAppInfo,
+  createDesktopAccessToken,
   createBackendProcessEnv,
   createBackendRuntime,
   isProcessAlive,

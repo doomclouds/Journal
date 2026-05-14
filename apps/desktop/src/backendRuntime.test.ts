@@ -42,16 +42,20 @@ describe("backend runtime classification", () => {
     const metadataPath = path.join(root, "build-metadata.env");
     await writeFile(metadataPath, [
       "JOURNAL_RELEASE_VERSION=2.3.4",
+      "JOURNAL_FRONTEND_VERSION=2.3.4",
       "JOURNAL_BUILD_COMMIT=abc1234",
       "JOURNAL_BUILD_TIME_UTC=2026-05-14T18:30:00Z",
+      "VITE_JOURNAL_FRONTEND_VERSION=2.3.4",
       "VITE_JOURNAL_RELEASE_VERSION=2.3.4"
     ].join("\n"), "utf8");
 
     try {
       expect(runtime.readBuildMetadataFile(metadataPath)).toEqual({
         JOURNAL_RELEASE_VERSION: "2.3.4",
+        JOURNAL_FRONTEND_VERSION: "2.3.4",
         JOURNAL_BUILD_COMMIT: "abc1234",
         JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z",
+        VITE_JOURNAL_FRONTEND_VERSION: "2.3.4",
         VITE_JOURNAL_RELEASE_VERSION: "2.3.4"
       });
     } finally {
@@ -161,7 +165,8 @@ describe("backend runtime classification", () => {
         exePath: "C:\\Program Files\\Journal\\backend\\Journal.Api.exe",
         dataRoot: "C:\\Users\\10062\\AppData\\Local\\OldJournal",
         releaseVersion: "0.0.9",
-        port: 51234
+        port: 51234,
+        desktopAccessToken: "old-token"
       },
       {
         actualExePath: "C:\\Program Files\\Journal\\backend\\Journal.Api.exe",
@@ -175,6 +180,30 @@ describe("backend runtime classification", () => {
       action: "restart-stale",
       apiBaseUrl: "http://127.0.0.1:51234",
       reason: "Existing backend lock is self-owned but belongs to an older release or data root."
+    });
+  });
+
+  test("classifies self-owned locks without desktop access tokens as stale", () => {
+    const result = runtime.classifyReusableBackendLock(
+      {
+        owner: "electron",
+        exePath: "C:\\Program Files\\Journal\\backend\\Journal.Api.exe",
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        releaseVersion: "0.1.0",
+        port: 51234
+      },
+      {
+        actualExePath: "C:\\Program Files\\Journal\\backend\\Journal.Api.exe",
+        backendExePath: "C:\\Program Files\\Journal\\backend\\Journal.Api.exe",
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        releaseVersion: "0.1.0"
+      }
+    );
+
+    expect(result).toEqual({
+      action: "restart-stale",
+      apiBaseUrl: "http://127.0.0.1:51234",
+      reason: "Existing backend lock is self-owned but does not contain a desktop access token."
     });
   });
 
@@ -308,9 +337,11 @@ describe("backend runtime classification", () => {
         releaseVersion: "2.3.4",
         buildMetadata: {
           JOURNAL_RELEASE_VERSION: "2.3.4",
+          JOURNAL_FRONTEND_VERSION: "2.3.4",
           JOURNAL_BUILD_COMMIT: "abc1234",
           JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z"
         },
+        desktopAccessToken: "desktop-token-123",
         processTools: {
           chooseFreePort: async () => 61234,
           spawnBackend: (_exePath: string, spawnOptions: { env: Record<string, string> }) => {
@@ -336,15 +367,30 @@ describe("backend runtime classification", () => {
 
       expect(result.status).toBe("connected");
       expect(capturedEnv).toMatchObject({
+        ASPNETCORE_ENVIRONMENT: "Production",
         ASPNETCORE_URLS: "http://127.0.0.1:61234",
         JOURNAL_DATA_ROOT: dataRoot,
         JOURNAL_RELEASE_VERSION: "2.3.4",
+        JOURNAL_FRONTEND_VERSION: "2.3.4",
         JOURNAL_BUILD_COMMIT: "abc1234",
-        JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z"
+        JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z",
+        JOURNAL_DESKTOP_ACCESS_TOKEN: "desktop-token-123"
       });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  test("forces packaged backend environment to production", () => {
+    const env = runtime.createBackendProcessEnv(
+      { ASPNETCORE_ENVIRONMENT: "Development" },
+      "http://127.0.0.1:61234",
+      "C:\\Users\\10062\\AppData\\Local\\Journal",
+      {},
+      "desktop-token-123"
+    );
+
+    expect(env.ASPNETCORE_ENVIRONMENT).toBe("Production");
   });
 
   test("fails promptly when a spawned backend exits before app-info validation succeeds", async () => {
@@ -425,7 +471,8 @@ describe("backend runtime classification", () => {
       releaseVersion: "0.1.0",
       dataRoot,
       owner: "electron",
-      exePath: backendExePath
+      exePath: backendExePath,
+      desktopAccessToken: "reused-token"
     }), "utf8");
 
     try {
@@ -451,6 +498,7 @@ describe("backend runtime classification", () => {
       });
 
       await backend.start();
+      expect(backend.getDesktopAccessToken()).toBe("reused-token");
       await backend.stop();
 
       expect(terminatedPids).toEqual([4321]);
@@ -545,7 +593,8 @@ describe("backend runtime classification", () => {
       releaseVersion: "0.1.0",
       dataRoot,
       owner: "electron",
-      exePath: backendExePath
+      exePath: backendExePath,
+      desktopAccessToken: "reused-token"
     }), "utf8");
 
     try {

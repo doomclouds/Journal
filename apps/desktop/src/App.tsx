@@ -72,6 +72,7 @@ declare global {
       platform?: string;
       getLocalServiceStatus?: () => Promise<LocalServiceState>;
       getApiBaseUrl?: () => Promise<string | null>;
+      getDesktopAccessToken?: () => Promise<string | null>;
       selectImportPackage?: () => Promise<string | null>;
       openPath?: (targetPath: string) => Promise<boolean>;
       onNativeMenuCommand?: (handler: (command: NativeMenuCommand) => void) => () => void;

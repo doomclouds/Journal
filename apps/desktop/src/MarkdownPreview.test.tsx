@@ -38,4 +38,13 @@ provider: jmf
     expect(preview).not.toHaveTextContent("provider:");
     expect(preview).not.toHaveTextContent("journal:section");
   });
+
+  test("opens markdown links outside the Electron renderer", () => {
+    render(<MarkdownPreview markdown={"[Journal](https://example.com/journal)"} />);
+
+    const link = screen.getByRole("link", { name: "Journal" });
+    expect(link).toHaveAttribute("href", "https://example.com/journal");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
 });

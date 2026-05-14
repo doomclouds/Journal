@@ -14,6 +14,7 @@ import {
   revealAiProviderApiKey,
   saveAiSettings,
   saveBlockDraft,
+  setDesktopAccessToken,
   startAppendHarnessRun,
   startHarnessRun,
   startReorganizeHarnessRun,
@@ -3832,6 +3833,20 @@ describe("editor API client", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", undefined);
   });
 
+  test("requests include desktop access token when packaged bridge provides one", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(aiSettings));
+    vi.stubGlobal("fetch", fetchMock);
+
+    setDesktopAccessToken("desktop-token-123");
+    await getAiSettings();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/settings/ai", {
+      headers: {
+        "X-Journal-Desktop-Token": "desktop-token-123"
+      }
+    });
+  });
+
   test("exportJournalData posts to the data export endpoint", async () => {
     const body = {
       exportPath: "C:\\Journal\\.journal\\exports\\Journal.zip",
@@ -4167,10 +4182,13 @@ describe("editor API client", () => {
     });
     vi.stubGlobal("EventSource", EventSourceMock);
     resetApiBaseUrlForTests("http://127.0.0.1:61234");
+    setDesktopAccessToken("desktop-token-123");
 
     openHarnessRunEvents("run id", vi.fn());
 
-    expect(EventSourceMock).toHaveBeenCalledWith("http://127.0.0.1:61234/journal/harness/runs/run%20id/events");
+    expect(EventSourceMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:61234/journal/harness/runs/run%20id/events?desktopAccessToken=desktop-token-123"
+    );
   });
 
   test("openHarnessRunEvents reports invalid event JSON without throwing", () => {

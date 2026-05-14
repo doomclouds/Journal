@@ -323,6 +323,7 @@ export type JournalHistoryEntryDetail = {
 
 const defaultApiBaseUrl = import.meta.env.VITE_JOURNAL_API_URL ?? "http://localhost:5057";
 let apiBaseUrl = defaultApiBaseUrl;
+let desktopAccessToken: string | null = null;
 
 function normalizeApiBaseUrl(value: string) {
   return value.replace(/\/+$/, "");
@@ -337,19 +338,32 @@ export function setApiBaseUrl(value: string | null | undefined) {
   return apiBaseUrl;
 }
 
+export function setDesktopAccessToken(value: string | null | undefined) {
+  const normalized = value?.trim() ?? "";
+  desktopAccessToken = normalized.length > 0 ? normalized : null;
+  return desktopAccessToken;
+}
+
 export function initializeApiBaseUrlFromDesktop() {
-  const getApiBaseUrl = globalThis.window?.journalDesktop?.getApiBaseUrl;
-  if (!getApiBaseUrl) {
+  const desktop = globalThis.window?.journalDesktop;
+  if (!desktop?.getApiBaseUrl && !desktop?.getDesktopAccessToken) {
     return apiBaseUrl;
   }
 
-  return Promise.resolve(getApiBaseUrl())
-    .then(value => setApiBaseUrl(value))
+  return Promise.all([
+    Promise.resolve(desktop.getApiBaseUrl?.()),
+    Promise.resolve(desktop.getDesktopAccessToken?.())
+  ])
+    .then(([apiBase, token]) => {
+      setDesktopAccessToken(token);
+      return setApiBaseUrl(apiBase);
+    })
     .catch(() => null);
 }
 
 export function resetApiBaseUrlForTests(nextApiBaseUrl = defaultApiBaseUrl) {
   apiBaseUrl = normalizeApiBaseUrl(nextApiBaseUrl);
+  desktopAccessToken = null;
   return apiBaseUrl;
 }
 
@@ -374,7 +388,8 @@ async function readErrorMessage(response: Response): Promise<string | null> {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, init);
+  const requestInit = withDesktopAccessToken(init);
+  const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
   if (!response.ok) {
     const errorMessage = await readErrorMessage(response);
     throw new Error(errorMessage ?? `${path} failed: ${response.status}`);
@@ -385,6 +400,29 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
+}
+
+function withDesktopAccessToken(init?: RequestInit): RequestInit | undefined {
+  if (!desktopAccessToken) {
+    return init;
+  }
+
+  return {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      "X-Journal-Desktop-Token": desktopAccessToken
+    }
+  };
+}
+
+function withDesktopAccessTokenQuery(url: string) {
+  if (!desktopAccessToken) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}desktopAccessToken=${encodeURIComponent(desktopAccessToken)}`;
 }
 
 export function getAppInfo(): Promise<AppInfo> {
@@ -469,7 +507,9 @@ export function openHarnessRunEvents(
   onEvent: (event: JournalHarnessRunEvent) => void,
   onError?: (error: Error) => void
 ): EventSource {
-  const events = new EventSource(`${apiBaseUrl}/journal/harness/runs/${encodeURIComponent(runId)}/events`);
+  const events = new EventSource(withDesktopAccessTokenQuery(
+    `${apiBaseUrl}/journal/harness/runs/${encodeURIComponent(runId)}/events`
+  ));
   const eventNames = [
     "run-started",
     "run-status",

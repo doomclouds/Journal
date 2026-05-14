@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Journal.Tests;
@@ -89,12 +90,118 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         using var request = new HttpRequestMessage(HttpMethod.Options, "/health");
         request.Headers.Add("Origin", origin);
         request.Headers.Add("Access-Control-Request-Method", "GET");
+        request.Headers.Add("Access-Control-Request-Headers", "X-Journal-Desktop-Token");
 
         using var response = await client.SendAsync(request);
 
         Assert.True(response.IsSuccessStatusCode);
         Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
         Assert.Contains(origin, origins);
+    }
+
+    [Fact]
+    public async Task NullOriginRequests_RequireDesktopAccessToken()
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/settings/ai/deepseek/api-key");
+        request.Headers.Add("Origin", "null");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task NullOriginRequests_WithDesktopAccessTokenReachEndpoint()
+    {
+        var previous = Environment.GetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", "test-desktop-token");
+        try
+        {
+            using var client = _factory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/settings/ai/deepseek/api-key");
+            request.Headers.Add("Origin", "null");
+            request.Headers.Add("X-Journal-Desktop-Token", "test-desktop-token");
+
+            using var response = await client.SendAsync(request);
+
+            Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
+            Assert.Contains("null", origins);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", previous);
+        }
+    }
+
+    [Fact]
+    public async Task ProductionDevOriginRequests_RequireDesktopAccessToken()
+    {
+        var previous = Environment.GetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", "test-desktop-token");
+        try
+        {
+            using var factory = _factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+            using var client = factory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/settings/ai/deepseek/api-key");
+            request.Headers.Add("Origin", "http://localhost:5173");
+
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.False(response.Headers.TryGetValues("Access-Control-Allow-Origin", out _));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", previous);
+        }
+    }
+
+    [Fact]
+    public async Task DesktopTokenConfiguredDevOriginRequests_RequireDesktopAccessTokenEvenInDevelopment()
+    {
+        var previous = Environment.GetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", "test-desktop-token");
+        try
+        {
+            using var client = _factory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/settings/ai/deepseek/api-key");
+            request.Headers.Add("Origin", "http://localhost:5173");
+
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", previous);
+        }
+    }
+
+    [Fact]
+    public async Task NullOriginHarnessEvents_AcceptDesktopAccessTokenQuery()
+    {
+        var previous = Environment.GetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", "test-desktop-token");
+        try
+        {
+            using var client = _factory.CreateClient();
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                "/journal/harness/runs/invalid/events?desktopAccessToken=test-desktop-token");
+            request.Headers.Add("Origin", "null");
+
+            using var response = await client.SendAsync(request);
+
+            Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
+            Assert.Contains("null", origins);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("JOURNAL_DESKTOP_ACCESS_TOKEN", previous);
+        }
     }
 
     [Fact]

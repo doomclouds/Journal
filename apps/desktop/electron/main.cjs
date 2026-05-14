@@ -8,6 +8,11 @@ const {
 } = require("./backendRuntime.cjs");
 const { createDataBackupIpcHandlers } = require("./dataBackupIpc.cjs");
 const { createApplicationMenuTemplate } = require("./menu.cjs");
+const {
+  installNavigationGuards,
+  isTrustedDesktopFrameUrl,
+  resolvePackagedRendererEntryPath
+} = require("./windowSecurity.cjs");
 
 const isDev = !app.isPackaged;
 const devApiBaseUrl = "http://localhost:5057";
@@ -37,12 +42,17 @@ function resolvePackagedBackendExePath() {
   return resolveBackendExePathFromResources(process.resourcesPath);
 }
 
+function resolvePackagedRendererEntryPathFromMain() {
+  return resolvePackagedRendererEntryPath(__dirname);
+}
+
 function resolvePackagedBuildMetadata() {
   const metadata = readBuildMetadataFile(path.join(process.resourcesPath, "build-metadata.env"));
   const releaseVersion = metadata.JOURNAL_RELEASE_VERSION || app.getVersion();
 
   return {
     JOURNAL_RELEASE_VERSION: releaseVersion,
+    JOURNAL_FRONTEND_VERSION: metadata.JOURNAL_FRONTEND_VERSION || releaseVersion,
     JOURNAL_BUILD_COMMIT: metadata.JOURNAL_BUILD_COMMIT,
     JOURNAL_BUILD_TIME_UTC: metadata.JOURNAL_BUILD_TIME_UTC
   };
@@ -75,9 +85,29 @@ function getTrustedApiBaseUrl() {
   return isDev ? devApiBaseUrl : null;
 }
 
+function getTrustedDesktopAccessToken(senderFrameUrl) {
+  if (isDev) {
+    return null;
+  }
+
+  if (!isTrustedDesktopFrameUrl(senderFrameUrl, {
+    isDev,
+    packagedIndexPath: resolvePackagedRendererEntryPathFromMain()
+  })) {
+    return null;
+  }
+
+  if ((localServiceState.status === "connected" || localServiceState.status === "reused") && backendRuntime) {
+    return backendRuntime.getDesktopAccessToken();
+  }
+
+  return null;
+}
+
 function installLocalServiceIpcHandlers() {
   ipcMain.handle("journal:get-local-service-status", () => localServiceState);
   ipcMain.handle("journal:get-api-base-url", () => getTrustedApiBaseUrl());
+  ipcMain.handle("journal:get-desktop-access-token", event => getTrustedDesktopAccessToken(event.senderFrame?.url));
 }
 
 function installDataBackupIpcHandlers() {
@@ -152,6 +182,11 @@ async function createWindow() {
     }
   });
   mainWindowRef = mainWindow;
+  installNavigationGuards(mainWindow, shell, {
+    isDev,
+    devOrigin: "http://localhost:5173",
+    packagedIndexPath: resolvePackagedRendererEntryPathFromMain()
+  });
   mainWindow.on("closed", () => {
     if (mainWindowRef === mainWindow) {
       mainWindowRef = null;
@@ -162,7 +197,7 @@ async function createWindow() {
     mainWindow.loadURL("http://localhost:5173");
   } else {
     await startPackagedBackendRuntime();
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    mainWindow.loadFile(resolvePackagedRendererEntryPathFromMain());
   }
 
   installApplicationMenu(mainWindow);

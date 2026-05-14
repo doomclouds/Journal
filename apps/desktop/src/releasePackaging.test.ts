@@ -37,6 +37,7 @@ describe("release packaging", () => {
       );
 
       const metadata = readFileSync(outputPath, "utf8");
+      expect(metadata).toContain("JOURNAL_FRONTEND_VERSION=9.8.7");
       expect(metadata).toContain("VITE_JOURNAL_FRONTEND_VERSION=9.8.7");
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
