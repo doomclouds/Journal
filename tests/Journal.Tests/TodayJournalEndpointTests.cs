@@ -287,6 +287,26 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task PostJournalDataExport_ReturnsExportUnderConfiguredWorkspace()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/journal/data/export", content: null);
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var exportPath = document.RootElement.GetProperty("exportPath").GetString();
+
+        Assert.NotNull(exportPath);
+        Assert.StartsWith(Path.Combine(workspace.Root, ".journal", "exports"), exportPath, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("Journal-Export-2026-05-08-080500-", Path.GetFileName(exportPath), StringComparison.Ordinal);
+        Assert.EndsWith(".zip", exportPath, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(exportPath));
+    }
+
+    [Fact]
     public async Task GetJournalHistory_ReturnsSearchResults()
     {
         using var workspace = TempWorkspace.Create();

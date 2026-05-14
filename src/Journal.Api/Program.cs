@@ -56,6 +56,7 @@ builder.Services.AddSingleton<JournalHarnessAuditStore>();
 builder.Services.AddSingleton<JournalHarnessService>();
 builder.Services.AddSingleton<TodayJournalService>();
 builder.Services.AddSingleton<JournalHistoryService>();
+builder.Services.AddSingleton<JournalDataExportService>();
 
 var app = builder.Build();
 
@@ -86,6 +87,20 @@ app.MapGet("/app/info", (
         environment.EnvironmentName,
         storageOptions.RootDirectory,
         paths.IndexPath()));
+});
+
+app.MapPost("/journal/data/export", async (
+    JournalDataExportService service,
+    LocalJournalPaths paths,
+    IJournalClock clock,
+    CancellationToken cancellationToken) =>
+{
+    var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
+    var exportPath = Path.Combine(
+        paths.ExportDirectory(),
+        $"Journal-Export-{clock.Now:yyyy-MM-dd-HHmmss}-{uniqueSuffix}.zip");
+
+    return Results.Ok(await service.ExportAsync(exportPath, cancellationToken));
 });
 
 app.MapGet("/settings/ai", async (JournalAiSettingsService service, CancellationToken cancellationToken) =>
