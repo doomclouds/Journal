@@ -57,6 +57,16 @@
 
 应用图标资产提交在 `assets/app-icon/` 下。Release/CI 使用这些已提交的确定性 PNG/ICO 文件，不在发布构建过程中重新生成 AI 图像。
 
+## 法律与数据声明
+
+- [隐私声明 / Journal Privacy](./docs/legal/PRIVACY.md)
+- [数据安全 / Journal Data Safety](./docs/legal/DATA_SAFETY.md)
+- [AI 使用声明 / Journal AI Notice](./docs/legal/AI_NOTICE.md)
+- [个人声明 / Personal Statement](./docs/legal/PERSONAL_STATEMENT.md)
+- [免责声明 / Disclaimer](./docs/legal/DISCLAIMER.md)
+- [Journal 0.1.0 Release Notes](./docs/release/RELEASE_NOTES.md)
+- [Journal v0.1.0 GitHub Release Template](./docs/release/GITHUB_RELEASE_TEMPLATE.md)
+
 ## 阶段 1：应用框架骨架
 
 阶段 1 只验证 Electron + React + .NET 本地 API 的工程链路。
