@@ -258,6 +258,11 @@ export type JournalHistorySearchResult = {
   items: JournalHistoryEntrySummary[];
 };
 
+export type JournalAnniversaryWheelResult = {
+  monthDay: string;
+  items: JournalHistoryEntrySummary[];
+};
+
 export type JournalEntryVersion = {
   id: string;
   date: JournalDate;
@@ -445,6 +450,14 @@ export function getJournalHistory(params: {
   if (params.limit) search.set("limit", String(params.limit));
   const suffix = search.toString();
   return requestJson<JournalHistorySearchResult>(`/journal/history${suffix ? `?${suffix}` : ""}`);
+}
+
+export function getJournalAnniversaryWheel(monthDay: string, limit = 50): Promise<JournalAnniversaryWheelResult> {
+  const search = new URLSearchParams();
+  search.set("limit", String(limit));
+  return requestJson<JournalAnniversaryWheelResult>(
+    `/journal/history/anniversary/${encodeURIComponent(monthDay)}?${search.toString()}`
+  );
 }
 
 export function getJournalHistoryEntry(date: string): Promise<JournalHistoryEntryDetail> {
