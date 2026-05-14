@@ -10,6 +10,8 @@
 
 晨间日记里同一条事实会被 AI 同时写进相近 section，例如“今天继续优化晨间日记 / 处理 Harness 提示词问题”同时出现在 `today-focus` 和 `work`。用户阅读时会感觉九宫格不是分工，而是在重复堆内容。
 
+同一类边界问题也可能反向表现为过度保守：用户只说“调整日记结构”时，Planner 把它当成“不够具体”并 no-op，要求用户说明具体怎么调，而不是主动检查重复、错分、整段内容和相近 section 边界。
+
 ## Trigger / Context
 
 - Planner prompt 只要求“分配到最合适的 section”，但没有给相近 section 的互斥边界。
@@ -47,6 +49,7 @@
 - `today-focus` 里塞入大量具体开发、会议或排障细节。
 - `work` 和 `today-focus` 的 tool call `content` 高度相似，甚至完全一样。
 - Prompt 里没有相近 section 的互斥说明，`sectionCatalog` 也没有语义 hint。
+- 用户输入“调整日记结构”“优化分类”“重新分配 section”这类短命令后，audit 显示 no-op 原因是“用户没有说明具体要调整什么”。
 
 ## Applicability / Non-Applicability
 

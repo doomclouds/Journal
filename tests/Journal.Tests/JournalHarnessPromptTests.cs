@@ -28,6 +28,8 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("每条新增内容必须写成 Markdown bullet", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("同一事实只能进入一个最合适的 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("today-focus 与 work 的边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("调整日记结构", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不能仅因为用户没有点名 section 就 noOp", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -135,6 +137,15 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("基于 protected context 中已有的 raw inputs、当前 draft 和 confirmed entry", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("id", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("raw-1", request.UserMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SystemInstructions_TreatShortStructureAdjustmentAsActionableReorganizeIntent()
+    {
+        Assert.Contains("短结构调整命令", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("重新分配 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("检查重复、错分、整段内容和相近 section 边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("如果发现安全可执行的整理点", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]
