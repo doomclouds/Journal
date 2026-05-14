@@ -37,6 +37,10 @@ public sealed record JournalHistoryQuery(
 
 public sealed record JournalHistorySearchResult(IReadOnlyList<JournalHistoryEntrySummary> Items);
 
+public sealed record JournalAnniversaryWheelResult(
+    string MonthDay,
+    IReadOnlyList<JournalHistoryEntrySummary> Items);
+
 public sealed record JournalHistoryEntrySummary(
     JournalDate Date,
     string Status,

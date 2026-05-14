@@ -301,6 +301,101 @@ public sealed class JournalIndexStore
         return new JournalHistorySearchResult(await SearchFtsAsync(connection, query, normalizedQuery, limit, cancellationToken));
     }
 
+    public async Task<JournalAnniversaryWheelResult> ReadAnniversaryAsync(
+        string monthDay,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await ConfigureConnectionAsync(connection, cancellationToken);
+        var normalizedLimit = NormalizeLimit(limit);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH selected_entries AS (
+                SELECT e.date,
+                       e.status,
+                       e.mood,
+                       e.attention_reason,
+                       (SELECT COUNT(*) FROM raw_inputs r WHERE r.date = e.date) AS raw_input_count,
+                       (SELECT COUNT(*) FROM entry_versions v WHERE v.date = e.date) AS version_count
+                FROM entries e
+                WHERE e.month_day = $monthDay
+                ORDER BY e.date DESC
+                LIMIT $limit
+            ),
+            candidate_hits AS (
+                SELECT se.date,
+                       se.status,
+                       se.mood,
+                       se.attention_reason,
+                       'section' AS source_type,
+                       s.section_id AS section_id,
+                       NULL AS raw_input_id,
+                       s.title AS title,
+                       CASE
+                           WHEN length(CASE WHEN substr(ltrim(s.content), 1, 2) = '- ' THEN substr(ltrim(s.content), 3) ELSE s.content END) > $snippetMaxLength
+                           THEN substr(CASE WHEN substr(ltrim(s.content), 1, 2) = '- ' THEN substr(ltrim(s.content), 3) ELSE s.content END, 1, $snippetMaxLength - 3) || '...'
+                           ELSE CASE WHEN substr(ltrim(s.content), 1, 2) = '- ' THEN substr(ltrim(s.content), 3) ELSE s.content END
+                       END AS snippet,
+                       se.raw_input_count,
+                       se.version_count,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY se.date
+                           ORDER BY s.display_order, s.section_id
+                       ) AS hit_rank
+                FROM selected_entries se
+                INNER JOIN entry_sections s ON s.date = se.date
+                UNION ALL
+                SELECT se.date,
+                       se.status,
+                       se.mood,
+                       se.attention_reason,
+                       'raw-input' AS source_type,
+                       NULL AS section_id,
+                       r.id AS raw_input_id,
+                       r.source AS title,
+                       CASE
+                           WHEN length(r.text) > $snippetMaxLength
+                           THEN substr(r.text, 1, $snippetMaxLength - 3) || '...'
+                           ELSE r.text
+                       END AS snippet,
+                       se.raw_input_count,
+                       se.version_count,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY se.date
+                           ORDER BY r.created_at_utc, r.id
+                       ) AS hit_rank
+                FROM selected_entries se
+                INNER JOIN raw_inputs r ON r.date = se.date
+            )
+            SELECT se.date,
+                   se.status,
+                   se.mood,
+                   se.attention_reason,
+                   COALESCE(h.source_type, 'section') AS source_type,
+                   h.section_id,
+                   h.raw_input_id,
+                   COALESCE(h.title, '日记') AS title,
+                   COALESCE(h.snippet, '') AS snippet,
+                   se.raw_input_count,
+                   se.version_count
+            FROM selected_entries se
+            LEFT JOIN candidate_hits h ON h.date = se.date AND h.hit_rank <= $hitLimit
+            ORDER BY se.date DESC,
+                     CASE h.source_type WHEN 'section' THEN 0 WHEN 'raw-input' THEN 1 ELSE 2 END,
+                     h.section_id,
+                     h.raw_input_id;
+            """;
+        command.Parameters.AddWithValue("$monthDay", monthDay);
+        command.Parameters.AddWithValue("$limit", normalizedLimit);
+        command.Parameters.AddWithValue("$hitLimit", SearchHitsPerDateLimit);
+        command.Parameters.AddWithValue("$snippetMaxLength", LikeSnippetMaxLength);
+
+        return new JournalAnniversaryWheelResult(
+            monthDay,
+            await ReadGroupedHitsAsync(command, normalizedLimit, cancellationToken));
+    }
+
     public async Task BackupAndResetAsync(DateTimeOffset now, string reason, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_paths.IndexBackupDirectory());
@@ -783,12 +878,18 @@ public sealed class JournalIndexStore
                 continue;
             }
 
+            var snippet = reader.GetString(8);
+            if (string.IsNullOrWhiteSpace(snippet))
+            {
+                continue;
+            }
+
             summary.Hits.Add(new JournalHistoryHit(
                 reader.GetString(4),
                 GetNullableString(reader, 5),
                 GetNullableString(reader, 6),
                 reader.GetString(7),
-                reader.GetString(8)));
+                snippet));
         }
 
         return grouped.Values
