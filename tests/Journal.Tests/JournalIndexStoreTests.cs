@@ -276,6 +276,28 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
+    public async Task ReadAnniversaryAsync_ReturnsSectionHitsByDisplayOrder()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 14));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date),
+            [
+                new JournalIndexedSection(date, "a-later", "Later", 20, "- Later content"),
+                new JournalIndexedSection(date, "z-first", "First", 10, "- First content"),
+                new JournalIndexedSection(date, "m-middle", "Middle", 15, "- Middle content")
+            ],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-14", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(["First", "Middle", "Later"], item.Hits.Select(hit => hit.Title).ToArray());
+    }
+
+    [Fact]
     public async Task ReadSummaryAsync_ReturnsCounts()
     {
         using var workspace = TempWorkspace.Create();

@@ -337,6 +337,7 @@ public sealed class JournalIndexStore
                            THEN substr(CASE WHEN substr(ltrim(s.content), 1, 2) = '- ' THEN substr(ltrim(s.content), 3) ELSE s.content END, 1, $snippetMaxLength - 3) || '...'
                            ELSE CASE WHEN substr(ltrim(s.content), 1, 2) = '- ' THEN substr(ltrim(s.content), 3) ELSE s.content END
                        END AS snippet,
+                       s.display_order AS display_order,
                        se.raw_input_count,
                        se.version_count,
                        ROW_NUMBER() OVER (
@@ -359,6 +360,7 @@ public sealed class JournalIndexStore
                            THEN substr(r.text, 1, $snippetMaxLength - 3) || '...'
                            ELSE r.text
                        END AS snippet,
+                       NULL AS display_order,
                        se.raw_input_count,
                        se.version_count,
                        ROW_NUMBER() OVER (
@@ -377,6 +379,7 @@ public sealed class JournalIndexStore
                    h.raw_input_id,
                    COALESCE(h.title, '日记') AS title,
                    COALESCE(h.snippet, '') AS snippet,
+                   h.display_order,
                    se.raw_input_count,
                    se.version_count
             FROM selected_entries se
@@ -388,6 +391,7 @@ public sealed class JournalIndexStore
                 )
             ORDER BY se.date DESC,
                      CASE h.source_type WHEN 'section' THEN 0 WHEN 'raw-input' THEN 1 ELSE 2 END,
+                     h.display_order,
                      h.section_id,
                      h.raw_input_id;
             """;
@@ -917,8 +921,8 @@ public sealed class JournalIndexStore
                     JournalDate.Parse(date),
                     reader.GetString(1),
                     GetNullableString(reader, 2),
-                    reader.GetInt32(9),
                     reader.GetInt32(10),
+                    reader.GetInt32(11),
                     GetNullableString(reader, 3));
                 grouped.Add(date, summary);
             }
