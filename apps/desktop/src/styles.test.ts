@@ -116,10 +116,12 @@ describe("Today workbench productized CSS contract", () => {
   test("keeps the bottom input compact and uses a confirmation dialog for regeneration", () => {
     expect(css).not.toMatch(/\.compose-hint\s*\{/);
     expect(css).not.toMatch(/\.compose-bar\s+label\s*\{/);
-    expect(css).toMatch(/\.compose-bar\s*\{[^}]*padding:\s*10px\s+22px;/s);
-    expect(css).toMatch(/\.compose-input-card\s*\{[^}]*border:\s*1px\s+solid\s+rgba\(52,\s*45,\s*36,\s*0\.16\);[^}]*border-radius:\s*14px;/s);
-    expect(css).toMatch(/\.compose-bar\s+textarea\s*\{[^}]*min-height:\s*52px;[^}]*border:\s*0;/s);
-    expect(css).toMatch(/\.compose-toolbar\s*\{[^}]*display:\s*flex;[^}]*min-height:\s*36px;[^}]*border-top:\s*1px\s+solid\s+rgba\(52,\s*45,\s*36,\s*0\.08\);/s);
+    expect(css).toMatch(/\.compose-bar\s*\{[^}]*border-top:\s*1px\s+solid\s+rgba\(52,\s*45,\s*36,\s*0\.1\);[^}]*background:\s*rgba\(238,\s*236,\s*228,\s*0\.58\);[^}]*padding:\s*10px\s+22px;/s);
+    expect(css).toMatch(/\.productized-journal-stage\s+\.compose-bar\s*\{[^}]*background:\s*rgba\(238,\s*236,\s*228,\s*0\.58\);[^}]*box-shadow:\s*none;/s);
+    expect(css).toMatch(/\.compose-input-card\s*\{[^}]*border:\s*1px\s+solid\s+rgba\(52,\s*45,\s*36,\s*0\.11\);[^}]*border-radius:\s*10px;[^}]*background:\s*rgba\(238,\s*236,\s*228,\s*0\.48\);[^}]*box-shadow:\s*none;/s);
+    expect(css).toMatch(/\.compose-input-card:focus-within\s*\{[^}]*border-color:\s*rgba\(47,\s*111,\s*95,\s*0\.26\);[^}]*background:\s*rgba\(242,\s*239,\s*231,\s*0\.86\);/s);
+    expect(css).toMatch(/\.compose-bar\s+textarea\s*\{[^}]*min-height:\s*42px;[^}]*max-height:\s*120px;[^}]*border:\s*0;[^}]*padding:\s*9px\s+12px\s+5px;/s);
+    expect(css).toMatch(/\.compose-toolbar\s*\{[^}]*display:\s*flex;[^}]*min-height:\s*32px;[^}]*border-top:\s*1px\s+solid\s+rgba\(52,\s*45,\s*36,\s*0\.07\);/s);
     expect(css).toMatch(/\.compose-icon-button\s*\{[^}]*width:\s*32px;[^}]*height:\s*32px;[^}]*border-radius:\s*8px;/s);
     expect(css).toMatch(/\.compose-send-action\s*\{[^}]*border-radius:\s*999px;[^}]*background:\s*var\(--sage\);/s);
     expect(css).toMatch(/\.confirm-overlay\s*\{[^}]*position:\s*fixed;[^}]*place-items:\s*center;/s);
@@ -134,6 +136,21 @@ describe("Today workbench productized CSS contract", () => {
     expect(css).toMatch(/\.source-stack\s*\{[^}]*display:\s*grid;[^}]*gap:\s*9px;/s);
     expect(css).toMatch(/\.source-item\.is-active\s*\{[^}]*border-color:\s*rgba\(181,\s*127,\s*48,\s*0\.26\);/s);
     expect(css).toMatch(/\.source-meta\s+span:first-child\s*\{[^}]*color:\s*var\(--gold\);/s);
+  });
+
+  test("keeps today workbench scrollbars quiet until users interact", () => {
+    expect(css).toMatch(
+      /\.command-workspace\s+\.context-rail,\s*\.document-scroll,\s*\.assistant-body\s*\{[^}]*scrollbar-width:\s*thin;[^}]*scrollbar-color:\s*transparent\s+transparent;[^}]*scrollbar-gutter:\s*stable;/s
+    );
+    expect(css).toMatch(
+      /\.command-workspace\s+\.context-rail:hover,[^}]*\.assistant-body:focus-within\s*\{[^}]*scrollbar-color:\s*rgba\(52,\s*45,\s*36,\s*0\.26\)\s+transparent;/s
+    );
+    expect(css).toMatch(
+      /\.command-workspace\s+\.context-rail::-webkit-scrollbar-thumb,[^}]*\.assistant-body::-webkit-scrollbar-thumb\s*\{[^}]*background-color:\s*transparent;[^}]*background-clip:\s*content-box;/s
+    );
+    expect(css).toMatch(
+      /\.command-workspace\s+\.context-rail:hover::-webkit-scrollbar-thumb,[^}]*\.assistant-body:focus-within::-webkit-scrollbar-thumb\s*\{[^}]*background-color:\s*rgba\(52,\s*45,\s*36,\s*0\.26\);/s
+    );
   });
 
   test("keeps next step as a passive status card without action-like controls", () => {

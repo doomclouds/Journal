@@ -75,6 +75,54 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.command-workspace .context-rail,
+.document-scroll,
+.assistant-body {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+}
+
+.command-workspace .context-rail:hover,
+.command-workspace .context-rail:focus-within,
+.document-scroll:hover,
+.document-scroll:focus-within,
+.assistant-body:hover,
+.assistant-body:focus-within {
+  scrollbar-color: rgba(52, 45, 36, 0.26) transparent;
+}
+
+.command-workspace .context-rail::-webkit-scrollbar,
+.document-scroll::-webkit-scrollbar,
+.assistant-body::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.command-workspace .context-rail::-webkit-scrollbar-track,
+.document-scroll::-webkit-scrollbar-track,
+.assistant-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.command-workspace .context-rail::-webkit-scrollbar-thumb,
+.document-scroll::-webkit-scrollbar-thumb,
+.assistant-body::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: transparent;
+  background-clip: content-box;
+}
+
+.command-workspace .context-rail:hover::-webkit-scrollbar-thumb,
+.command-workspace .context-rail:focus-within::-webkit-scrollbar-thumb,
+.document-scroll:hover::-webkit-scrollbar-thumb,
+.document-scroll:focus-within::-webkit-scrollbar-thumb,
+.assistant-body:hover::-webkit-scrollbar-thumb,
+.assistant-body:focus-within::-webkit-scrollbar-thumb {
+  background-color: rgba(52, 45, 36, 0.26);
+}
+
 .today-shell {
   min-height: 100vh;
   padding: 20px;
@@ -495,9 +543,9 @@ button:focus-visible {
 }
 
 .productized-journal-stage .compose-bar {
-  border-color: rgba(47, 111, 95, 0.18);
-  background: #fffefa;
-  box-shadow: 0 12px 28px rgba(55, 44, 30, 0.08);
+  border-color: rgba(52, 45, 36, 0.1);
+  background: rgba(238, 236, 228, 0.58);
+  box-shadow: none;
 }
 
 .compose-bar form {
@@ -2068,9 +2116,9 @@ button:focus-visible {
 .compose-bar {
   display: block;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid rgba(52, 45, 36, 0.1);
   border-radius: 0;
-  background: rgba(255, 253, 247, 0.82);
+  background: rgba(238, 236, 228, 0.58);
   box-shadow: none;
   padding: 10px 22px;
 }
@@ -2080,38 +2128,43 @@ button:focus-visible {
 }
 
 .compose-input-card {
-  border: 1px solid rgba(52, 45, 36, 0.16);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 254, 250, 0.98), rgba(250, 248, 241, 0.98));
-  box-shadow:
-    0 12px 30px rgba(52, 43, 31, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(52, 45, 36, 0.11);
+  border-radius: 10px;
+  background: rgba(238, 236, 228, 0.48);
+  box-shadow: none;
   overflow: hidden;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.compose-input-card:focus-within {
+  border-color: rgba(47, 111, 95, 0.26);
+  background: rgba(242, 239, 231, 0.86);
 }
 
 .compose-bar textarea {
   width: 100%;
-  min-height: 52px;
-  max-height: 140px;
+  min-height: 42px;
+  max-height: 120px;
   resize: vertical;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--ink);
-  padding: 13px 14px 8px;
+  padding: 9px 12px 5px;
   line-height: 1.65;
   outline: none;
 }
 
 .compose-toolbar {
   display: flex;
-  min-height: 36px;
+  min-height: 32px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-top: 1px solid rgba(52, 45, 36, 0.08);
-  padding: 5px 7px 7px;
+  border-top: 1px solid rgba(52, 45, 36, 0.07);
+  padding: 3px 6px 6px;
 }
 
 .compose-tool-group,
