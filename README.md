@@ -35,6 +35,7 @@
 - [阶段 7 Windows 发布设计](./docs/superpowers/specs/2026-05-14-phase-7-windows-release-pipeline-design.md)
 - [阶段 7 Windows 发布实施计划](./docs/superpowers/plans/2026-05-14-phase-7-windows-release-pipeline-implementation-plan.md)
 - [阶段 7 Windows 发布归档](./docs/superpowers/archives/2026-05/2026-05-14-phase-7-windows-release-pipeline-archives.md)
+- [JMF 分类软合并设计](./docs/superpowers/specs/2026-05-15-jmf-soft-section-consolidation-design.md)
 - [Superpowers 交付归档索引](./docs/superpowers/archives/INDEX.md)
 - [产品故事演示](./docs/product/journal-product-story.html)
 
