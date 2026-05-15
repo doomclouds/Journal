@@ -126,6 +126,11 @@ app.MapPost("/journal/data/export", async (
     return Results.Ok(await service.ExportAsync(exportPath, cancellationToken));
 });
 
+app.MapGet("/journal/data/summary", (JournalDataExportService service) =>
+{
+    return Results.Ok(service.CreateManifest());
+});
+
 app.MapPost("/journal/data/import", async Task<IResult> (
     JournalDataImportRequest request,
     JournalDataImportService service,

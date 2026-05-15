@@ -307,6 +307,30 @@ public sealed class TodayJournalEndpointTests
     }
 
     [Fact]
+    public async Task GetJournalDataSummary_ReturnsCurrentLocalDataCounts()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var date = JournalDate.From(FixedDay);
+        await WriteEntryAsync(paths, date, CreateMarkdown(date, "current summary entry"));
+        LocalJournalPaths.EnsureParentDirectory(paths.RawInputPath(date));
+        await File.WriteAllTextAsync(paths.RawInputPath(date), "{}\n{}\n", Encoding.UTF8);
+        await CreateVersionAsync(paths, date, "current summary version");
+
+        using var response = await client.GetAsync("/journal/data/summary");
+        response.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("entryCount").GetInt32());
+        Assert.Equal(2, root.GetProperty("rawInputCount").GetInt32());
+        Assert.Equal(1, root.GetProperty("versionCount").GetInt32());
+        Assert.False(root.GetProperty("containsFullApiKeys").GetBoolean());
+    }
+
+    [Fact]
     public async Task PostJournalDataImport_WithBlankPackagePathReturnsBadRequest()
     {
         using var workspace = TempWorkspace.Create();

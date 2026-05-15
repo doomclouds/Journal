@@ -3117,8 +3117,9 @@ button:focus-visible {
 }
 
 .data-backup-head span,
+.data-backup-overview span,
+.data-backup-overview p,
 .data-backup-section-head p,
-.data-backup-meta,
 .data-backup-result > span {
   color: #655d53;
   font-size: 12px;
@@ -3137,6 +3138,34 @@ button:focus-visible {
   border-radius: 8px;
   background: #fffdf8;
   padding: 14px;
+}
+
+.data-backup-overview {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #cbd9cf;
+  border-radius: 8px;
+  background: #f8fbf7;
+  padding: 14px;
+}
+
+.data-backup-overview div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.data-backup-overview strong {
+  color: #2f6f5f;
+  font-size: 15px;
+}
+
+.data-backup-overview p {
+  max-width: 330px;
+  margin: 0;
+  line-height: 1.55;
 }
 
 .data-backup-section-head {
@@ -3178,21 +3207,6 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.data-backup-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  line-height: 1.4;
-}
-
-.data-backup-meta span {
-  border-radius: 999px;
-  background: rgba(47, 111, 95, 0.08);
-  color: #2f6f5f;
-  padding: 4px 8px;
-  font-weight: 800;
-}
-
 .data-import-form {
   display: grid;
   gap: 10px;
@@ -3232,6 +3246,17 @@ button:focus-visible {
 
 .data-backup-alert {
   margin: 0 12px 12px;
+}
+
+.data-backup-status {
+  margin: 0 12px 12px;
+  border: 1px solid #cbd9cf;
+  border-radius: 8px;
+  background: #f8fbf7;
+  color: #2f6f5f;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .about-panel {

@@ -5,6 +5,7 @@ import {
   activateAiSettings,
   exportJournalData,
   getAiSettings,
+  getJournalDataSummary,
   getJournalAudit,
   getTodayEditor,
   importJournalData,
@@ -211,6 +212,18 @@ const historyVersion: JournalEntryVersion = {
   markdownPath: ".journal/versions/2026/05/2026-05-08/version.md",
   metaPath: ".journal/versions/2026/05/2026-05-08/version.meta.json",
   contentHash: "sha256:history"
+};
+
+const dataSummary = {
+  format: "journal-export/v1",
+  createdAt: "2026-05-15T08:30:00+08:00",
+  appVersion: "0.1.0",
+  backendVersion: "0.1.0",
+  frontendVersion: "0.1.0",
+  entryCount: 2,
+  rawInputCount: 3,
+  versionCount: 1,
+  containsFullApiKeys: false
 };
 
 const anniversaryPreviousDate = {
@@ -1178,6 +1191,18 @@ describe("App", () => {
     expect(within(menu).getByRole("menuitem", { name: "同日年轮" })).toBeInTheDocument();
   });
 
+  test("closes the journal corridor menu when clicking outside without choosing an action", async () => {
+    const fetchMock = createInitialFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await openJournalCorridorMenu();
+    fireEvent.pointerDown(await screen.findByLabelText("日记纸面"));
+
+    expect(screen.queryByRole("menu", { name: "日记回廊菜单" })).not.toBeInTheDocument();
+  });
+
   test("opens the journal corridor menu from the journal paper context menu", async () => {
     const fetchMock = createInitialFetchMock();
     vi.stubGlobal("fetch", fetchMock);
@@ -1770,19 +1795,10 @@ describe("App", () => {
     const exportPath = "C:\\Journal\\.journal\\exports\\Journal-Export-2026-05-15.zip";
     const openPath = vi.fn().mockResolvedValue(true);
     const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse(dataSummary))
       .mockResolvedValueOnce(mockJsonResponse({
         exportPath,
-        manifest: {
-          format: "journal-export/v1",
-          createdAt: "2026-05-15T08:30:00+08:00",
-          appVersion: "0.1.0",
-          backendVersion: "0.1.0",
-          frontendVersion: "0.1.0",
-          entryCount: 2,
-          rawInputCount: 3,
-          versionCount: 1,
-          containsFullApiKeys: false
-        }
+        manifest: dataSummary
       }));
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("journalDesktop", { openPath });
@@ -1791,17 +1807,21 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
     const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    const overview = await within(dialog).findByRole("region", { name: "当前数据概览" });
+    expect(within(overview).getByText("2 篇日记 · 3 条原始输入 · 1 个版本")).toBeInTheDocument();
+    expect(within(dialog).getByText("导出会生成一个 ZIP 数据包，包含正式日记、原始材料、草稿、版本和审计记录。")).toBeInTheDocument();
+    expect(within(dialog).getByText("导入会先备份当前数据，再用数据包内容替换本地 Journal 数据。")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "关闭" }).textContent).toBe("");
     fireEvent.click(within(dialog).getByRole("button", { name: "导出数据包" }));
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/data/export", {
+      expect(fetchMock).toHaveBeenNthCalledWith(5, "http://localhost:5057/journal/data/export", {
         method: "POST"
       })
     );
     expect(within(dialog).getByText(exportPath)).toBeInTheDocument();
-    expect(within(dialog).getByText("2 篇日记 · 3 条原始输入 · 1 个版本")).toBeInTheDocument();
-    expect(within(dialog).getByText("导出包不包含完整 API Key。")).toBeInTheDocument();
+    expect(within(overview).getByText("2 篇日记 · 3 条原始输入 · 1 个版本")).toBeInTheDocument();
+    expect(within(dialog).getByRole("status")).toHaveTextContent("导出完成。数据包已写入本地导出目录。");
 
     fireEvent.click(within(dialog).getByRole("button", { name: "打开导出路径" }));
 
@@ -1824,6 +1844,7 @@ describe("App", () => {
     const selectImportPackage = vi.fn().mockResolvedValue(packagePath);
     const openPath = vi.fn().mockResolvedValue(true);
     const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse(dataSummary))
       .mockResolvedValueOnce(mockJsonResponse({
         backupDirectory,
         manifest: {
@@ -1857,6 +1878,7 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "数据与备份" }));
     const dialog = await screen.findByRole("dialog", { name: "数据与备份" });
+    const overview = await within(dialog).findByRole("region", { name: "当前数据概览" });
     fireEvent.click(within(dialog).getByRole("button", { name: "选择导入包" }));
 
     const pathInput = await within(dialog).findByLabelText("导入包路径");
@@ -1865,7 +1887,7 @@ describe("App", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "导入数据包" }));
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/data/import", {
+      expect(fetchMock).toHaveBeenNthCalledWith(5, "http://localhost:5057/journal/data/import", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1874,7 +1896,8 @@ describe("App", () => {
       })
     );
     expect(within(dialog).getByText(backupDirectory)).toBeInTheDocument();
-    expect(within(dialog).getByText("4 篇日记 · 8 条原始输入 · 2 个版本")).toBeInTheDocument();
+    expect(within(overview).getByText("4 篇日记 · 8 条原始输入 · 2 个版本")).toBeInTheDocument();
+    expect(within(dialog).getByRole("status")).toHaveTextContent("导入完成。原有数据已备份，可从备份目录回看。");
     expect(await screen.findByText("导入后的日记段落")).toBeInTheDocument();
     expect(screen.getAllByText("导入后的今日材料").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("LLM：DeepSeek")).toBeInTheDocument();
@@ -1894,6 +1917,7 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockReturnValueOnce(historyRefreshDeferred.promise)
+      .mockResolvedValueOnce(mockJsonResponse(dataSummary))
       .mockResolvedValueOnce(mockJsonResponse({
         backupDirectory,
         manifest: {
@@ -1937,7 +1961,7 @@ describe("App", () => {
 
     expect(await screen.findByText("导入后的日记段落")).toBeInTheDocument();
     expect(within(dialog).getByText(backupDirectory)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(8);
 
     await act(async () => {
       historyRefreshDeferred.resolve(mockJsonResponse({ items: [historySummary] }));
@@ -1945,7 +1969,7 @@ describe("App", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(8);
     expect(screen.queryByRole("region", { name: "历史日记预览" })).not.toBeInTheDocument();
     expect(screen.getByText("导入后的日记段落")).toBeInTheDocument();
     expect(screen.getByLabelText("LLM：DeepSeek")).toBeInTheDocument();
@@ -1954,6 +1978,7 @@ describe("App", () => {
   test("clears stale data backup results on failures and close reopen", async () => {
     const exportPath = "C:\\Journal\\.journal\\exports\\Journal-Export-old.zip";
     const fetchMock = createInitialFetchMock()
+      .mockResolvedValueOnce(mockJsonResponse(dataSummary))
       .mockResolvedValueOnce(mockJsonResponse({
         exportPath,
         manifest: {
@@ -1968,7 +1993,8 @@ describe("App", () => {
           containsFullApiKeys: false
         }
       }))
-      .mockResolvedValueOnce(mockJsonResponse({ error: "export failed" }, false, 500));
+      .mockResolvedValueOnce(mockJsonResponse({ error: "export failed" }, false, 500))
+      .mockResolvedValueOnce(mockJsonResponse(dataSummary));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -1992,7 +2018,8 @@ describe("App", () => {
 
   test("keeps a single modal open when switching between about llm and data backup", async () => {
     const fetchMock = createInitialFetchMock()
-      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+      .mockResolvedValueOnce(mockJsonResponse(appInfo))
+      .mockResolvedValueOnce(mockJsonResponse(dataSummary));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -2015,7 +2042,7 @@ describe("App", () => {
   test("keeps pasted import path when package selection is cancelled", async () => {
     const existingPath = "C:\\Backups\\existing.zip";
     const selectImportPackage = vi.fn().mockResolvedValue(null);
-    vi.stubGlobal("fetch", createInitialFetchMock());
+    vi.stubGlobal("fetch", createInitialFetchMock().mockResolvedValueOnce(mockJsonResponse(dataSummary)));
     vi.stubGlobal("journalDesktop", { selectImportPackage });
 
     render(<App />);
@@ -2031,7 +2058,7 @@ describe("App", () => {
   });
 
   test("shows a clear data backup message when native package selection is unavailable", async () => {
-    vi.stubGlobal("fetch", createInitialFetchMock());
+    vi.stubGlobal("fetch", createInitialFetchMock().mockResolvedValueOnce(mockJsonResponse(dataSummary)));
     vi.stubGlobal("journalDesktop", {});
 
     render(<App />);
@@ -3925,6 +3952,15 @@ describe("editor API client", () => {
       },
       body: JSON.stringify({ packagePath: "C:\\Backups\\Journal.zip" })
     });
+  });
+
+  test("getJournalDataSummary reads current data counts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse(dataSummary));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getJournalDataSummary()).resolves.toEqual(dataSummary);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/data/summary", undefined);
   });
 
   test("saveAiSettings sends provider settings", async () => {

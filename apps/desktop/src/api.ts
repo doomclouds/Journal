@@ -594,6 +594,10 @@ export function exportJournalData(): Promise<JournalDataExportResult> {
   });
 }
 
+export function getJournalDataSummary(): Promise<JournalDataExportManifest> {
+  return requestJson<JournalDataExportManifest>("/journal/data/summary");
+}
+
 export function importJournalData(packagePath: string): Promise<JournalDataImportResult> {
   return requestJson<JournalDataImportResult>("/journal/data/import", {
     method: "POST",

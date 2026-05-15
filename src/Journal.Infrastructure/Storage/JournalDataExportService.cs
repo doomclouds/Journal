@@ -12,6 +12,18 @@ public sealed class JournalDataExportService(LocalJournalPaths paths)
         WriteIndented = true
     };
 
+    public JournalDataExportManifest CreateManifest() =>
+        new(
+            "journal-export/v1",
+            DateTimeOffset.Now,
+            ApplicationInfo.Version,
+            ApplicationInfo.Version,
+            ApplicationBuildInfo.Current.FrontendVersion,
+            CountFiles(paths.EntryRootDirectory(), "*.md"),
+            CountJsonLines(paths.RawInputRootDirectory()),
+            CountFiles(paths.VersionRootDirectory(), "*.md"),
+            false);
+
     public async Task<JournalDataExportResult> ExportAsync(string exportPath, CancellationToken cancellationToken)
     {
         LocalJournalPaths.EnsureParentDirectory(exportPath);
@@ -21,16 +33,7 @@ public sealed class JournalDataExportService(LocalJournalPaths paths)
             $"{Path.GetFileName(exportPath)}.{Guid.NewGuid():N}.tmp");
         var tempCreated = false;
 
-        var manifest = new JournalDataExportManifest(
-            "journal-export/v1",
-            DateTimeOffset.Now,
-            ApplicationInfo.Version,
-            ApplicationInfo.Version,
-            ApplicationBuildInfo.Current.FrontendVersion,
-            CountFiles(paths.EntryRootDirectory(), "*.md"),
-            CountFiles(paths.RawInputRootDirectory(), "*.jsonl"),
-            CountFiles(paths.VersionRootDirectory(), "*.md"),
-            false);
+        var manifest = CreateManifest();
 
         try
         {
@@ -78,6 +81,12 @@ public sealed class JournalDataExportService(LocalJournalPaths paths)
     private static int CountFiles(string directory, string pattern) =>
         Directory.Exists(directory)
             ? Directory.GetFiles(directory, pattern, SearchOption.AllDirectories).Length
+            : 0;
+
+    private static int CountJsonLines(string directory) =>
+        Directory.Exists(directory)
+            ? Directory.GetFiles(directory, "*.jsonl", SearchOption.AllDirectories)
+                .Sum(file => File.ReadLines(file).Count(line => !string.IsNullOrWhiteSpace(line)))
             : 0;
 
     private static async Task AddJsonAsync<T>(

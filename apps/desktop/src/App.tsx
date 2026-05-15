@@ -12,6 +12,7 @@ import {
   importJournalData,
   getJournalAudit,
   getJournalAnniversaryWheel,
+  getJournalDataSummary,
   getJournalHistory,
   getJournalHistoryEntry,
   getJournalHistoryVersion,
@@ -127,12 +128,6 @@ function formatDataManifestCounts(manifest: JournalDataExportManifest) {
   return `${manifest.entryCount} 篇日记 · ${manifest.rawInputCount} 条原始输入 · ${manifest.versionCount} 个版本`;
 }
 
-function getApiKeyManifestNotice(manifest: JournalDataExportManifest) {
-  return manifest.containsFullApiKeys
-    ? "导入包声明包含完整 API Key，请确认来源。"
-    : "导出包不包含完整 API Key。";
-}
-
 function formatRawInputTime(value: string) {
   const time = value.match(/T(\d{2}:\d{2})/);
   return time?.[1] ?? value;
@@ -198,6 +193,7 @@ export default function App() {
   const auditRequestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
   const historyVersionRequestIdRef = useRef(0);
+  const dataSummaryRequestIdRef = useRef(0);
   const aboutRequestIdRef = useRef(0);
   const aboutInFlightRef = useRef<Promise<AppInfo> | null>(null);
   const aboutCloseButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -208,6 +204,8 @@ export default function App() {
   const dataBackupPreviousFocusRef = useRef<HTMLElement | null>(null);
   const dataBackupEntryDisabledRef = useRef(false);
   const harnessEventsRef = useRef<EventSource | null>(null);
+  const journalCorridorTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const journalCorridorMenuRef = useRef<HTMLDivElement | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [editor, setEditor] = useState<TodayEditorState | null>(null);
@@ -220,11 +218,14 @@ export default function App() {
   const [selectedAboutLegalNoticeId, setSelectedAboutLegalNoticeId] =
     useState<AboutLegalNoticeId>("statement");
   const [dataBackupError, setDataBackupError] = useState("");
+  const [dataBackupNotice, setDataBackupNotice] = useState("");
   const [importPackagePath, setImportPackagePath] = useState("");
+  const [dataSummary, setDataSummary] = useState<JournalDataExportManifest | null>(null);
   const [dataExportResult, setDataExportResult] = useState<JournalDataExportResult | null>(null);
   const [dataImportResult, setDataImportResult] = useState<JournalDataImportResult | null>(null);
   const [isDataExporting, setIsDataExporting] = useState(false);
   const [isDataImporting, setIsDataImporting] = useState(false);
+  const [isDataSummaryLoading, setIsDataSummaryLoading] = useState(false);
   const [input, setInput] = useState("");
   const [apiError, setApiError] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -412,6 +413,40 @@ export default function App() {
   }, [isDataBackupOpen]);
 
   useEffect(() => {
+    if (!journalCorridorMenu) {
+      return undefined;
+    }
+
+    function handleJournalCorridorPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (journalCorridorTriggerRef.current?.contains(target) || journalCorridorMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setJournalCorridorMenu(null);
+    }
+
+    function handleJournalCorridorKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setJournalCorridorMenu(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleJournalCorridorPointerDown);
+    document.addEventListener("keydown", handleJournalCorridorKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleJournalCorridorPointerDown);
+      document.removeEventListener("keydown", handleJournalCorridorKeyDown);
+    };
+  }, [journalCorridorMenu]);
+
+  useEffect(() => {
     function handleNativeMenuCommand(command: NativeMenuCommand) {
       if (command === "open-llm-settings") {
         resetPendingRegenerateDraft();
@@ -544,10 +579,34 @@ export default function App() {
   }
 
   function resetDataBackupPanelState() {
+    dataSummaryRequestIdRef.current += 1;
     setDataBackupError("");
+    setDataBackupNotice("");
     setImportPackagePath("");
+    setDataSummary(null);
     setDataExportResult(null);
     setDataImportResult(null);
+    setIsDataSummaryLoading(false);
+  }
+
+  async function refreshDataSummary() {
+    const requestId = dataSummaryRequestIdRef.current + 1;
+    dataSummaryRequestIdRef.current = requestId;
+    setIsDataSummaryLoading(true);
+    try {
+      const summary = await getJournalDataSummary();
+      if (requestId === dataSummaryRequestIdRef.current) {
+        setDataSummary(summary);
+      }
+    } catch (caught) {
+      if (requestId === dataSummaryRequestIdRef.current) {
+        setDataBackupError(getErrorMessage(caught));
+      }
+    } finally {
+      if (requestId === dataSummaryRequestIdRef.current) {
+        setIsDataSummaryLoading(false);
+      }
+    }
   }
 
   function openDataBackupPanel() {
@@ -560,6 +619,7 @@ export default function App() {
     setIsLlmPanelOpen(false);
     resetDataBackupPanelState();
     setIsDataBackupOpen(true);
+    void refreshDataSummary();
   }
 
   function closeDataBackupPanel() {
@@ -604,12 +664,15 @@ export default function App() {
     }
 
     setDataBackupError("");
+    setDataBackupNotice("");
     setDataExportResult(null);
     setDataImportResult(null);
     setIsDataExporting(true);
     try {
       const result = await exportJournalData();
       setDataExportResult(result);
+      setDataSummary(result.manifest);
+      setDataBackupNotice("导出完成。数据包已写入本地导出目录。");
     } catch (caught) {
       setDataBackupError(getErrorMessage(caught));
     } finally {
@@ -623,6 +686,7 @@ export default function App() {
     }
 
     setDataBackupError("");
+    setDataBackupNotice("");
     try {
       const selectImportPackage = window.journalDesktop?.selectImportPackage;
       if (!selectImportPackage) {
@@ -651,6 +715,7 @@ export default function App() {
 
     invalidateInFlightRequestsForDataImport();
     setDataBackupError("");
+    setDataBackupNotice("");
     setDataExportResult(null);
     setDataImportResult(null);
     setIsDataImporting(true);
@@ -661,6 +726,8 @@ export default function App() {
         getAiSettings()
       ]);
       setDataImportResult(result);
+      setDataSummary(result.manifest);
+      setDataBackupNotice("导入完成。原有数据已备份，可从备份目录回看。");
       setEditor(nextEditor);
       setAiSettings(nextAiSettings);
       setLoadState("ready");
@@ -1374,6 +1441,7 @@ export default function App() {
               </div>
               <button
                 type="button"
+                ref={journalCorridorTriggerRef}
                 className="journal-corridor-trigger"
                 aria-label="日记回廊"
                 title="日记回廊"
@@ -1393,6 +1461,7 @@ export default function App() {
 
           {journalCorridorMenu ? (
             <div
+              ref={journalCorridorMenuRef}
               className="journal-corridor-menu"
               role="menu"
               aria-label="日记回廊菜单"
@@ -1688,11 +1757,25 @@ export default function App() {
             </header>
 
             <div className="data-backup-body">
+              <section className="data-backup-overview" aria-label="当前数据概览">
+                <div>
+                  <span>当前数据概览</span>
+                  <strong>
+                    {dataSummary
+                      ? formatDataManifestCounts(dataSummary)
+                      : isDataSummaryLoading
+                        ? "正在读取本地数据..."
+                        : "暂时没有读取到数据概览"}
+                  </strong>
+                </div>
+                <p>默认导出不会包含完整 API Key；SQLite 索引只是缓存，可由本地 Markdown 和材料重建。</p>
+              </section>
+
               <section className="data-backup-section">
                 <div className="data-backup-section-head">
                   <div>
                     <h2>导出</h2>
-                    <p>生成一个本地数据包，默认不包含完整 API Key。</p>
+                    <p>导出会生成一个 ZIP 数据包，包含正式日记、原始材料、草稿、版本和审计记录。</p>
                   </div>
                   <button
                     type="button"
@@ -1708,10 +1791,6 @@ export default function App() {
                   <div className="data-backup-result" aria-label="导出结果">
                     <span>导出路径</span>
                     <p>{dataExportResult.exportPath}</p>
-                    <div className="data-backup-meta">
-                      <span>{formatDataManifestCounts(dataExportResult.manifest)}</span>
-                      <span>{getApiKeyManifestNotice(dataExportResult.manifest)}</span>
-                    </div>
                     <button
                       type="button"
                       className="secondary-action"
@@ -1728,7 +1807,7 @@ export default function App() {
                 <div className="data-backup-section-head">
                   <div>
                     <h2>导入</h2>
-                    <p>导入会先备份当前数据；导出默认不包含完整 API Key。</p>
+                    <p>导入会先备份当前数据，再用数据包内容替换本地 Journal 数据。</p>
                   </div>
                 </div>
                 <form className="data-import-form" onSubmit={event => {
@@ -1767,10 +1846,6 @@ export default function App() {
                   <div className="data-backup-result" aria-label="导入结果">
                     <span>当前数据备份目录</span>
                     <p>{dataImportResult.backupDirectory}</p>
-                    <div className="data-backup-meta">
-                      <span>{formatDataManifestCounts(dataImportResult.manifest)}</span>
-                      <span>{getApiKeyManifestNotice(dataImportResult.manifest)}</span>
-                    </div>
                     <button
                       type="button"
                       className="secondary-action"
@@ -1784,6 +1859,7 @@ export default function App() {
               </section>
             </div>
 
+            {dataBackupNotice ? <p className="data-backup-status" role="status">{dataBackupNotice}</p> : null}
             {dataBackupError ? <p className="api-error data-backup-alert" role="alert">{dataBackupError}</p> : null}
           </section>
         </div>

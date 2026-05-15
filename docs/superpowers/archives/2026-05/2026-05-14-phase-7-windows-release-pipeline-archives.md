@@ -57,3 +57,4 @@ Phase 7 把 Journal 从开发态双进程应用推进到 Windows 本地发布闭
 - `JOURNAL_DESKTOP_ACCESS_TOKEN` is an internal packaged runtime variable. If it is manually left in a development shell, dev browser requests without the token will be rejected by design.
 - Release staging now treats frontend asset path shape and frontend version metadata as build-time gates, so future installer builds fail before shipping a white-screen package.
 - The automated verification snapshot proves build artifacts, checksum, frontend build, and test suite health. It does not replace manual installed-app UX checks for About, legal notices, native path opening, and other Electron bridge surfaces.
+- 2026-05-15 数据备份 UX 回访：数据与备份面板新增固定的当前数据概览区，通过 `GET /journal/data/summary` 读取本地条目/原始材料/版本计数；导入和导出分区补齐操作前提示，成功后用稳定状态行反馈完成结果，避免统计信息跟随导入/导出结果块漂移。
