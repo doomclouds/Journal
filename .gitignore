@@ -4,6 +4,7 @@ obj/
 TestResults/
 *.user
 *.suo
+*.lscache
 
 # Node / Electron / Vite
 node_modules/

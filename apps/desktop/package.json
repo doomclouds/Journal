@@ -9,7 +9,7 @@
     "electron": "wait-on http://localhost:5173 && electron .",
     "desktop": "concurrently -k \"npm run dev\" \"npm run electron\"",
     "build": "tsc -b && vite build",
-    "package:win": "electron-packager . Journal --platform=win32 --arch=x64 --out=../../artifacts/installer/electron --overwrite --ignore=\"src|node_modules/.cache\"",
+    "package:win": "electron-packager . Journal --platform=win32 --arch=x64 --icon=../../assets/app-icon/journal.ico --out=../../artifacts/installer/electron --overwrite --ignore=\"src|node_modules/.cache\"",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
