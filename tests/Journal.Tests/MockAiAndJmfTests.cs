@@ -35,7 +35,9 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("今天准备做 JMF renderer #Journal", aiJson.RawInputs);
         Assert.Contains("想到一个原则：Markdown 必须稳定可读，有推进感", aiJson.RawInputs);
         Assert.Contains("昨天完成了存储骨架 #工程", aiJson.YesterdayReview);
-        Assert.Contains("今天准备做 JMF renderer #Journal", aiJson.TodayFocus);
+        Assert.Contains("整理今天的重点。", aiJson.TodayFocus);
+        Assert.DoesNotContain("今天准备做 JMF renderer #Journal", aiJson.TodayFocus);
+        Assert.Contains("今天准备做 JMF renderer #Journal", aiJson.Work);
         Assert.Contains("想到一个原则：Markdown 必须稳定可读，有推进感", aiJson.Inspiration);
         Assert.Equal("有推进感", aiJson.Mood);
     }
@@ -118,7 +120,13 @@ public sealed class MockAiAndJmfTests
             ["昨天完成了存储骨架 #工程"],
             ["完成了 Task 1/2 依赖。"],
             ["实现 JMF renderer。"],
-            ["可以让 Markdown 稳定可读。"]);
+            ["可以让 Markdown 稳定可读。"])
+        {
+            Work = ["推进 renderer 实现。"],
+            Relationship = ["感谢测试先行。"],
+            Health = ["保持精力。"],
+            Money = ["检查预算。"]
+        };
 
         var markdown = JmfMarkdownRenderer.Render(aiJson, generatedAt);
 
@@ -144,15 +152,27 @@ public sealed class MockAiAndJmfTests
         Assert.Contains("<!-- journal:section today-focus origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("<!-- /journal:section today-focus -->", markdown);
         Assert.Contains("<!-- journal:section mood origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
+        Assert.Contains("<!-- journal:section work origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
+        Assert.Contains("<!-- journal:section relationship origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
+        Assert.Contains("<!-- journal:section health origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
+        Assert.Contains("<!-- journal:section money origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("<!-- journal:section inspiration origin=\"ai\" created_by=\"ai\" last_touched_by=\"ai\" last_operation=\"create\" -->", markdown);
         Assert.Contains("## 原始输入", markdown);
         Assert.Contains("## 昨日回顾", markdown);
         Assert.Contains("## 今日重点", markdown);
         Assert.Contains("## 状态与情绪", markdown);
+        Assert.Contains("## 工作与学习", markdown);
+        Assert.Contains("## 生活与关系", markdown);
+        Assert.Contains("## 健康与精力", markdown);
+        Assert.Contains("## 财务", markdown);
         Assert.Contains("## 灵感与未来提醒", markdown);
         Assert.Contains("- 昨天完成了存储骨架 #工程", markdown);
         Assert.Contains("- 完成了 Task 1/2 依赖。", markdown);
         Assert.Contains("- 实现 JMF renderer。", markdown);
+        Assert.Contains("- 推进 renderer 实现。", markdown);
+        Assert.Contains("- 感谢测试先行。", markdown);
+        Assert.Contains("- 保持精力。", markdown);
+        Assert.Contains("- 检查预算。", markdown);
         Assert.Contains("- 可以让 Markdown 稳定可读。", markdown);
     }
 

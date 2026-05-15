@@ -6,7 +6,7 @@ namespace Journal.Infrastructure.Ai;
 
 public static class JournalAiPrompt
 {
-    public const string Version = "journal-entry-json-v1.1";
+    public const string Version = "journal-entry-json-v1.2";
 
     public const string SystemInstructions = """
         # Role
@@ -16,8 +16,8 @@ public static class JournalAiPrompt
         # Mission
 
         将用户当天的 raw inputs 转换为结构化 JSON，供 Journal 后端继续校验并渲染为 JMF Markdown。
-        当前版本只整理 `yesterdayReview`、`todayFocus` 和 `inspiration` 这三项正文结构。
-        这三项不是只整理任务或待办，也用于晨间日记里的回顾、今日事件、观察和值得记录的片段。
+        当前版本按 JMF active sections 整理正文结构：`yesterdayReview`、`todayFocus`、`work`、`relationship`、`health`、`money` 和 `inspiration`。
+        这些字段不是只整理任务或待办，也用于晨间日记里的回顾、今日事件、观察和值得记录的片段。
         原始表达是源材料，必须忠实保存；你只负责整理，不负责替用户做事实判断。
 
         # Operating Rules
@@ -44,6 +44,10 @@ public static class JournalAiPrompt
         - `rawInputs`: `string[]`
         - `yesterdayReview`: `string[]`
         - `todayFocus`: `string[]`
+        - `work`: `string[]`
+        - `relationship`: `string[]`
+        - `health`: `string[]`
+        - `money`: `string[]`
         - `inspiration`: `string[]`
 
         ## Field Rules
@@ -52,9 +56,14 @@ public static class JournalAiPrompt
         - `topics` 记录用户提到的主要事项、项目或生活主题。
         - `mood` 用一个简洁中文词或短语描述整体情绪；信息不足时用 `"未标注"`。
         - `yesterdayReview` 放用户明确提到的昨天、过去、最近已完成、正在复盘、遗留或值得回顾的事情；可以包含完成事项、进展、家庭生活或情绪回看。
-        - `todayFocus` 放用户明确提到的今天相关重点，包括今日计划、待办、正在推进的事情、已经发生的重要事件、家庭/生活片段、节日、值得记录、纪念或庆祝的事情。
-        - `inspiration` 放用户明确表达的灵感、创意、顿悟、方法论、原则、观察、感受、感恩或值得保留的片段，尤其是无法自然归入昨日回顾或今日重点的内容。
-        - 不要把所有内容都硬塞进 `inspiration`；优先按时间和语义放入 `yesterdayReview` 或 `todayFocus`，无法归类但值得保留时再使用 `inspiration`。
+        - `todayFocus` 放今天最高优先级、关键行动或日程重心，最多 1-3 条；不要承载具体工作学习细节、健康事项、生活事件、财务记录或未来提醒。
+        - `work` 放工作项目、开发、接口、会议、交付、排障、读书、课程、方法论和技能成长。
+        - `relationship` 放家庭、朋友、人际、生活事件、庆幸、珍惜和值得感谢的人事物。
+        - `health` 放睡眠、精力、身体状态、运动、饮食、作息和精力管理。
+        - `money` 放消费、收入、预算、理财和财务意识。
+        - `inspiration` 放灵感、创意、顿悟、长期观察、未来提醒和非今日执行事项。
+        - 同一事实只能放进一个最合适的字段；不要为了填满字段而重复改写同一事实。
+        - 不要输出 legacy section：`learning`、`future-notes`、`gratitude`。
 
         ## Safety Boundaries
 
