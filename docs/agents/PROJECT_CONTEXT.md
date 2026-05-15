@@ -66,6 +66,33 @@ V1 / `0.1.0` 已进入 Windows 本地发布闭环：安装版 Electron 加载打
 - 当前 version restore 只允许恢复今天的版本为 `reviewing` draft。
 - UI 风格应保持安静、工具化、可扫描，服务每日写作工作流，不做 marketing landing page。
 
+## JMF Section Boundary
+
+当前 active 新内容分类：
+
+- `mood`：状态与情绪。
+- `work`：工作与学习。
+- `relationship`：生活与关系。
+- `health`：健康与精力。
+- `money`：财务。
+- `inspiration`：灵感与未来提醒。
+
+基础和系统 section：
+
+- `raw-inputs`：原始输入。
+- `yesterday-review`：昨日回顾。
+- `today-focus`：今日重点。
+- `keywords`：关键词。
+- `metadata-note`：生成信息。
+
+legacy section 只做旧日记兼容，不作为新内容目标：
+
+- `learning`：学习与思考，合并到 `work`。
+- `future-notes`：未来提醒，合并到 `inspiration`。
+- `gratitude`：感恩，合并到 `relationship`。
+
+新增块菜单、今日编辑器可新增块列表、Harness prompt catalog 和 Harness operation executor 都应只面向 active sections。`reorganize-existing` 是用户选择式单篇转换：基于 raw inputs 按当前 active 分类重新整理草稿，确认后才覆盖正式 entry。
+
 ## Source of Truth
 
 - Product vision: `PROJECT_VISION.md`
