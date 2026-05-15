@@ -11,6 +11,9 @@ name: Windows Release
     tags:
       - "v*"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows-installer:
     runs-on: windows-latest

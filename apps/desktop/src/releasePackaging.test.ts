@@ -53,6 +53,12 @@ describe("release packaging", () => {
     expect(mainProcess).toContain("sandbox: false");
   });
 
+  test("opts GitHub release actions into the Node 24 runtime", () => {
+    const releaseWorkflow = readFileSync(join(repoRoot, ".github", "workflows", "release-windows.yml"), "utf8");
+
+    expect(releaseWorkflow).toContain("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true");
+  });
+
   test("about panel styles use concrete theme values", () => {
     const styles = readFileSync(join(repoRoot, "apps", "desktop", "src", "styles.css"), "utf8");
     const aboutPanelMatch = styles.match(/\.about-panel\s*\{(?<body>[^}]+)\}/);
