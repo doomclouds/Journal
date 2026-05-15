@@ -217,6 +217,7 @@ When `compound-development-asset` and `write-superpowers-problem` are available,
 - `check_indexes.py`: validate archive/problem/inbox index order, dead links, duplicate entries, and orphan files.
 - `archive-superpowers-feature/scripts/validate_archive_asset.py`: validate formal archive assets.
 - `write-superpowers-problem/scripts/validate_problem_asset.py`: validate formal problem assets and inbox notes.
+- `write-superpowers-problem/scripts/inspect_inbox_lifecycle.py`: inspect related inbox lifecycle status and revisit candidates.
 
 Scripts provide evidence, not final authority. Use the output to reduce misses and duplicates, then make the final routing decision with project context.
 
@@ -224,6 +225,7 @@ Scripts provide evidence, not final authority. Use the output to reduce misses a
 
 - Use `inbox` for uncertain but potentially reusable signals.
 - Update an existing problem/archive when the new learning belongs to the same feature or failure class.
+- Treat user validation feedback, CI/release warnings, installer/artifact warnings, and hosted automation deprecations as asset signals; update a related asset if one exists, otherwise park the signal in inbox.
 - Create a new problem only for a stable, distinct failure mode with root-cause evidence and recognition clues.
 - Create or update an archive only for completed or accepted requirement threads.
 - Use `both` only when a completed requirement also produced stable reusable debugging knowledge.
@@ -269,8 +271,11 @@ Use `inbox` for:
 - an environment/tool/provider quirk that affected the work but was not fully diagnosed
 - a requirement or workflow ambiguity that may need later promotion
 - a "could archive or could skip" lesson that future agents might realistically search for
+- a release/CI warning that did not fail the run but may affect future builds
 
 Use `none` only when the signal is clearly mechanical, one-off, already covered, or unlikely to help future work. If choosing `none` after meaningful development, state the concrete reason in the final handoff.
+
+Inbox notes should track lifecycle: `Open`, `Partially promoted`, `Promoted`, or `Closed`. When a related problem/archive later covers the signal, update the inbox lifecycle instead of leaving it stale.
 
 ### Problem Gate Output
 
