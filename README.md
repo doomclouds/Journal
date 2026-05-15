@@ -5,6 +5,9 @@
 ## 项目文档
 
 - [项目愿景](./PROJECT_VISION.md)
+- [Agent 项目上下文](./docs/agents/PROJECT_CONTEXT.md)
+- [Agent 开发参考](./docs/agents/DEVELOPMENT_REFERENCE.md)
+- [Agent 产品不变量](./docs/agents/PRODUCT_INVARIANTS.md)
 - [阶段 1 设计](./docs/superpowers/specs/2026-05-07-phase-1-skeleton-design.md)
 - [阶段 2 设计](./docs/superpowers/specs/2026-05-08-phase-2-jmf-generation-confirmation-design.md)
 - [阶段 2 实施归档](./docs/superpowers/archives/2026-05/2026-05-08-phase-2-jmf-generation-confirmation-archives.md)
@@ -29,12 +32,15 @@
 - [阶段 6B 同日年轮原型](./docs/superpowers/specs/2026-05-14-phase-6b-anniversary-wheel-prototype.html)
 - [阶段 6B 实施计划](./docs/superpowers/plans/2026-05-14-phase-6b-anniversary-wheel-implementation-plan.md)
 - [阶段 6B 实施归档](./docs/superpowers/archives/2026-05/2026-05-14-phase-6b-anniversary-wheel-archives.md)
+- [阶段 7 Windows 发布设计](./docs/superpowers/specs/2026-05-14-phase-7-windows-release-pipeline-design.md)
+- [阶段 7 Windows 发布实施计划](./docs/superpowers/plans/2026-05-14-phase-7-windows-release-pipeline-implementation-plan.md)
+- [阶段 7 Windows 发布归档](./docs/superpowers/archives/2026-05/2026-05-14-phase-7-windows-release-pipeline-archives.md)
 - [Superpowers 交付归档索引](./docs/superpowers/archives/INDEX.md)
 - [产品故事演示](./docs/product/journal-product-story.html)
 
 ## 当前状态
 
-当前主线已经跑通到 Phase 6B，并补上 Phase 4A 本地历史可靠性：
+当前主线已经进入 V1 / `0.1.0` Windows 本地发布阶段：
 
 ```text
 自然语言输入 -> Raw input 持久化 -> Mock / 真实 LLM JSON 或 Harness Core 工具计划
@@ -45,13 +51,17 @@
   -> 正式 Markdown 文件
   -> 可重建 SQLite/FTS 历史索引
   -> 历史搜索 / 同日年轮 / 版本查看 / 恢复今日版本为草稿
+  -> 数据导出/导入
+  -> Windows 安装包
 ```
 
-已交付能力包括：今日输入、原始输入保存、Mock 整理、OpenAI-compatible 真实 LLM 调用、JMF 草稿预览、块编辑、源码编辑、结构校验、确认写入正式 Markdown、可用的 LLM 参数配置界面、LLM Harness Core 的受控工具调用、草稿写入保护、section 级 provenance、按日期查看 harness run 的 AI 审计工作台，以及覆盖前版本快照、可重建 SQLite/FTS5 历史索引、历史搜索工作台、同日年轮工作台和今日版本恢复为待确认草稿。
+已交付能力包括：今日输入、原始输入保存、Mock 整理、OpenAI-compatible 真实 LLM 调用、JMF 草稿预览、块编辑、源码编辑、结构校验、确认写入正式 Markdown、可用的 LLM 参数配置界面、LLM Harness Core 的受控工具调用、草稿写入保护、section 级 provenance、按日期查看 harness run 的 AI 审计工作台、覆盖前版本快照、可重建 SQLite/FTS5 历史索引、历史搜索工作台、同日年轮工作台、今日版本恢复为待确认草稿、数据导出/导入、About/法律声明面板、安装版 Electron 托管 `.NET` backend、Inno Setup 安装包和 GitHub Actions release workflow。
 
+- 数据导出默认不包含完整 API Key；导入会先备份当前 source material，再替换本地 Journal 数据。
+- 数据备份面板通过 `GET /journal/data/summary` 固定展示当前 entry/raw input/version 计数，SQLite index 仍只是可重建缓存。
 - Phase 6B adds the same-day anniversary wheel: the journal paper's corridor menu can open a read-only history workbench mode for a selected `MM-DD`, compare entries across years, inspect raw material snippets, and open version snapshots without changing the normal Today journal layout.
 
-仍未交付：非今日版本直接恢复/确认、AI 改写聊天、自动保存、应用内录音/语音转写、删除流程、item 级 provenance、draft diff 和 entry rollback UI。
+仍未交付：非今日版本直接恢复/确认、AI 改写聊天、自动保存、应用内录音/语音转写、删除流程、item 级 provenance、draft diff、entry rollback UI、云同步、自动更新、代码签名和完整 API Key 导入导出。
 
 ## Release Identity
 

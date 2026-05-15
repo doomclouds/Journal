@@ -1,109 +1,26 @@
 # AGENTS
 
-## Project Orientation
+## Read First
 
-Journal is a local-first morning journal desktop app. The product idea is: the user writes natural language in the morning, the app preserves the raw expression, a pluggable AI layer turns it into structured JSON, and the backend renders/validates JMF Markdown for long-term local storage.
+Journal 已进入 V1 / `0.1.0` Windows 本地发布阶段。根 `AGENTS.md` 只保留 agent 启动入口、硬规则和资产复利导航；长项目上下文已拆到引用文档里。
 
-Current delivered scope is Phase 6B plus Phase 4A local history reliability:
+开始涉及代码、文档、发布、需求状态判断前，按任务读取：
 
-```text
-Natural language input -> Mock or real LLM JSON or Harness Core tool plan -> JMF Markdown draft -> block/source edit or harness execution with JMF validation -> user confirmation -> version snapshot when overwriting -> formal Markdown file -> rebuildable SQLite/FTS history index -> history search/same-day anniversary/version restore workbench
-```
+- Project context and delivered scope: [docs/agents/PROJECT_CONTEXT.md](docs/agents/PROJECT_CONTEXT.md)
+- Development paths, commands, and data layout: [docs/agents/DEVELOPMENT_REFERENCE.md](docs/agents/DEVELOPMENT_REFERENCE.md)
+- Product invariants and safety boundaries: [docs/agents/PRODUCT_INVARIANTS.md](docs/agents/PRODUCT_INVARIANTS.md)
+- Public project overview: [README.md](README.md)
+- Product vision: [PROJECT_VISION.md](PROJECT_VISION.md)
+- Delivery history: [docs/superpowers/archives/INDEX.md](docs/superpowers/archives/INDEX.md)
+- Release notes: [docs/release/RELEASE_NOTES.md](docs/release/RELEASE_NOTES.md)
 
-Phase 6B includes the Phase 3 generation/confirmation/editor workflow, Phase 5 real OpenAI-compatible LLM integration, Harness Core, Phase 4A local history/search, and Same-Day Anniversary Wheel:
+## Current Snapshot
 
-- Backend parses draft/entry Markdown into a JMF document.
-- Block mode edits known editable sections while preserving protected/system sections.
-- Source mode can edit full Markdown, but saving is guarded by JMF validation.
-- Valid editor saves write a `reviewing` draft only.
-- Invalid editor saves write an `attention` draft and must not overwrite the formal entry.
-- The formal Markdown entry is updated only after the user confirms the current draft.
-- Real LLM providers are configured through `GET/PUT /settings/ai`; the safe settings view must not return full API keys.
-- File-backed API keys can be revealed on explicit user action through `GET /settings/ai/{providerId}/api-key`; environment-backed keys are never revealable through the API.
-- `POST /settings/ai/test` supports candidate settings so the UI can test the current form before saving it.
-- `POST /settings/ai/activate` is the protected activation path: test first, then save/enable only on success.
-- `POST /journal/today/draft/regenerate` remains a legacy full-draft regeneration compatibility endpoint; the Today workflow should use Harness Run for both normal input and reorganize actions.
-- Real LLM output must not overwrite `raw-inputs`; server-side raw input text remains the source of truth in draft and formal JMF.
-- Phase 6 adds Harness Core: real LLMs can use side-effect-free Agent Framework tools to plan draft operations.
-- Harness operations write draft only; formal entries still require user confirmation.
-- Harness tools are limited to append, upsert, revise AI-generated section, and no-op; user content must not be deleted, cleared, or replaced.
-- Section-level provenance is stored in JMF markers and hidden from normal preview.
-- Audit run records are stored as per-run JSON files under `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` and exposed through the audit workbench.
-- Formal entry overwrites go through `EntryWritePipeline`: snapshot the previous entry first, write Markdown second, then update the rebuildable SQLite index.
-- Version snapshots live under `.journal/versions/yyyy/MM/yyyy-MM-dd/` as Markdown plus metadata; first writes do not create snapshots.
-- SQLite lives under `.journal/index/journal.db` and is a rebuildable cache over Markdown, raw-input jsonl, and version files. Do not treat it as durable truth.
-- History APIs expose search, date detail, version list/detail, scan/rebuild, and restore-version-to-draft.
-- The history workbench is a full workspace mode opened from the journal paper's corridor menu, mirroring audit-style navigation.
-- Phase 6B adds Same-Day Anniversary Wheel: the History Workbench can open an anniversary mode from the journal paper's corridor menu, query entries by `MM-DD`, render year-card summaries, inspect selected historical Markdown, and keep the anniversary surface read-only.
-- Anniversary mode is a read-only memory corridor; versions can be viewed there, not restored.
-- Restoring a version writes a `reviewing` draft only and never writes directly to `entries/`. Current restore is limited to today's date because editor/confirm flows remain today-centered.
+V1 includes local-first daily writing, raw input preservation, JMF draft/edit/validation/confirmation, OpenAI-compatible LLM settings, Harness Core audit runs, rebuildable local history index, same-day anniversary wheel, data backup/import, Windows installer scripts, and GitHub Actions release workflow.
 
-Do not assume these are implemented yet unless the code or docs say so: non-today restore/confirm, AI rewrite/follow-up chat, autosave, rich text/WYSIWYG editing, in-app recording, speech-to-text, delete flows, item-level provenance, draft diff, or entry rollback UI. GitHub Actions Windows release workflow is wired: manual `workflow_dispatch` only builds GitHub-hosted installer artifacts, and actual GitHub Release publishing only comes from a pushed `v*` tag.
+Do not assume these are implemented unless code or docs prove it: non-today restore/confirm, AI follow-up chat, autosave, rich text editing, in-app recording, speech-to-text, delete flows, item-level provenance, draft diff, entry rollback UI, cloud sync, auto update/signing, or full API Key export/import.
 
-## Tech Stack
-
-- Backend: .NET 10, minimal API in `src/Journal.Api`.
-- Domain model: `src/Journal.Domain`.
-- Infrastructure: storage, clock, AI abstraction, JMF rendering/parsing/validation in `src/Journal.Infrastructure`.
-- Desktop app: Electron + React + Vite + TypeScript in `apps/desktop`.
-- Backend tests: xUnit in `tests/Journal.Tests`.
-- Frontend tests: Vitest + Testing Library in `apps/desktop`.
-
-## Key Code Paths
-
-- API composition and endpoints: `src/Journal.Api/Program.cs`.
-- Today's main workflow: `src/Journal.Infrastructure/Today/TodayJournalService.cs`.
-- AI boundary: `src/Journal.Infrastructure/Ai/IJournalAiProvider.cs`; current implementations are `MockAiProvider` and `OpenAiCompatibleJournalAiProvider`.
-- OpenAI-compatible runtime and settings: `src/Journal.Infrastructure/Ai/OpenAiCompatibleAgentRuntime.cs`, `JournalAiGenerationService.cs`, `JournalAiSettingsService.cs`, `JournalAiSettingsStore.cs`, and `JournalAiSettings.cs`.
-- AI JSON validation/rendering: `src/Journal.Infrastructure/Jmf/JournalAiJsonValidator.cs` and `JmfMarkdownRenderer.cs`.
-- Harness Core service/planner/audit: `src/Journal.Infrastructure/Harness/JournalHarnessService.cs`, `JournalHarnessPlanner.cs`, `JournalHarnessToolCollector.cs`, `JournalHarnessOperationExecutor.cs`, and `JournalHarnessAuditStore.cs`.
-- History storage and indexing: `src/Journal.Infrastructure/Storage/JournalVersionStore.cs`, `EntryWritePipeline.cs`, `JournalIndexStore.cs`, and `JournalIndexingService.cs`.
-- History service/API composition: `src/Journal.Infrastructure/Today/JournalHistoryService.cs` and `src/Journal.Api/Program.cs`.
-- JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, and editor request/state records.
-- JMF parse/validate/compose layer: `src/Journal.Infrastructure/Jmf/JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, and `JmfMarkdownComposer.cs`.
-- Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
-- Main desktop screen: `apps/desktop/src/App.tsx`.
-- JMF editor UI: `apps/desktop/src/JournalEditor.tsx`, `JournalBlockCard.tsx`, `InsertBlockMenu.tsx`, and `ValidationPanel.tsx`.
-- LLM settings UI: `apps/desktop/src/LlmSettingsPanel.tsx`.
-- AI audit workbench UI: `apps/desktop/src/AuditWorkbench.tsx`.
-- History workbench UI: `apps/desktop/src/HistoryWorkbench.tsx`.
-- Same-day anniversary workbench UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
-- API client and shared frontend contracts: `apps/desktop/src/api.ts`.
-- Windows release workflow: `.github/workflows/release-windows.yml`; manual `workflow_dispatch` builds installer artifacts from `release_version` without publishing a GitHub Release, and pushed `v*` tags build and publish GitHub Release assets.
-- Product direction and phase docs: `PROJECT_VISION.md`, `README.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/superpowers/archives/`.
-
-## Product Invariants
-
-- Raw user input is the source material and must not be overwritten by summaries.
-- Formal Markdown is the durable human-readable source of truth; generated caches or indexes must be rebuildable.
-- SQLite history index is a cache only. Markdown entries, raw-input jsonl files, and version snapshot files are the source material.
-- Formal entry overwrites must snapshot the previous entry before writing the new Markdown.
-- AI output should stay behind the JSON validation and preview/confirmation boundary before it becomes a formal entry.
-- Editor saves are draft writes. `SaveBlockDraftAsync` and `SaveSourceDraftAsync` must not write directly to `entries/`.
-- JMF validation protects the formal entry: invalid source or block requests should become `attention` drafts with repair information, not partial formal writes.
-- Block mode must not edit `raw-inputs`, `keywords`, or `metadata-note`; `raw-inputs` is preserved from the baseline draft/entry.
-- Source mode can edit full Markdown, including markers and front matter, but save must pass through parser/validator before it can become confirmable.
-- `GET /settings/ai` must only expose safe API key previews. Do not add full key values to settings views, Markdown, logs, generated metadata, screenshots, or archives.
-- Environment variables override file settings for the active/effective LLM provider. On Windows, read environment values from Process first, then User, then Machine, so user-level API keys configured outside the current terminal are still picked up. File settings are the fallback and the only source whose API key can be revealed through the UI.
-- Provider activation should remain protected: failed health checks should not switch the active provider or persist a broken candidate.
-- Reorganizing a draft is still a draft write. It must not write directly to `entries/` and must preserve server-side raw inputs.
-- The Today compose submit flow and reorganize action should use `POST /journal/today/harness/runs` plus the run SSE stream, so both paths create audit records.
-- Harness append-input runs persist the current user text as raw input for future runs, but the planner prompt must treat it as the current user message, not as historical raw input context.
-- Harness reorganize-existing runs must not append raw input; they use a fixed server-side user prompt and provide only existing raw inputs, the section catalog, and tool constraints to the LLM. Do not provide the current draft or confirmed entry to the planner in this mode.
-- Harness planner section catalog entries include semantic hints and avoid rules. The planner should put one fact in the single best section instead of duplicating it across nearby topics such as `today-focus` and `work`.
-- The Today "reorganize" button is an aggressive full-structure reorganization mode: historical raw inputs are the only journal fact source, existing journal body content is abandoned, and the LLM must not read, reference, or inherit the current draft or confirmed entry.
-- Harness planner content should use Markdown syntax for emphasis, such as `**bold**` on key actions, risks, or top priorities, and order bullets by urgency and importance.
-- Harness execution normalizes AI tool content into Markdown bullet-list section bodies and suppresses exact duplicate facts across competing section operations.
-- Harness execution is draft-only. Executing a run may write a `reviewing` or `attention` draft, never `entries/`.
-- Harness planner tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
-- Harness provenance is section-level. Do not claim item-level provenance, draft diff, or entry rollback UI unless those features are added.
-- Anniversary mode is read-only. Do not expose restore, delete, diff, or edit actions there unless the product direction changes explicitly.
-- Restoring a version is draft-only. It must create a `reviewing` draft and must not write `entries/` directly.
-- Current version restore is limited to today's date; avoid exposing non-today restore until date-aware editor/confirm behavior exists.
-- The app should support append/update flows, but no user-facing delete model unless the product direction changes explicitly.
-- Keep the UI quiet, tool-like, fast to scan, and focused on the daily writing workflow.
-
-## Development Commands
+## Quick Commands
 
 Use PowerShell from the repository root.
 
@@ -113,29 +30,7 @@ npm test --prefix apps/desktop
 npm run build --prefix apps/desktop
 ```
 
-Useful focused checks:
-
-```powershell
-dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter TodayJournalEditorServiceTests
-dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JmfMarkdownParserTests|JmfMarkdownValidatorTests|JmfMarkdownComposerTests"
-dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalAiSettingsTests|JournalAiGenerationServiceTests|OpenAiCompatibleJournalAiProviderTests|TodayJournalEndpointTests"
-dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalVersionStoreTests|JournalIndexStoreTests|JournalIndexingServiceTests|EntryWritePipelineTests|JournalHistoryServiceTests|TodayJournalEndpointTests"
-npm test --prefix apps/desktop -- App.test.tsx
-npm test --prefix apps/desktop -- HistoryWorkbench.test.tsx
-npm test --prefix apps/desktop -- AnniversaryWheelWorkbench.test.tsx
-```
-
-Development run:
-
-```powershell
-dotnet run --project src/Journal.Api
-npm install --prefix apps/desktop
-npm run desktop --prefix apps/desktop
-```
-
-The development flow is two-process: start the .NET API first, then start the Electron/Vite desktop app. Vite is configured for `127.0.0.1:5173` with `strictPort`; backend CORS currently allows `http://localhost:5173`, `http://127.0.0.1:5173`, and packaged Electron `null` origins.
-
-Focused release commands:
+Release checks:
 
 ```powershell
 .\scripts\release\build-installer.ps1 -ReleaseVersion 0.1.0 -SkipInno
@@ -143,30 +38,7 @@ Focused release commands:
 .\scripts\release\verify-installer.ps1 -ReleaseVersion 0.1.0
 ```
 
-GitHub Actions release workflow:
-
-```text
-.github/workflows/release-windows.yml
-workflow_dispatch release_version=0.1.0 -> installer artifact
-push tag v0.1.0 -> GitHub Release assets
-```
-
-## Data Locations
-
-Development data is written under `%LocalAppData%/Journal`:
-
-```text
-entries/yyyy/MM/yyyy-MM-dd.md
-.journal/raw-inputs/yyyy/MM/yyyy-MM-dd.jsonl
-.journal/drafts/yyyy/MM/yyyy-MM-dd.md
-.journal/drafts/yyyy/MM/yyyy-MM-dd.meta.json
-.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json
-.journal/versions/yyyy/MM/yyyy-MM-dd/<versionId>.md
-.journal/versions/yyyy/MM/yyyy-MM-dd/<versionId>.meta.json
-.journal/index/journal.db
-```
-
-Phase 5 added `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for persisted LLM settings. Phase 6 adds `.journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json` for harness audit records. Phase 4A adds `.journal/versions/` for overwrite snapshots and `.journal/index/journal.db` for the rebuildable SQLite/FTS cache. Be careful with changes that alter these paths or formats; update docs and tests together.
+For focused commands and code paths, read [docs/agents/DEVELOPMENT_REFERENCE.md](docs/agents/DEVELOPMENT_REFERENCE.md).
 
 ## Working Rules
 
@@ -174,8 +46,9 @@ Phase 5 added `%LocalAppData%/Journal/.journal/settings/ai-providers.json` for p
 - Keep `.NET` changes nullable-clean and aligned with the existing minimal API/service style.
 - Keep frontend changes consistent with the current dense desktop tool layout; do not turn the app into a marketing landing page.
 - When changing behavior, update or add focused tests in the relevant test project before calling the work complete.
-- When changing phase scope or delivered capabilities, update `README.md`, this `AGENTS.md`, and the relevant `docs/superpowers` asset together.
+- When changing phase scope or delivered capabilities, update `README.md`, this `AGENTS.md`, `docs/agents/*`, and the relevant `docs/superpowers` asset together.
 - Before continuing feature work, explaining prior decisions, or checking delivery status, search the Superpowers assets below before guessing from memory.
+- The asset-compounding guidance block below is a required plugin navigation anchor. Do not move, delete, or split the content between its marker comments.
 
 <!-- asset-compounding-guidance:start -->
 ## Asset Compounding Retrieval Guide
