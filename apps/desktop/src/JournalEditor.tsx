@@ -7,6 +7,7 @@ import type {
 } from "./api";
 import { InsertBlockMenu } from "./InsertBlockMenu";
 import { JournalBlockCard } from "./JournalBlockCard";
+import { getSectionDisplayTitle } from "./todayWorkbenchView";
 import { ValidationPanel } from "./ValidationPanel";
 
 type JournalEditorProps = {
@@ -24,8 +25,8 @@ const jmfSectionCatalogOrder = new Map<string, number>([
   ["today-focus", 4],
   ["work", 5],
   ["learning", 6],
-  ["health", 7],
-  ["relationship", 8],
+  ["relationship", 7],
+  ["health", 8],
   ["money", 9],
   ["inspiration", 10],
   ["future-notes", 11],
@@ -34,13 +35,30 @@ const jmfSectionCatalogOrder = new Map<string, number>([
   ["metadata-note", 14]
 ]);
 
+const activeOptionalSectionIds = new Set([
+  "mood",
+  "work",
+  "relationship",
+  "health",
+  "money",
+  "inspiration"
+]);
+
 function createSectionFromDefinition(definition: JmfSectionDefinition): JmfSection {
   return {
     id: definition.id,
-    title: definition.title,
+    title: getSectionDisplayTitle(definition.id, definition.title),
     content: "",
     kind: definition.kind,
     isEditableInBlockMode: definition.isEditableInBlockMode
+  };
+}
+
+function normalizeSectionDefinition(definition: JmfSectionDefinition): JmfSectionDefinition {
+  return {
+    ...definition,
+    title: getSectionDisplayTitle(definition.id, definition.title),
+    order: jmfSectionCatalogOrder.get(definition.id) ?? definition.order
   };
 }
 
@@ -86,14 +104,19 @@ export function JournalEditor({
         orders.set(section.id, Number.MAX_SAFE_INTEGER - editor.sections.length + index);
       }
     });
-    editor.availableOptionalSections.forEach(section => orders.set(section.id, section.order));
+    editor.availableOptionalSections.forEach(section => {
+      const normalized = normalizeSectionDefinition(section);
+      orders.set(normalized.id, normalized.order);
+    });
     return orders;
   }, [editor.availableOptionalSections, editor.sections]);
 
   const insertableSections = useMemo(() => {
     const visibleIds = new Set(sections.map(section => section.id));
     return [...editor.availableOptionalSections]
+      .filter(section => activeOptionalSectionIds.has(section.id))
       .filter(section => !visibleIds.has(section.id))
+      .map(normalizeSectionDefinition)
       .sort((left, right) => left.order - right.order);
   }, [editor.availableOptionalSections, sections]);
 

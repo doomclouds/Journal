@@ -120,6 +120,29 @@ public sealed class JmfMarkdownComposerTests
     }
 
     [Fact]
+    public void Compose_PreservesLegacyOptionalSections()
+    {
+        var document = CreateDocument(
+            Section("raw-inputs", "- 原始输入"),
+            Section("yesterday-review", "- 昨日回顾"),
+            Section("today-focus", "- 今日重点"),
+            Section("learning", "- 旧学习内容"),
+            Section("future-notes", "- 旧未来提醒"),
+            Section("gratitude", "- 旧感恩内容"));
+
+        var markdown = JmfMarkdownComposer.Compose(document);
+
+        Assert.Contains("<!-- journal:section learning -->", markdown, StringComparison.Ordinal);
+        Assert.Contains("## 学习与思考", markdown, StringComparison.Ordinal);
+        Assert.Contains("<!-- journal:section future-notes -->", markdown, StringComparison.Ordinal);
+        Assert.Contains("<!-- journal:section gratitude -->", markdown, StringComparison.Ordinal);
+
+        var parseResult = JmfMarkdownParser.Parse(markdown);
+        var validationResult = JmfMarkdownValidator.Validate(parseResult.Document, parseResult.Issues);
+        Assert.True(validationResult.IsValid);
+    }
+
+    [Fact]
     public void Compose_WritesSectionProvenanceAttributes()
     {
         var document = new JmfDocument(

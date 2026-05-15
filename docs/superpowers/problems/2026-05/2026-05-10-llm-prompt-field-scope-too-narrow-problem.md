@@ -34,6 +34,7 @@ prompt 字段语义过窄，和晨间日记的真实使用语境不一致。`tod
 - 扩展 `inspiration`：允许无法自然归入昨日回顾或今日重点的观察、感受、感恩和值得保留的片段。
 - 增加 prompt 合同测试，要求系统提示词明确包含这些字段范围。
 - 用真实 DeepSeek 重新生成当天 draft，确认 `today-focus` 写入“一家出去吃饭”“出去玩了，很开心”“母亲节值得纪念”“晚上计划去跑步”等条目。
+- 2026-05-15 JMF 分类软合并后，将普通 AI JSON prompt version 提升到 `journal-entry-json-v1.2`，并把旧三正文字段扩展为 active sections：`work`、`relationship`、`health`、`money` 和 `inspiration`。这次修复还要求 Mock provider 先归入具体 active section，再让 `todayFocus` 跳过已归类事实，避免同一句同时出现在 `today-focus` 与 `work`。
 
 ## Why This Fix
 
@@ -45,6 +46,7 @@ prompt 字段语义过窄，和晨间日记的真实使用语境不一致。`tod
 - front matter 的 `tags`、`topics` 或 `mood` 已经识别出生活事件和情绪，但 `today-focus` 为空。
 - 用户输入包含“今天”“开心”“值得纪念”“出去玩”“一家吃饭”等日记事件词，而不是任务/待办词。
 - prompt 中 `todayFocus` 的说明偏“计划、重点、待办、下一步”，缺少已发生事件、纪念、庆祝、生活片段。
+- 做 JMF 分类调整时，只改 Harness prompt 或前端新增块是不够的；还要检查 `JournalAiPrompt`、`JournalAiJson`、`JmfMarkdownRenderer` 和 Mock provider 这条兼容生成链是否继续固化旧字段合同。
 
 ## Applicability / Non-Applicability
 
@@ -57,7 +59,7 @@ prompt 字段语义过窄，和晨间日记的真实使用语境不一致。`tod
 ### Does Not Apply When
 
 - 模型返回非法 JSON、空 `rawInputs` 或字段类型错误；那属于 provider/runtime/validator 问题。
-- 产品明确决定新增 `gratitude`、`celebrations` 或九宫格字段；那需要新的 schema、renderer 和 UI 设计。
+- 产品明确决定新增或合并正文 section；那需要同步 schema、prompt、renderer、Mock provider、Harness 和 UI，而不是只改单个 prompt。
 - 用户输入完全没有可整理的正文信息；此时正文块为空是合理结果。
 
 ## Related Artifacts
@@ -65,6 +67,7 @@ prompt 字段语义过窄，和晨间日记的真实使用语境不一致。`tod
 - Spec: [2026-05-10-ai-provider-integration-design.md](../../specs/2026-05-10-ai-provider-integration-design.md)
 - Plan: [2026-05-10-ai-provider-integration-implementation-plan.md](../../plans/2026-05-10-ai-provider-integration-implementation-plan.md)
 - Archive: [2026-05-10-ai-provider-integration-archives.md](../../archives/2026-05/2026-05-10-ai-provider-integration-archives.md)
+- Follow-up Archive: [2026-05-15-jmf-soft-section-consolidation-archives.md](../../archives/2026-05/2026-05-15-jmf-soft-section-consolidation-archives.md)
 - Related Problems:
   - [2026-05-10-llm-validator-contract-mismatch-problem.md](./2026-05-10-llm-validator-contract-mismatch-problem.md)
 - Code or Test:

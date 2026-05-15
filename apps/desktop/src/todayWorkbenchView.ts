@@ -63,8 +63,14 @@ const productStatusViews: Record<ProductJournalStatus, ProductJournalStatusView>
 
 const sectionDisplayTitles: Record<string, string> = {
   "raw-inputs": "今日材料",
+  "mood": "状态与情绪",
   "today-focus": "今日重点",
   "yesterday-review": "昨天回顾",
+  "work": "工作与学习",
+  "relationship": "生活与关系",
+  "health": "健康与精力",
+  "money": "财务",
+  "inspiration": "灵感与未来提醒",
   "future-notes": "未来提醒"
 };
 

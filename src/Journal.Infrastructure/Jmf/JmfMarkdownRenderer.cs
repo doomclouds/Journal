@@ -37,20 +37,29 @@ public static class JmfMarkdownRenderer
         builder.AppendLine();
 
         AppendSection(builder, "raw-inputs", aiJson.RawInputs, JmfSectionProvenance.Unknown);
-        AppendSection(builder, "yesterday-review", aiJson.YesterdayReview, AiCreateProvenance);
-        AppendSection(builder, "today-focus", aiJson.TodayFocus, AiCreateProvenance);
 
         if (!string.IsNullOrWhiteSpace(aiJson.Mood) && !string.Equals(aiJson.Mood, "未标注", StringComparison.Ordinal))
         {
             AppendSection(builder, "mood", [aiJson.Mood], AiCreateProvenance);
         }
 
-        if (aiJson.Inspiration.Count > 0 && aiJson.Inspiration.Any(item => !string.IsNullOrWhiteSpace(item)))
-        {
-            AppendSection(builder, "inspiration", aiJson.Inspiration, AiCreateProvenance);
-        }
+        AppendSection(builder, "yesterday-review", aiJson.YesterdayReview, AiCreateProvenance);
+        AppendSection(builder, "today-focus", aiJson.TodayFocus, AiCreateProvenance);
+        AppendOptionalSection(builder, "work", aiJson.Work);
+        AppendOptionalSection(builder, "relationship", aiJson.Relationship);
+        AppendOptionalSection(builder, "health", aiJson.Health);
+        AppendOptionalSection(builder, "money", aiJson.Money);
+        AppendOptionalSection(builder, "inspiration", aiJson.Inspiration);
 
         return builder.ToString();
+    }
+
+    private static void AppendOptionalSection(StringBuilder builder, string marker, IReadOnlyList<string> items)
+    {
+        if (items.Count > 0 && items.Any(item => !string.IsNullOrWhiteSpace(item)))
+        {
+            AppendSection(builder, marker, items, AiCreateProvenance);
+        }
     }
 
     private static void AppendScalar(StringBuilder builder, string key, string value) =>

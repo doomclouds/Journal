@@ -17,8 +17,8 @@ public sealed class JmfSectionCatalogTests
                 "today-focus",
                 "work",
                 "learning",
-                "health",
                 "relationship",
+                "health",
                 "money",
                 "inspiration",
                 "future-notes",
@@ -57,7 +57,63 @@ public sealed class JmfSectionCatalogTests
 
         Assert.DoesNotContain(available, item => item.Id == "mood");
         Assert.Contains(available, item => item.Id == "inspiration");
+        Assert.DoesNotContain(available, item => item.Id is "learning" or "future-notes" or "gratitude");
         Assert.DoesNotContain(available, item => item.Kind != JmfSectionKind.OptionalSingleton);
+    }
+
+    [Fact]
+    public void ActiveForNewContent_ExcludesLegacyMergedSections()
+    {
+        Assert.Equal(
+            [
+                "raw-inputs",
+                "mood",
+                "yesterday-review",
+                "today-focus",
+                "work",
+                "relationship",
+                "health",
+                "money",
+                "inspiration",
+                "keywords",
+                "metadata-note"
+            ],
+            JmfSectionCatalog.ActiveForNewContent.Select(item => item.Id));
+
+        Assert.Equal(
+            ["learning", "future-notes", "gratitude"],
+            JmfSectionCatalog.LegacyOptionalSingleton.Select(item => item.Id));
+    }
+
+    [Fact]
+    public void ActiveOptionalSections_UseConsolidatedTitlesAndExcludeLegacySections()
+    {
+        Assert.Equal(
+            ["mood", "work", "relationship", "health", "money", "inspiration"],
+            JmfSectionCatalog.ActiveOptionalSingleton.Select(item => item.Id));
+
+        Assert.Equal("状态与情绪", JmfSectionCatalog.Require("mood").Title);
+        Assert.Equal("工作与学习", JmfSectionCatalog.Require("work").Title);
+        Assert.Equal("生活与关系", JmfSectionCatalog.Require("relationship").Title);
+        Assert.Equal("灵感与未来提醒", JmfSectionCatalog.Require("inspiration").Title);
+    }
+
+    [Fact]
+    public void OptionalSingleton_IncludesLegacySectionsForMarkdownCompatibility()
+    {
+        Assert.Equal(
+            [
+                "mood",
+                "work",
+                "learning",
+                "relationship",
+                "health",
+                "money",
+                "inspiration",
+                "future-notes",
+                "gratitude"
+            ],
+            JmfSectionCatalog.OptionalSingleton.Select(item => item.Id));
     }
 
     [Fact]
@@ -66,5 +122,8 @@ public sealed class JmfSectionCatalogTests
         Assert.IsNotType<JmfSectionDefinition[]>(JmfSectionCatalog.All);
         Assert.IsNotType<JmfSectionDefinition[]>(JmfSectionCatalog.Required);
         Assert.IsNotType<JmfSectionDefinition[]>(JmfSectionCatalog.OptionalSingleton);
+        Assert.IsNotType<JmfSectionDefinition[]>(JmfSectionCatalog.ActiveForNewContent);
+        Assert.IsNotType<JmfSectionDefinition[]>(JmfSectionCatalog.ActiveOptionalSingleton);
+        Assert.IsNotType<JmfSectionDefinition[]>(JmfSectionCatalog.LegacyOptionalSingleton);
     }
 }

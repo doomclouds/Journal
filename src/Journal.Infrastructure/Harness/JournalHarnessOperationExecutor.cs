@@ -52,6 +52,12 @@ public static class JournalHarnessOperationExecutor
                 continue;
             }
 
+            if (!definition.IsActiveForNewContent)
+            {
+                issues.Add(CreateIssue("harness-target-inactive", $"Section '{operation.TargetSectionId}' is a legacy section and cannot be targeted by harness."));
+                continue;
+            }
+
             var index = sections.FindIndex(section => string.Equals(section.Id, operation.TargetSectionId, StringComparison.Ordinal));
             var basedOnRawInputIds = FilterBasedOnRawInputIds(operation.BasedOnRawInputIds, allowedRawInputIdSet);
             var normalizedContent = NormalizeGeneratedContent(operation.Content, definition);
@@ -187,6 +193,7 @@ public static class JournalHarnessOperationExecutor
                 || !JmfSectionCatalog.TryGet(operation.TargetSectionId, out var definition)
                 || string.Equals(definition.Id, "raw-inputs", StringComparison.Ordinal)
                 || !definition.IsEditableInBlockMode
+                || !definition.IsActiveForNewContent
                 || definition.Kind == JmfSectionKind.System)
             {
                 continue;
@@ -234,13 +241,10 @@ public static class JournalHarnessOperationExecutor
         sectionId switch
         {
             "work" => 100,
-            "learning" => 95,
             "health" => 95,
             "relationship" => 95,
             "money" => 95,
-            "gratitude" => 90,
-            "future-notes" => 85,
-            "inspiration" => 80,
+            "inspiration" => 90,
             "mood" => 75,
             "yesterday-review" => 70,
             "today-focus" => 50,

@@ -2575,7 +2575,7 @@ describe("App", () => {
     fireEvent.click(regenerateButton);
     expect(screen.getByRole("dialog", { name: "重新整理草稿" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 状态与情绪" }));
 
     expect(screen.queryByRole("dialog", { name: "重新整理草稿" })).not.toBeInTheDocument();
 
@@ -2983,7 +2983,7 @@ describe("App", () => {
     expect(saveButton).toBeDisabled();
     expect(focusEditor).toBeDisabled();
     expect(confirmButton).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 状态与情绪" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "数据与备份" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "编辑 今日重点" })).not.toBeInTheDocument();
 
@@ -3143,7 +3143,7 @@ describe("JournalEditor", () => {
     });
 
     const nextSectionEditButton = screen.getByRole("button", { name: "编辑 昨天回顾" });
-    const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
+    const insertButton = screen.getByRole("button", { name: "添加 状态与情绪" });
     expect(nextSectionEditButton).toBeDisabled();
     expect(insertButton).toBeDisabled();
 
@@ -3152,7 +3152,7 @@ describe("JournalEditor", () => {
 
     expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("A 段未保存内容");
     expect(screen.queryByRole("textbox", { name: "编辑 昨天回顾" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 状态与情绪" })).not.toBeInTheDocument();
     expect(screen.getByText("昨天完成 Phase 2")).toBeInTheDocument();
   });
 
@@ -3197,18 +3197,116 @@ describe("JournalEditor", () => {
     expect(screen.getByRole("button", { name: "收起 今日材料" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  test("shows 添加 情绪感受 for optional inserts and opens the new inline block", () => {
+  test("shows active optional insert labels and opens the new inline block", () => {
     render(
       <JournalEditor
-        editor={createEditorState()}
+        editor={createEditorState({
+          availableOptionalSections: [
+            {
+              id: "mood",
+              title: "情绪感受",
+              order: 30,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "work",
+              title: "工作推进",
+              order: 50,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "relationship",
+              title: "关系与家庭",
+              order: 80,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "health",
+              title: "健康记录",
+              order: 70,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "money",
+              title: "金钱记录",
+              order: 90,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "inspiration",
+              title: "灵感",
+              order: 100,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
         isBusy={false}
         onSaveBlocks={vi.fn()}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
+    expect(screen.getByRole("button", { name: "添加 状态与情绪" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 工作与学习" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 生活与关系" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 健康与精力" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 财务" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 灵感与未来提醒" })).toBeInTheDocument();
 
-    expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "添加 状态与情绪" }));
+
+    expect(screen.getByRole("textbox", { name: "编辑 状态与情绪" })).toBeInTheDocument();
+  });
+
+  test("does not expose legacy optional sections as insert actions", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          availableOptionalSections: [
+            {
+              id: "learning",
+              title: "学习与思考",
+              order: 60,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "future-notes",
+              title: "未来提醒",
+              order: 110,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "gratitude",
+              title: "感恩",
+              order: 120,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "mood",
+              title: "情绪感受",
+              order: 30,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "添加 状态与情绪" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加 学习与思考" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加 未来提醒" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加 感恩" })).not.toBeInTheDocument();
   });
 
   test("canceling a temporary optional inline block removes it and restores insert action", () => {
@@ -3220,14 +3318,14 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "添加 情绪感受" }));
-    expect(screen.getByRole("textbox", { name: "编辑 情绪感受" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "添加 状态与情绪" }));
+    expect(screen.getByRole("textbox", { name: "编辑 状态与情绪" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
-    expect(screen.queryByRole("heading", { name: "情绪感受" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "状态与情绪" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 状态与情绪" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加 状态与情绪" })).toBeInTheDocument();
   });
 
   test("keeps inserted optional blocks in catalog order after required sections", () => {
@@ -3272,13 +3370,65 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "添加 工作推进" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加 工作与学习" }));
 
     expect(screen.getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual([
       "今日材料",
       "昨天回顾",
       "今日重点",
-      "工作推进"
+      "工作与学习"
+    ]);
+  });
+
+  test("uses canonical catalog order when optional API definitions carry old order values", () => {
+    render(
+      <JournalEditor
+        editor={createEditorState({
+          sections: [
+            {
+              id: "raw-inputs",
+              title: "原始输入",
+              content: "今天要保留原始表达",
+              kind: "system",
+              isEditableInBlockMode: false
+            },
+            {
+              id: "yesterday-review",
+              title: "昨日回顾",
+              content: "昨天完成 Phase 2",
+              kind: "required",
+              isEditableInBlockMode: true
+            },
+            {
+              id: "today-focus",
+              title: "今日重点",
+              content: "推进 Phase 3",
+              kind: "required",
+              isEditableInBlockMode: true
+            }
+          ],
+          availableOptionalSections: [
+            {
+              id: "mood",
+              title: "情绪感受",
+              order: 30,
+              kind: "optionalSingleton",
+              isEditableInBlockMode: true
+            }
+          ]
+        })}
+        isBusy={false}
+        onSaveBlocks={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "添加 状态与情绪" }));
+
+    expect(screen.getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual([
+      "今日材料",
+      "状态与情绪",
+      "昨天回顾",
+      "今日重点"
     ]);
   });
 
@@ -3291,7 +3441,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
+    const insertButton = screen.getByRole("button", { name: "添加 状态与情绪" });
     const firstSection = screen.getByRole("region", { name: "今日重点" });
 
     expect(insertButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -3390,7 +3540,7 @@ describe("JournalEditor", () => {
     );
 
     expect(screen.getByRole("button", { name: "编辑 今日重点" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加 状态与情绪" })).toBeDisabled();
   });
 });
 

@@ -30,6 +30,13 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("按轻重缓急排序", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("同一事实只能进入一个最合适的 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("today-focus 与 work 的边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("今日重点最多 1-3 条", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("工作与学习", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("生活与关系", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("灵感与未来提醒", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("learning 放", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("future-notes 放", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("gratitude 只放", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("调整日记结构", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("不能仅因为用户没有点名 section 就 noOp", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
@@ -76,22 +83,27 @@ public sealed class JournalHarnessPromptTests
         Assert.DoesNotContain("当前输入：今天重写 planner prompt。", request.ProtectedContext, StringComparison.Ordinal);
 
         var catalog = root.GetProperty("sectionCatalog").EnumerateArray().ToArray();
-        Assert.Equal(JmfSectionCatalog.All.Count, catalog.Length);
+        Assert.Equal(JmfSectionCatalog.ActiveForNewContent.Count, catalog.Length);
         Assert.Equal(
-            JmfSectionCatalog.All.Select(section => section.Id),
+            JmfSectionCatalog.ActiveForNewContent.Select(section => section.Id),
             catalog.Select(item => item.GetProperty("id").GetString()));
+        Assert.DoesNotContain(catalog, item => item.GetProperty("id").GetString() is "learning" or "future-notes" or "gratitude");
         Assert.Contains(catalog, item => item.GetProperty("id").GetString() == "today-focus");
         Assert.Contains(catalog, item => item.GetProperty("id").GetString() == "raw-inputs");
         Assert.Contains(catalog, item => item.GetProperty("title").GetString() == "原始输入");
         Assert.Contains(catalog, item => item.TryGetProperty("isEditableInBlockMode", out _));
         Assert.Contains(catalog, item =>
             item.GetProperty("id").GetString() == "work"
-            && item.GetProperty("semanticHint").GetString()!.Contains("工作项目", StringComparison.Ordinal)
-            && item.GetProperty("avoidWhen").GetString()!.Contains("今日总体优先级", StringComparison.Ordinal));
+            && item.GetProperty("title").GetString() == "工作与学习"
+            && item.GetProperty("semanticHint").GetString()!.Contains("读书", StringComparison.Ordinal));
         Assert.Contains(catalog, item =>
-            item.GetProperty("id").GetString() == "today-focus"
-            && item.GetProperty("semanticHint").GetString()!.Contains("今天最重要的行动", StringComparison.Ordinal)
-            && item.GetProperty("avoidWhen").GetString()!.Contains("具体工作项目", StringComparison.Ordinal));
+            item.GetProperty("id").GetString() == "relationship"
+            && item.GetProperty("title").GetString() == "生活与关系"
+            && item.GetProperty("semanticHint").GetString()!.Contains("值得感谢", StringComparison.Ordinal));
+        Assert.Contains(catalog, item =>
+            item.GetProperty("id").GetString() == "inspiration"
+            && item.GetProperty("title").GetString() == "灵感与未来提醒"
+            && item.GetProperty("semanticHint").GetString()!.Contains("未来提醒", StringComparison.Ordinal));
 
         var tools = root.GetProperty("availableTools").EnumerateArray().Select(item => item.GetString()).ToArray();
         Assert.Contains("appendJournalSection", tools);
@@ -107,6 +119,36 @@ public sealed class JournalHarnessPromptTests
         Assert.Equal(
             "2026-05-13T07:40:00+08:00",
             userMessage.RootElement.GetProperty("createdAt").GetDateTimeOffset().ToString("yyyy-MM-ddTHH:mm:sszzz"));
+    }
+
+    [Fact]
+    public void BuildForReorganizeExisting_ExposesOnlyActiveSectionCatalog()
+    {
+        var date = JournalDate.From(new DateOnly(2026, 5, 15));
+        var request = JournalHarnessPrompt.BuildForReorganizeExisting(
+            date,
+            [
+                new RawInput(
+                    "raw-1",
+                    date,
+                    new DateTimeOffset(2026, 5, 15, 8, 0, 0, TimeSpan.FromHours(8)),
+                    "text",
+                    "今天要把分类合并得更少。")
+            ],
+            "# Draft",
+            "# Entry");
+
+        using var context = JsonDocument.Parse(request.ProtectedContext);
+        var catalogIds = context.RootElement
+            .GetProperty("sectionCatalog")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("id").GetString())
+            .ToArray();
+
+        Assert.Equal(JmfSectionCatalog.ActiveForNewContent.Select(section => section.Id), catalogIds);
+        Assert.DoesNotContain("learning", catalogIds);
+        Assert.DoesNotContain("future-notes", catalogIds);
+        Assert.DoesNotContain("gratitude", catalogIds);
     }
 
     [Fact]
@@ -146,7 +188,7 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("不要读取、参考或继承 current draft", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("放弃现有全部日记正文", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("不得把旧日记正文当作事实来源", request.UserMessage, StringComparison.Ordinal);
-        Assert.Contains("重新规划整篇日记的九宫格分布", request.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("重新规划整篇日记的分类分布", request.UserMessage, StringComparison.Ordinal);
         Assert.Contains("合并重复、移动错分、压缩冗余表达", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("id", request.UserMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("raw-1", request.UserMessage, StringComparison.Ordinal);

@@ -129,9 +129,16 @@ describe("todayWorkbenchView", () => {
 
   test("maps section ids to product display titles", () => {
     expect(getSectionDisplayTitle("raw-inputs", "原始输入")).toBe("今日材料");
-    expect(getSectionDisplayTitle("today-focus", "今日重点")).toBe("今日重点");
+    expect(getSectionDisplayTitle("today-focus", "今日想推进")).toBe("今日重点");
     expect(getSectionDisplayTitle("yesterday-review", "昨日回顾")).toBe("昨天回顾");
+    expect(getSectionDisplayTitle("mood", "情绪感受")).toBe("状态与情绪");
+    expect(getSectionDisplayTitle("work", "工作推进")).toBe("工作与学习");
+    expect(getSectionDisplayTitle("relationship", "关系与家庭")).toBe("生活与关系");
+    expect(getSectionDisplayTitle("health", "健康记录")).toBe("健康与精力");
+    expect(getSectionDisplayTitle("money", "钱")).toBe("财务");
+    expect(getSectionDisplayTitle("inspiration", "灵感")).toBe("灵感与未来提醒");
     expect(getSectionDisplayTitle("future-notes", "未来备注")).toBe("未来提醒");
+    expect(getSectionDisplayTitle("learning", "学习与思考")).toBe("学习与思考");
     expect(getSectionDisplayTitle("gratitude", "感恩记录")).toBe("感恩记录");
   });
 

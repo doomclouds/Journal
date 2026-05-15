@@ -55,6 +55,37 @@ public sealed class TodayJournalEditorServiceTests
     }
 
     [Fact]
+    public async Task GetTodayEditorAsync_DoesNotOfferLegacySectionsAsAvailableOptionalSections()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = CreatePaths(workspace.Root);
+        var service = CreateService(paths);
+        var date = JournalDate.From(FixedDay);
+        await new DraftStore(paths).WriteAsync(
+            new JournalDraft(
+                date,
+                JournalStatus.Reviewing,
+                ComposeRequiredOnlyMarkdown(),
+                [],
+                [],
+                FixedNow),
+            CancellationToken.None);
+
+        var editor = await service.GetTodayEditorAsync(CancellationToken.None);
+
+        var availableIds = editor.AvailableOptionalSections.Select(section => section.Id).ToArray();
+        Assert.DoesNotContain("learning", availableIds);
+        Assert.DoesNotContain("future-notes", availableIds);
+        Assert.DoesNotContain("gratitude", availableIds);
+        Assert.Contains("mood", availableIds);
+        Assert.Contains("work", availableIds);
+        Assert.Contains("relationship", availableIds);
+        Assert.Contains("health", availableIds);
+        Assert.Contains("money", availableIds);
+        Assert.Contains("inspiration", availableIds);
+    }
+
+    [Fact]
     public async Task SaveBlockDraftAsync_PreservesRawInputsFromBaselineAndUpdatesTodayFocus()
     {
         using var workspace = TempWorkspace.Create();
@@ -123,7 +154,7 @@ public sealed class TodayJournalEditorServiceTests
         var editor = await service.SaveBlockDraftAsync(
             new JournalBlockEditRequest(
             [
-                new("gratitude", "- 感谢测试先行"),
+                new("relationship", "- 感谢测试先行"),
                 new("work", "- 推进 JMF editor"),
                 new("mood", "平静"),
                 new("today-focus", "- 保存 block draft")
@@ -133,7 +164,7 @@ public sealed class TodayJournalEditorServiceTests
         var sectionIds = JmfMarkdownParser.Parse(editor.Markdown).Document.Sections.Select(section => section.Id).ToArray();
 
         Assert.Equal(
-            ["raw-inputs", "mood", "yesterday-review", "today-focus", "work", "inspiration", "gratitude"],
+            ["raw-inputs", "mood", "yesterday-review", "today-focus", "work", "relationship", "inspiration"],
             sectionIds);
     }
 
@@ -205,6 +236,26 @@ public sealed class TodayJournalEditorServiceTests
     {
         var parseResult = JmfMarkdownParser.Parse(markdown);
         return parseResult.Document.Sections.Single(section => section.Id == sectionId);
+    }
+
+    private static string ComposeRequiredOnlyMarkdown() =>
+        JmfMarkdownComposer.Compose(new JmfDocument(
+            "schema: journal-entry/v1\ndate: \"2026-05-08\"",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["schema"] = "journal-entry/v1",
+                ["date"] = "2026-05-08"
+            },
+            [
+                Section("raw-inputs", "- 只保留 required baseline"),
+                Section("yesterday-review", "- 昨日回顾"),
+                Section("today-focus", "- 今日重点")
+            ]));
+
+    private static JmfSection Section(string id, string content)
+    {
+        var definition = JmfSectionCatalog.Require(id);
+        return new JmfSection(definition.Id, definition.Title, content, definition.Kind, definition.IsEditableInBlockMode);
     }
 
     private static async Task AssertBlockRequestShapeThrowsAsync(

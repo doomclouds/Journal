@@ -18,6 +18,14 @@
 - Block mode must not edit `raw-inputs`, `keywords`, or `metadata-note`; `raw-inputs` is preserved from the baseline draft/entry.
 - Source mode can edit full Markdown, including markers and front matter, but save must pass parser/validator before it can become confirmable.
 
+## JMF Sections
+
+- New content targets must use active sections only: `mood`, `work`, `relationship`, `health`, `money`, and `inspiration`, plus required/system sections where the server owns them.
+- Required/system sections are `raw-inputs`, `yesterday-review`, `today-focus`, `keywords`, and `metadata-note`; `today-focus` display title is always `今日重点`.
+- Legacy sections remain parse/display compatible so old entries do not become invalid: `learning` merges into `work`, `future-notes` merges into `inspiration`, and `gratitude` merges into `relationship`.
+- Do not automatically migrate all legacy entries.
+- `reorganize-existing` is a user-chosen per-entry conversion path: rebuild a draft from raw inputs using current active sections, and only overwrite the formal entry after user confirmation.
+
 ## LLM Settings And Security
 
 - `GET /settings/ai` must only expose safe API key previews.
@@ -36,6 +44,7 @@
 - Do not provide current draft or confirmed entry to the planner in reorganize-existing mode.
 - Harness tools are side-effect-free collection tools. Server-side execution, validation, draft persistence, and audit persistence happen after tool collection.
 - Harness tools are limited to append, upsert, revise AI-generated section, and no-op.
+- Harness prompt catalog and operation executor must target active sections only; legacy targets must be rejected with `harness-target-inactive`.
 - User content must not be deleted, cleared, or replaced.
 - Harness execution is draft-only. Executing a run may write a `reviewing` or `attention` draft, never `entries/`.
 - Harness provenance is section-level. Do not claim item-level provenance, draft diff, or entry rollback UI unless implemented.

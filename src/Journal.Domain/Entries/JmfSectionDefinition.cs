@@ -7,4 +7,5 @@ public sealed record JmfSectionDefinition(
     JmfSectionKind Kind,
     bool IsEditableInBlockMode,
     string SemanticHint,
-    string AvoidWhen);
+    string AvoidWhen,
+    bool IsActiveForNewContent = true);

@@ -11,4 +11,13 @@ public sealed record JournalAiJson(
     IReadOnlyList<string> RawInputs,
     IReadOnlyList<string> YesterdayReview,
     IReadOnlyList<string> TodayFocus,
-    IReadOnlyList<string> Inspiration);
+    IReadOnlyList<string> Inspiration)
+{
+    public IReadOnlyList<string> Work { get; init; } = Array.Empty<string>();
+
+    public IReadOnlyList<string> Relationship { get; init; } = Array.Empty<string>();
+
+    public IReadOnlyList<string> Health { get; init; } = Array.Empty<string>();
+
+    public IReadOnlyList<string> Money { get; init; } = Array.Empty<string>();
+}

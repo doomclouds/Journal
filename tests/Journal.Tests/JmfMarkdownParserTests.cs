@@ -140,7 +140,7 @@ public sealed class JmfMarkdownParserTests
         Assert.Equal("- 解析 Markdown。\n- 校验 JMF。", todayFocus.Content);
 
         var inspiration = result.Document.Sections.Single(section => section.Id == "inspiration");
-        Assert.Equal("灵感", inspiration.Title);
+        Assert.Equal("灵感与未来提醒", inspiration.Title);
         Assert.Equal(JmfSectionKind.OptionalSingleton, inspiration.Kind);
         Assert.True(inspiration.IsEditableInBlockMode);
         Assert.Equal("- 编辑器要保护结构。", inspiration.Content);

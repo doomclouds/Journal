@@ -169,7 +169,7 @@ public sealed class JournalHarnessOperationExecutorTests
         ]);
         var operation = JournalHarnessOperation.Append(
             "mood",
-            "## 情绪状态\n\n- 开心且兴奋！日记架构基本完成，感觉未来可期",
+            "## 状态与情绪\n\n- 开心且兴奋！日记架构基本完成，感觉未来可期",
             ["raw-2"],
             "模型把 section 标题一起放进了工具参数。");
 
@@ -249,6 +249,36 @@ public sealed class JournalHarnessOperationExecutorTests
 
         Assert.False(result.Validation.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "harness-target-readonly");
+    }
+
+    [Theory]
+    [InlineData("learning")]
+    [InlineData("future-notes")]
+    [InlineData("gratitude")]
+    public void Apply_RejectsLegacySectionsAsHarnessTargets(string sectionId)
+    {
+        var document = CreateDocument();
+        var content = "- AI 应该写入 active section";
+        var operations = new[]
+        {
+            JournalHarnessOperation.Upsert(
+                sectionId,
+                content,
+                ["raw-1"],
+                "legacy section is no longer active"),
+            JournalHarnessOperation.Append(
+                "today-focus",
+                content,
+                ["raw-1"],
+                "same fact should stay with the active section")
+        };
+
+        var result = JournalHarnessOperationExecutor.Apply(document, operations, ["raw-1"]);
+
+        Assert.False(result.Validation.IsValid);
+        Assert.Contains(result.Issues, issue => issue.Code == "harness-target-inactive");
+        Assert.DoesNotContain(result.Document.Sections, section => section.Id == sectionId);
+        Assert.Equal("- focus\n- AI 应该写入 active section", GetSection(result.Document, "today-focus").Content);
     }
 
     [Fact]

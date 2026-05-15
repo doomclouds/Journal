@@ -75,6 +75,25 @@ public sealed class JmfMarkdownValidatorTests
         Assert.Empty(result.Issues);
     }
 
+    [Theory]
+    [InlineData("learning")]
+    [InlineData("future-notes")]
+    [InlineData("gratitude")]
+    public void Validate_ReturnsValidForLegacyOptionalSections(string sectionId)
+    {
+        var result = JmfMarkdownValidator.Validate(CreateDocument(
+            sections:
+            [
+                Section("raw-inputs"),
+                Section("yesterday-review"),
+                Section("today-focus"),
+                Section(sectionId)
+            ]));
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Issues);
+    }
+
     [Fact]
     public void ValidateBlockEditRequest_ReturnsRawInputsIsReadonlyForRawInputs()
     {
