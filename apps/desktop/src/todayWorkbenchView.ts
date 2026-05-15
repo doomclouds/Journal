@@ -63,7 +63,7 @@ const productStatusViews: Record<ProductJournalStatus, ProductJournalStatusView>
 
 const sectionDisplayTitles: Record<string, string> = {
   "raw-inputs": "今日材料",
-  "today-focus": "今天想推进",
+  "today-focus": "今日重点",
   "yesterday-review": "昨天回顾",
   "future-notes": "未来提醒"
 };

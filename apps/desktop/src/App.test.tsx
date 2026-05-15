@@ -631,7 +631,7 @@ describe("App", () => {
       expect(screen.getAllByText("可保存").length).toBeGreaterThan(0)
     );
     expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日重点" })).not.toBeInTheDocument();
   });
 
   test("shows friendly empty productized state on initial render", async () => {
@@ -1008,8 +1008,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "还没保存的审计前编辑" }
     });
 
@@ -1017,7 +1017,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的审计前编辑");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("还没保存的审计前编辑");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/audit?date=2026-05-08", undefined);
   });
@@ -1659,8 +1659,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "还没保存的历史前编辑" }
     });
 
@@ -1668,7 +1668,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的历史前编辑");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("还没保存的历史前编辑");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/history?limit=50", undefined);
   });
@@ -1679,8 +1679,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "还没保存的同日年轮前编辑" }
     });
 
@@ -1688,7 +1688,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(screen.getByLabelText("日记纸面")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的同日年轮前编辑");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("还没保存的同日年轮前编辑");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).not.toHaveBeenCalledWith(
       "http://localhost:5057/journal/history/anniversary/05-08?limit=50",
@@ -2496,8 +2496,8 @@ describe("App", () => {
     fireEvent.click(regenerateButton);
     expect(screen.getByRole("dialog", { name: "重新整理草稿" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "补充新的今日重点" }
     });
 
@@ -2507,7 +2507,7 @@ describe("App", () => {
     fireEvent.click(regenerateButton);
 
     expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/today/draft/regenerate", expect.anything());
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("补充新的今日重点");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("补充新的今日重点");
 
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
@@ -2520,8 +2520,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "还没保存的本地改动" }
     });
 
@@ -2541,8 +2541,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "还没保存的本地改动" }
     });
     fireEvent.change(screen.getByLabelText("补充今天的自然语言输入"), {
@@ -2562,7 +2562,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("还没保存的本地改动");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("还没保存的本地改动");
   });
 
   test("inserting optional block resets regenerate confirmation", async () => {
@@ -2646,7 +2646,7 @@ describe("App", () => {
     );
     expect(screen.getByRole("button", { name: "保存日记" })).toBeInTheDocument();
     expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日重点" })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:5057/journal/today/harness/runs", {
       method: "POST",
       headers: {
@@ -2915,8 +2915,8 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今日重点" });
     fireEvent.change(focusEditor, { target: { value: "保存后的区块内容" } });
     expect(screen.getAllByText("有未保存修改").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
@@ -2947,14 +2947,14 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "保存失败时不要丢" }
     });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("block save failed");
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("保存失败时不要丢");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("保存失败时不要丢");
     expect(screen.getAllByText("有未保存修改").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "保存日记" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认保存" })).not.toBeInTheDocument();
@@ -2973,9 +2973,9 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
     const saveButton = screen.getByRole("button", { name: "保存修改" });
-    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今日重点" });
     const confirmButton = screen.getByRole("button", { name: "保存日记" });
 
     fireEvent.click(saveButton);
@@ -2985,14 +2985,14 @@ describe("App", () => {
     expect(confirmButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "数据与备份" })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "编辑 今日重点" })).not.toBeInTheDocument();
 
     blockSaveDeferred.resolve(mockJsonResponse(createEditorState()));
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeEnabled()
+      expect(screen.getByRole("button", { name: "编辑 今日重点" })).toBeEnabled()
     );
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日重点" })).not.toBeInTheDocument();
     expect(confirmButton).toBeEnabled();
     expect(screen.getByRole("button", { name: "数据与备份" })).toBeEnabled();
   });
@@ -3003,14 +3003,14 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "编辑 今天想推进" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 今日重点" }));
     const input = screen.getByLabelText("补充今天的自然语言输入");
     const inputForm = input.closest("form");
     if (!inputForm) {
       throw new Error("Expected raw input form");
     }
 
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "准备保存的本地内容" }
     });
     fireEvent.change(input, { target: { value: "后发起的 raw input 刷新" } });
@@ -3018,7 +3018,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("先保存或取消当前编辑，再继续补充或重新整理。");
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("准备保存的本地内容");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("准备保存的本地内容");
   });
 
   test("restores mocked fetch between tests", () => {
@@ -3036,10 +3036,10 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "今天想推进" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "今日重点" })).toBeInTheDocument();
     expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编辑 今日重点" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日重点" })).not.toBeInTheDocument();
   });
 
   test("reading preview renders generated markdown lists with the shared markdown style", () => {
@@ -3099,8 +3099,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
-    const focusEditor = screen.getByRole("textbox", { name: "编辑 今天想推进" });
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今日重点" }));
+    const focusEditor = screen.getByRole("textbox", { name: "编辑 今日重点" });
     fireEvent.change(focusEditor, { target: { value: "完成前端编辑器组件" } });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
@@ -3108,7 +3108,7 @@ describe("JournalEditor", () => {
     expect(onSaveBlocks).toHaveBeenCalledWith([
       { id: "today-focus", content: "完成前端编辑器组件" }
     ]);
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("完成前端编辑器组件");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("完成前端编辑器组件");
   });
 
   test("switching sections keeps the dirty inline block active until it is saved or canceled", () => {
@@ -3137,8 +3137,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "A 段未保存内容" }
     });
 
@@ -3150,7 +3150,7 @@ describe("JournalEditor", () => {
     fireEvent.click(nextSectionEditButton);
     fireEvent.click(insertButton);
 
-    expect(screen.getByRole("textbox", { name: "编辑 今天想推进" })).toHaveValue("A 段未保存内容");
+    expect(screen.getByRole("textbox", { name: "编辑 今日重点" })).toHaveValue("A 段未保存内容");
     expect(screen.queryByRole("textbox", { name: "编辑 昨天回顾" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "编辑 情绪感受" })).not.toBeInTheDocument();
     expect(screen.getByText("昨天完成 Phase 2")).toBeInTheDocument();
@@ -3165,13 +3165,13 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "临时改动，不保存" }
     });
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日重点" })).not.toBeInTheDocument();
     expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
     expect(screen.queryByText("临时改动，不保存")).not.toBeInTheDocument();
   });
@@ -3277,7 +3277,7 @@ describe("JournalEditor", () => {
     expect(screen.getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual([
       "今日材料",
       "昨天回顾",
-      "今天想推进",
+      "今日重点",
       "工作推进"
     ]);
   });
@@ -3292,7 +3292,7 @@ describe("JournalEditor", () => {
     );
 
     const insertButton = screen.getByRole("button", { name: "添加 情绪感受" });
-    const firstSection = screen.getByRole("region", { name: "今天想推进" });
+    const firstSection = screen.getByRole("region", { name: "今日重点" });
 
     expect(insertButton.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -3314,8 +3314,8 @@ describe("JournalEditor", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "编辑 今天想推进" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今天想推进" }), {
+    fireEvent.click(screen.getByRole("button", { name: "编辑 今日重点" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑 今日重点" }), {
       target: { value: "未保存的本地区块内容" }
     });
 
@@ -3327,7 +3327,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.queryByRole("textbox", { name: "编辑 今天想推进" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "编辑 今日重点" })).not.toBeInTheDocument();
     expect(screen.getByText("推进 Phase 3")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("未保存的本地区块内容")).not.toBeInTheDocument();
   });
@@ -3389,7 +3389,7 @@ describe("JournalEditor", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "编辑 今天想推进" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑 今日重点" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "添加 情绪感受" })).toBeDisabled();
   });
 });

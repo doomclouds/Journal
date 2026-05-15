@@ -129,7 +129,7 @@ describe("todayWorkbenchView", () => {
 
   test("maps section ids to product display titles", () => {
     expect(getSectionDisplayTitle("raw-inputs", "原始输入")).toBe("今日材料");
-    expect(getSectionDisplayTitle("today-focus", "今日重点")).toBe("今天想推进");
+    expect(getSectionDisplayTitle("today-focus", "今日重点")).toBe("今日重点");
     expect(getSectionDisplayTitle("yesterday-review", "昨日回顾")).toBe("昨天回顾");
     expect(getSectionDisplayTitle("future-notes", "未来备注")).toBe("未来提醒");
     expect(getSectionDisplayTitle("gratitude", "感恩记录")).toBe("感恩记录");
