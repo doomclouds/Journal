@@ -87,6 +87,42 @@ public sealed class JournalDataImportServiceTests
     }
 
     [Fact]
+    public async Task ImportAsync_RestoresAnniversarySourceMaterial()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var packagePath = Path.Combine(workspace.Root, "import.zip");
+        Directory.CreateDirectory(workspace.Root);
+        using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+        {
+            var manifest = archive.CreateEntry("manifest.json");
+            await using (var stream = manifest.Open())
+            {
+                await JsonSerializer.SerializeAsync(stream, new JournalDataExportManifest(
+                    "journal-export/v1",
+                    DateTimeOffset.Parse("2026-05-16T10:00:00+08:00"),
+                    "0.1.1",
+                    "0.1.1",
+                    "0.1.1",
+                    0,
+                    0,
+                    0,
+                    false));
+            }
+
+            var anniversaries = archive.CreateEntry(".journal/anniversaries/anniversaries.json");
+            await using var anniversaryStream = anniversaries.Open();
+            await using var writer = new StreamWriter(anniversaryStream, Encoding.UTF8);
+            await writer.WriteAsync("""{"schema":"journal-anniversaries/v1","items":[]}""");
+        }
+
+        await new JournalDataImportService(paths, new JournalIndexingService(paths, new JournalIndexStore(paths)))
+            .ImportAsync(packagePath, CancellationToken.None);
+
+        Assert.True(File.Exists(paths.AnniversaryPath()));
+    }
+
+    [Fact]
     public async Task ImportAsync_WithZipSlipEntry_DoesNotWriteOutsideRootAndRestoresBackup()
     {
         using var workspace = TempWorkspace.Create();

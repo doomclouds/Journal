@@ -52,6 +52,7 @@ public sealed class JournalDataExportService(LocalJournalPaths paths)
                 await AddJsonAsync(archive, "manifest.json", manifest, cancellationToken);
                 AddDirectory(archive, paths.EntryRootDirectory(), "entries", cancellationToken);
                 AddDirectory(archive, paths.RawInputRootDirectory(), ".journal/raw-inputs", cancellationToken);
+                AddDirectory(archive, paths.AnniversaryDirectory(), ".journal/anniversaries", cancellationToken);
                 AddDirectory(archive, paths.DraftRootDirectory(), ".journal/drafts", cancellationToken);
                 AddDirectory(archive, paths.VersionRootDirectory(), ".journal/versions", cancellationToken);
                 AddDirectory(archive, paths.AuditRootDirectory(), ".journal/audit", cancellationToken);
