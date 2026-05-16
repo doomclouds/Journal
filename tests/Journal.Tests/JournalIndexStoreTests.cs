@@ -228,6 +228,118 @@ public sealed class JournalIndexStoreTests
     }
 
     [Fact]
+    public async Task ReadAnniversaryAsync_ReturnsCardPreviewFromPrioritySections()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 16));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date, lastWriteTimeUtc: DateTimeOffset.Parse("2026-05-16T01:37:50Z")),
+            [
+                new JournalIndexedSection(date, "raw-inputs", "原始输入", 0, "- 原始长句不应成为卡片简介"),
+                new JournalIndexedSection(date, "work", "工作与学习", 40, "- 优化 AI 系统提示\n- 修复小 bug，提高体验"),
+                new JournalIndexedSection(date, "relationship", "生活与关系", 50, "- 周末带家人出去逛逛")
+            ],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-16", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(DateTimeOffset.Parse("2026-05-16T01:37:50Z"), item.EntryUpdatedAt);
+        Assert.Equal("工作与学习", item.CardPreview.Title);
+        Assert.Equal(["优化 AI 系统提示", "修复小 bug，提高体验", "周末带家人出去逛逛"], item.CardPreview.Lines);
+        Assert.DoesNotContain(item.CardPreview.Lines, line => line.Contains("原始长句", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_DerivesCardPreviewFromSectionsBeyondHitLimit()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 16));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date, mood: null),
+            [
+                new JournalIndexedSection(date, "raw-inputs", "原始输入", 0, "- 原始材料不要进预览"),
+                new JournalIndexedSection(date, "metadata-note", "元数据", 1, "- 元数据不要进预览"),
+                new JournalIndexedSection(date, "keywords", "关键词", 2, "- 关键词不要进预览"),
+                new JournalIndexedSection(date, "blank", "空段落", 3, "   "),
+                new JournalIndexedSection(date, "misc", "杂项", 4, "- 低优先级内容"),
+                new JournalIndexedSection(date, "work", "工作与学习", 40, "- 真正应该展示的工作重点")
+            ],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-16", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("工作与学习", item.CardPreview.Title);
+        Assert.Equal(["真正应该展示的工作重点", "低优先级内容"], item.CardPreview.Lines);
+        Assert.DoesNotContain(item.Hits, hit => hit.SectionId == "work");
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_UsesTitleFromSectionThatContributesPreviewLine()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 16));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date, mood: null),
+            [
+                new JournalIndexedSection(date, "today-focus", "今日重点", 10, "   "),
+                new JournalIndexedSection(date, "work", "工作与学习", 40, "- 来自低优先但实际有内容的段落")
+            ],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-16", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("工作与学习", item.CardPreview.Title);
+        Assert.Equal(["来自低优先但实际有内容的段落"], item.CardPreview.Lines);
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_UsesRawOnlyCardPreviewFallback()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 16));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(CreateEntry(date, mood: null), [], CancellationToken.None);
+        await store.UpsertRawInputAsync(
+            new JournalIndexedRawInput("raw-1", date, DateTimeOffset.Parse("2026-05-16T08:00:00+08:00"), "text", "只有原始材料"),
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-16", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("日记", item.CardPreview.Title);
+        Assert.Equal(["1 条材料"], item.CardPreview.Lines);
+    }
+
+    [Fact]
+    public async Task ReadAnniversaryAsync_UsesMoodCardPreviewFallbackWhenNoSectionLines()
+    {
+        using var workspace = TempWorkspace.Create();
+        var store = CreateStore(workspace.Root);
+        var date = JournalDate.From(new DateOnly(2026, 5, 16));
+        await store.EnsureReadyAsync(CancellationToken.None);
+        await store.UpsertEntryAsync(
+            CreateEntry(date, mood: "平静"),
+            [new JournalIndexedSection(date, "today-focus", "今日重点", 10, "   ")],
+            CancellationToken.None);
+
+        var result = await store.ReadAnniversaryAsync("05-16", 50, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("状态与情绪", item.CardPreview.Title);
+        Assert.Equal(["平静"], item.CardPreview.Lines);
+    }
+
+    [Fact]
     public async Task ReadAnniversaryAsync_IncludesRawOnlyAndAttentionEntries()
     {
         using var workspace = TempWorkspace.Create();
@@ -571,7 +683,8 @@ public sealed class JournalIndexStoreTests
         string status = "processed",
         string? mood = "平静",
         string tagsJson = "[]",
-        string topicsJson = "[]") =>
+        string topicsJson = "[]",
+        DateTimeOffset? lastWriteTimeUtc = null) =>
         new(
             date,
             $"entries/{date.Year}/{date.Month}/{date.MarkdownFileName}",
@@ -580,7 +693,7 @@ public sealed class JournalIndexStoreTests
             tagsJson,
             topicsJson,
             $"sha256:{date.IsoDate}",
-            DateTimeOffset.Parse($"{date.IsoDate}T00:00:00+00:00"),
+            lastWriteTimeUtc ?? DateTimeOffset.Parse($"{date.IsoDate}T00:00:00+00:00"),
             128,
             DateTimeOffset.Parse($"{date.IsoDate}T01:00:00+00:00"),
             null);
