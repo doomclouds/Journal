@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Journal 记忆回廊 · Phase 6C Prototype</title>
+  <style>
+    :root {
+      --bg: #eef1eb;
+      --paper: #fffdf7;
+      --paper-soft: #faf7ef;
+      --rail: #f2eee5;
+      --panel: #eee8dc;
+      --ink: #25211d;
+      --ink-soft: #514a42;
+      --muted: #746d63;
+      --line: rgba(52, 45, 36, 0.13);
+      --line-strong: rgba(52, 45, 36, 0.2);
+      --sage: #2f6f5f;
+      --sage-dark: #24584c;
+      --gold: #b57f30;
+      --blue: #346b86;
+      --plum: #77556b;
+      --warm: #b86f3e;
+      --soft-sage: rgba(229, 242, 235, 0.82);
+      --soft-gold: rgba(255, 248, 232, 0.86);
+      --soft-blue: rgba(226, 239, 245, 0.82);
+      --soft-plum: rgba(241, 232, 238, 0.84);
+      --shadow: 0 18px 42px rgba(52, 43, 31, 0.11);
+      --shadow-soft: 0 10px 26px rgba(52, 43, 31, 0.07);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 1180px;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .shell {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.92);
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .brand strong {
+      font-size: 18px;
+    }
+
+    .brand span,
+    .topline {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .topline {
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 270px minmax(620px, 1fr) minmax(326px, 0.4fr);
+      grid-template-areas: "rail corridor anniversary";
+      background: rgba(248, 246, 239, 0.82);
+    }
+
+    .rail,
+    .corridor,
+    .anniversary-panel {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .rail {
+      grid-area: rail;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(247, 244, 236, 0.9), rgba(238, 232, 219, 0.9)), var(--rail);
+    }
+
+    .corridor {
+      grid-area: corridor;
+      position: relative;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background: rgba(248, 246, 239, 0.74);
+    }
+
+    .anniversary-panel {
+      grid-area: anniversary;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-left: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 253, 247, 0.88), rgba(239, 234, 222, 0.92)), var(--panel);
+    }
+
+    .scroll {
+      min-height: 0;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(52, 45, 36, 0.2) transparent;
+    }
+
+    .scroll::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scroll::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: rgba(52, 45, 36, 0.14);
+    }
+
+    .rail-head,
+    .corridor-head,
+    .anniversary-head {
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 247, 0.46);
+    }
+
+    .rail-head {
+      padding: 22px 20px 18px;
+    }
+
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--gold);
+      font-size: 11px;
+      line-height: 1.2;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .rail-head h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .rail-head h1 span {
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    .rail-section {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .section-title span {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .date-control {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      border: 1px solid rgba(70, 66, 59, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      padding: 0 10px;
+    }
+
+    .calendar-icon {
+      display: grid;
+      place-items: center;
+      color: var(--sage);
+    }
+
+    .date-control input {
+      width: 100%;
+      min-height: 34px;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      padding: 0;
+      font-weight: 900;
+    }
+
+    .small-primary {
+      min-height: 34px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--sage);
+      color: #fffdf7;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .saved-list,
+    .year-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .saved-date,
+    .year-jump {
+      width: 100%;
+      border: 1px solid rgba(52, 45, 36, 0.1);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.64);
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .saved-date {
+      padding: 10px;
+    }
+
+    .saved-date.is-active,
+    .year-jump.is-active {
+      border-color: rgba(47, 111, 95, 0.36);
+      background: rgba(231, 243, 235, 0.78);
+      box-shadow: inset 3px 0 0 var(--sage);
+    }
+
+    .saved-date strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .saved-date span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .year-jump {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 9px;
+      font-size: 12px;
+    }
+
+    .year-jump strong {
+      font-size: 13px;
+    }
+
+    .year-jump span {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(52, 45, 36, 0.2);
+    }
+
+    .dot.has-entry {
+      background: var(--sage);
+    }
+
+    .dot.origin {
+      background: var(--gold);
+      box-shadow: 0 0 0 4px rgba(181, 127, 48, 0.12);
+    }
+
+    .corridor-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 16px 22px;
+    }
+
+    .corridor-title h2,
+    .anniversary-head h2 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.25;
+    }
+
+    .corridor-title p:last-child,
+    .anniversary-head p:last-child {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .density-switch {
+      display: flex;
+      gap: 6px;
+      padding: 3px;
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      border-radius: 9px;
+      background: rgba(255, 253, 247, 0.58);
+    }
+
+    .density-switch button {
+      min-height: 30px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .density-switch button.active {
+      background: var(--sage);
+      color: #fffdf7;
+    }
+
+    .corridor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .back-to-timeline {
+      min-height: 36px;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(47, 111, 95, 0.22);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      color: var(--sage);
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .back-to-timeline::before {
+      content: "←";
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .corridor-action {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(52, 45, 36, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      color: var(--ink-soft);
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .corridor-action svg {
+      width: 15px;
+      height: 15px;
+      color: var(--sage);
+    }
+
+    .corridor-scroll {
+      padding: 24px 28px 34px;
+    }
+
+    .diary-reader {
+      display: none;
+      padding: 28px 34px 42px;
+      background: linear-gradient(180deg, rgba(255, 253, 247, 0.64), rgba(248, 246, 239, 0.84));
+    }
+
+    .corridor.is-reading .corridor-scroll {
+      display: none;
+    }
+
+    .corridor.is-reading .diary-reader {
+      display: block;
+    }
+
+    .corridor.is-reading .density-switch {
+      display: none;
+    }
+
+    .corridor.is-reading .back-to-timeline {
+      display: inline-flex;
+    }
+
+    .diary-paper {
+      max-width: 760px;
+      min-height: 100%;
+      margin: 0 auto;
+      border: 1px solid rgba(96, 83, 63, 0.18);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(47, 111, 95, 0.05) 0, rgba(47, 111, 95, 0) 72px),
+        #fffefa;
+      box-shadow:
+        0 24px 60px rgba(52, 43, 31, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      padding: clamp(30px, 5vw, 58px);
+    }
+
+    .diary-document-head {
+      margin-bottom: 26px;
+    }
+
+    .diary-document-head .kicker {
+      margin-bottom: 10px;
+    }
+
+    .diary-document-head h3 {
+      margin: 0 0 10px;
+      color: #211e1a;
+      font-size: 34px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    .diary-document-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .diary-markdown {
+      color: #26221d;
+      line-height: 1.72;
+      overflow-wrap: anywhere;
+    }
+
+    .diary-markdown h1 {
+      margin: 0 0 28px;
+      color: #211e1a;
+      font-size: 34px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    .diary-markdown h2 {
+      margin: 30px 0 12px;
+      color: #302a24;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    .diary-markdown p,
+    .diary-markdown li {
+      color: #39332c;
+      font-size: 15px;
+    }
+
+    .diary-markdown p {
+      margin: 0 0 14px;
+    }
+
+    .timeline-wrap {
+      position: relative;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 10px 0 34px;
+    }
+
+    .timeline-spine {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      left: 50%;
+      width: 2px;
+      transform: translateX(-50%);
+      background: linear-gradient(
+        180deg,
+        rgba(47, 111, 95, 0),
+        rgba(47, 111, 95, 0.2) 10%,
+        rgba(181, 127, 48, 0.22) 52%,
+        rgba(52, 107, 134, 0.16) 90%,
+        rgba(52, 107, 134, 0)
+      );
+    }
+
+    .memory-entry {
+      --node-y: 36px;
+      --connector-length: 44px;
+      --connector-overlap: 10px;
+      --connector-color: rgba(47, 111, 95, 0.42);
+      --connector-fade: rgba(47, 111, 95, 0.08);
+      --node-color: var(--sage);
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+      min-height: 126px;
+      margin-bottom: 24px;
+    }
+
+    .memory-entry:last-child {
+      margin-bottom: 0;
+    }
+
+    .memory-entry.is-left .memory-card {
+      grid-column: 1;
+    }
+
+    .memory-entry.is-right .memory-card {
+      grid-column: 3;
+    }
+
+    .memory-entry::before {
+      content: "";
+      position: absolute;
+      top: calc(var(--node-y) - 1px);
+      width: calc(var(--connector-length) + var(--connector-overlap));
+      height: 2px;
+      background: linear-gradient(90deg, var(--connector-color), var(--connector-fade));
+      border: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .memory-entry.is-left::before {
+      left: calc(50% - var(--connector-length) - var(--connector-overlap));
+    }
+
+    .memory-entry.is-right::before {
+      left: 50%;
+      background: linear-gradient(90deg, var(--connector-fade), var(--connector-color));
+    }
+
+    .memory-entry.is-origin {
+      --connector-color: rgba(181, 127, 48, 0.48);
+      --connector-fade: rgba(181, 127, 48, 0.12);
+      --node-color: var(--gold);
+    }
+
+    .memory-entry.is-empty {
+      --connector-color: rgba(52, 45, 36, 0.2);
+      --connector-fade: rgba(52, 45, 36, 0.05);
+      --node-color: rgba(52, 45, 36, 0.16);
+    }
+
+    .year-pin {
+      grid-column: 2;
+      grid-row: 1;
+      position: relative;
+      z-index: 2;
+      display: grid;
+      justify-items: center;
+      align-items: start;
+      padding-top: calc(var(--node-y) - 8px);
+    }
+
+    .year-pin strong,
+    .year-pin span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .year-pin i {
+      width: 16px;
+      height: 16px;
+      border: 3px solid var(--paper);
+      border-radius: 999px;
+      background: var(--node-color);
+      box-shadow: 0 0 0 1px rgba(47, 111, 95, 0.28);
+    }
+
+    .memory-entry.is-origin .year-pin i {
+      box-shadow: 0 0 0 5px rgba(181, 127, 48, 0.13);
+    }
+
+    .memory-entry.is-empty .year-pin i {
+      box-shadow: none;
+    }
+
+    .memory-card {
+      grid-row: 1;
+      position: relative;
+      z-index: 2;
+      border: 1px solid rgba(52, 45, 36, 0.11);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow-soft);
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .memory-card.is-active {
+      border-color: rgba(47, 111, 95, 0.4);
+      box-shadow: inset 0 0 0 2px rgba(47, 111, 95, 0.09), var(--shadow);
+    }
+
+    .memory-entry.is-empty .memory-card {
+      background: rgba(250, 247, 239, 0.74);
+      color: var(--muted);
+      box-shadow: none;
+    }
+
+    .memory-card-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 8px;
+    }
+
+    .memory-title {
+      min-width: 0;
+    }
+
+    .memory-meta {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--gold);
+      font-size: 11px;
+      line-height: 1;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .memory-card h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.28;
+    }
+
+    .card-actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .count-pill {
+      border-radius: 999px;
+      background: rgba(52, 45, 36, 0.07);
+      color: var(--muted);
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .eye-button {
+      width: 30px;
+      height: 30px;
+      border: 1px solid rgba(47, 111, 95, 0.2);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.86);
+      display: grid;
+      place-items: center;
+    }
+
+    .eye-shape {
+      position: relative;
+      width: 17px;
+      height: 10px;
+      border: 1.8px solid var(--sage);
+      border-radius: 999px 999px 999px 999px / 80% 80% 80% 80%;
+      transform: rotate(-4deg);
+    }
+
+    .eye-shape::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: var(--sage);
+    }
+
+    .memory-card p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.62;
+    }
+
+    .quote-line {
+      display: block;
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 11px;
+    }
+
+    .tags span,
+    .source-year {
+      border-radius: 999px;
+      background: rgba(47, 111, 95, 0.1);
+      color: var(--sage);
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .tags span.gold {
+      background: rgba(181, 127, 48, 0.13);
+      color: var(--gold);
+    }
+
+    .compact .quote-line,
+    .compact .tags {
+      display: none;
+    }
+
+    .compact .memory-entry {
+      min-height: 86px;
+      margin-bottom: 18px;
+    }
+
+    .anniversary-head {
+      padding: 16px 18px;
+    }
+
+    .anniversary-scroll {
+      padding: 16px;
+    }
+
+    .form-card,
+    .hint-card {
+      border: 1px solid rgba(52, 45, 36, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.72);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .form-card.primary {
+      background: var(--soft-plum);
+      border-color: rgba(119, 85, 107, 0.2);
+    }
+
+    .hint-card {
+      background: var(--soft-gold);
+      border-color: rgba(181, 127, 48, 0.2);
+    }
+
+    .form-card h3,
+    .hint-card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .form-card p,
+    .hint-card p,
+    .form-card label {
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.58;
+    }
+
+    .form-card p,
+    .hint-card p {
+      margin: 0;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 9px;
+      margin-top: 10px;
+    }
+
+    .form-grid label {
+      display: grid;
+      gap: 5px;
+      font-weight: 800;
+    }
+
+    .form-grid input,
+    .form-grid select,
+    .form-grid textarea {
+      width: 100%;
+      border: 1px solid rgba(70, 66, 59, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.8);
+      color: var(--ink);
+      padding: 0 10px;
+    }
+
+    .form-grid input,
+    .form-grid select {
+      min-height: 34px;
+    }
+
+    .form-grid textarea {
+      min-height: 78px;
+      padding-top: 9px;
+      resize: none;
+      line-height: 1.5;
+    }
+
+    .source-years {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .panel-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .panel-actions button {
+      min-height: 34px;
+      border: 1px solid rgba(52, 45, 36, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.78);
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .panel-actions button.primary {
+      border-color: var(--sage);
+      background: var(--sage);
+      color: #fffdf7;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <strong>Journal</strong>
+        <span>记忆回廊</span>
+      </div>
+      <div class="topline">05-16 · 十年同页 · 位置导航 / 时间线阅读 / 纪念日设置</div>
+    </header>
+
+    <main class="workspace">
+      <aside class="rail" aria-label="日期与年份导航">
+        <section class="rail-head">
+          <p class="eyebrow">Navigation</p>
+          <h1>05-16<span>固定日期，只做位置导航。</span></h1>
+        </section>
+
+        <div class="scroll">
+          <section class="rail-section">
+            <div class="section-title">
+              <h2>选择日期</h2>
+              <span>MM-DD</span>
+            </div>
+            <div class="date-control">
+              <span class="calendar-icon" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"></rect>
+                  <path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                </svg>
+              </span>
+              <input type="date" value="2026-05-16" aria-label="选择日期">
+            </div>
+          </section>
+
+          <section class="rail-section">
+            <div class="section-title">
+              <h2>常看日期</h2>
+              <span>3 个</span>
+            </div>
+            <div class="saved-list">
+              <button class="saved-date is-active">
+                <strong>05-16 · Journal 阶段日</strong>
+                <span>从记录习惯走向记忆核心。</span>
+              </button>
+              <button class="saved-date">
+                <strong>05-07 · 项目启动日</strong>
+                <span>第一次写下完整产品蓝图。</span>
+              </button>
+              <button class="saved-date">
+                <strong>12-31 · 年末回望</strong>
+                <span>总结、感恩、写给下一年。</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="rail-section">
+            <div class="section-title">
+              <h2>年份定位</h2>
+              <span>10 年</span>
+            </div>
+            <div class="year-list">
+              <button class="year-jump is-active" data-year="2026"><strong>2026</strong><span>今年</span><i class="dot has-entry"></i></button>
+              <button class="year-jump" data-year="2025"><strong>2025</strong><span>去年</span><i class="dot has-entry"></i></button>
+              <button class="year-jump" data-year="2024"><strong>2024</strong><span>起点年</span><i class="dot origin"></i></button>
+              <button class="year-jump" data-year="2023"><strong>2023</strong><span>短记录</span><i class="dot has-entry"></i></button>
+              <button class="year-jump" data-year="2022"><strong>2022</strong><span>无记录</span><i class="dot"></i></button>
+              <button class="year-jump" data-year="2021"><strong>2021</strong><span>有一句提醒</span><i class="dot has-entry"></i></button>
+              <button class="year-jump" data-year="2020"><strong>2020</strong><span>无记录</span><i class="dot"></i></button>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="corridor" id="corridorPanel" aria-label="同日时间线">
+        <header class="corridor-head">
+          <div class="corridor-title">
+            <p class="eyebrow" id="corridorEyebrow">Timeline</p>
+            <h2 id="corridorHeading">05-16 的十年同页</h2>
+            <p id="corridorSubheading">外层保留短摘要；点击年份卡上的眼睛按钮在中间阅读当年最后版本日记。</p>
+          </div>
+          <div class="corridor-toolbar">
+            <button class="back-to-timeline" id="backToTimeline" type="button">返回年轮</button>
+            <div class="density-switch" aria-label="显示密度">
+              <button class="active" data-density="comfortable">舒展</button>
+              <button data-density="compact">紧凑</button>
+            </div>
+            <button class="corridor-action" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 11a8 8 0 1 0-2.34 5.66" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                <path d="M20 5v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              刷新
+            </button>
+            <button class="corridor-action" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                <path d="m12 19-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              返回今日
+            </button>
+          </div>
+        </header>
+
+        <div class="scroll corridor-scroll" id="corridorScroll">
+          <div class="timeline-wrap" id="timelineWrap">
+            <div class="timeline-spine" aria-hidden="true"></div>
+
+            <section class="memory-entry is-left" data-year="2026">
+              <div class="year-pin"><strong>2026</strong><span>今年</span><i></i></div>
+              <article class="memory-card is-active">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2026 · 今年</span>
+                    <h3>Journal 不该只是 AI 总结器</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">4 条材料</span>
+                    <button class="eye-button" data-detail="2026" title="阅读日记" aria-label="阅读 2026 日记"><span class="eye-shape"></span></button>
+                  </div>
+                </div>
+                <p>今天重新确认：日记整理要像一个有感性的日记编写者，而不是把生活压成冷冰冰的条目。</p>
+                <span class="quote-line">“同日年轮应该让人看到同一时期自己的变化。”</span>
+                <div class="tags"><span>AI 日记</span><span>记忆核心</span><span class="gold">产品方向</span></div>
+              </article>
+            </section>
+
+            <section class="memory-entry is-right" data-year="2025">
+              <div class="year-pin"><strong>2025</strong><span>去年</span><i></i></div>
+              <article class="memory-card">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2025 · 去年</span>
+                    <h3>想法很多，担心停在文档里</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">3 条材料</span>
+                    <button class="eye-button" data-detail="2025" title="阅读日记" aria-label="阅读 2025 日记"><span class="eye-shape"></span></button>
+                  </div>
+                </div>
+                <p>这一年的同一天更像执行压力：知道自己想做长期工具，但还没有把愿景和产品形态真正扣住。</p>
+                <span class="quote-line">“别让工具只变成技术练习。”</span>
+                <div class="tags"><span>项目推进</span><span>执行压力</span></div>
+              </article>
+            </section>
+
+            <section class="memory-entry is-origin is-left" data-year="2024">
+              <div class="year-pin"><strong>2024</strong><span>起点</span><i></i></div>
+              <article class="memory-card">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2024 · 起点年</span>
+                    <h3>记录习惯还不稳定</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">2 条材料</span>
+                    <button class="eye-button" data-detail="2024" title="阅读日记" aria-label="阅读 2024 日记"><span class="eye-shape"></span></button>
+                  </div>
+                </div>
+                <p>这里第一次出现“更低负担地记录”和“以后能回看零散想法”的主题，像这条纪念线的起点。</p>
+                <span class="quote-line">“希望以后能回看这些零散想法。”</span>
+                <div class="tags"><span class="gold">建议起点</span><span>记录习惯</span></div>
+              </article>
+            </section>
+
+            <section class="memory-entry is-right" data-year="2023">
+              <div class="year-pin"><strong>2023</strong><span>短记</span><i></i></div>
+              <article class="memory-card">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2023 · 短记录</span>
+                    <h3>别忘了做自己的工具</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">1 条材料</span>
+                    <button class="eye-button" data-detail="2023" title="阅读日记" aria-label="阅读 2023 日记"><span class="eye-shape"></span></button>
+                  </div>
+                </div>
+                <p>内容很短，但方向很清楚：不是为了炫技，而是为了以后真的能用。</p>
+                <span class="quote-line">“别忘了做自己的工具。”</span>
+                <div class="tags"><span>自我提醒</span></div>
+              </article>
+            </section>
+
+            <section class="memory-entry is-empty is-left" data-year="2022">
+              <div class="year-pin"><strong>2022</strong><span>空白</span><i></i></div>
+              <article class="memory-card">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2022 · 空白</span>
+                    <h3>这一年没有留下 05-16</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">无记录</span>
+                  </div>
+                </div>
+                <p>空白也是时间的一部分。它让记录习惯的形成过程变得可见。</p>
+              </article>
+            </section>
+
+            <section class="memory-entry is-right" data-year="2021">
+              <div class="year-pin"><strong>2021</strong><span>更早</span><i></i></div>
+              <article class="memory-card">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2021 · 更早</span>
+                    <h3>想拥有自己的长期系统</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">1 条材料</span>
+                    <button class="eye-button" data-detail="2021" title="阅读日记" aria-label="阅读 2021 日记"><span class="eye-shape"></span></button>
+                  </div>
+                </div>
+                <p>那时还没有清楚的产品形态，只是隐约觉得“长期记录”和“自我整理”会很重要。</p>
+                <span class="quote-line">“如果有个地方能保存每年的今天就好了。”</span>
+                <div class="tags"><span>长期系统</span><span>早期愿望</span></div>
+              </article>
+            </section>
+
+            <section class="memory-entry is-empty is-left" data-year="2020">
+              <div class="year-pin"><strong>2020</strong><span>空白</span><i></i></div>
+              <article class="memory-card">
+                <div class="memory-card-head">
+                  <div class="memory-title">
+                    <span class="memory-meta">2020 · 空白</span>
+                    <h3>没有记录</h3>
+                  </div>
+                  <div class="card-actions">
+                    <span class="count-pill">无记录</span>
+                  </div>
+                </div>
+                <p>没有就是没有，不让 AI 补故事。</p>
+              </article>
+            </section>
+          </div>
+        </div>
+
+        <article class="scroll diary-reader" id="diaryReader" aria-label="日记阅读">
+          <div class="diary-paper">
+            <header class="diary-document-head">
+              <p class="kicker">Final Journal</p>
+              <h3 id="readerDate">2026-05-16</h3>
+              <p id="readerMeta">最后版本：2026-05-16 23:42</p>
+            </header>
+
+            <div class="diary-markdown" id="readerContent">
+              <h1>Journal 不该只是 AI 总结器</h1>
+              <p>今天重新确认：日记整理要像一个有感性的日记编写者，而不是把生活压成冷冰冰的条目。</p>
+              <p>真正重要的不是把输入切成漂亮的总结，而是让这些片段重新回到人的感受里。它们应该能看见我的犹豫、判断、烦躁、期待，也能看见一个想法从模糊到清楚的过程。</p>
+              <p>同日年轮的价值也在这里：它不急着给我一个结论，而是把每一年同一天放在一起，让变化自己浮出来。</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <aside class="anniversary-panel" aria-label="纪念日设置">
+        <header class="anniversary-head">
+          <p class="eyebrow">Anniversary</p>
+          <h2>纪念日设置</h2>
+          <p>只处理当前日期的意义确认、起点年和未来锚点。</p>
+        </header>
+
+        <div class="scroll anniversary-scroll">
+          <section class="hint-card">
+            <h3>意义观察</h3>
+            <p>从 2021 到 2026，这一天的主题从“想要长期系统”，逐渐变成“明确 Journal 要成为个人记忆核心”。</p>
+            <div class="source-years">
+              <span class="source-year">2021</span>
+              <span class="source-year">2024</span>
+              <span class="source-year">2026</span>
+            </div>
+          </section>
+
+          <section class="form-card primary">
+            <h3>保存为纪念日</h3>
+            <div class="form-grid">
+              <label>
+                名称
+                <input value="Journal 阶段日">
+              </label>
+              <label>
+                起点年
+                <select>
+                  <option>2024 · 第一次出现记录习惯主题</option>
+                  <option>2021 · 更早的长期系统愿望</option>
+                  <option>2026 · 今天正式命名</option>
+                </select>
+              </label>
+              <label>
+                类型
+                <select>
+                  <option>项目里程碑</option>
+                  <option>成长节点</option>
+                  <option>自我提醒</option>
+                  <option>感恩时刻</option>
+                </select>
+              </label>
+              <label>
+                说明
+                <textarea>从记录习惯逐渐走向个人记忆核心，这一天适合被保存为 Journal 的阶段性纪念日。</textarea>
+              </label>
+            </div>
+            <div class="panel-actions">
+              <button class="primary">确认保存</button>
+              <button>稍后再说</button>
+            </div>
+          </section>
+
+          <section class="form-card">
+            <h3>下一年锚点</h3>
+            <p>写给 2027-05-16 的一句话，明年同日回廊会带回来。</p>
+            <div class="panel-actions">
+              <button>写给下一年今天</button>
+              <button>清空</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const detailData = {
+      "2026": {
+        date: "2026-05-16",
+        lastVersionDate: "2026-05-16 23:42",
+        title: "Journal 不该只是 AI 总结器",
+        content: [
+          "今天重新确认：日记整理要像一个有感性的日记编写者，而不是把生活压成冷冰冰的条目。",
+          "真正重要的不是把输入切成漂亮的总结，而是让这些片段重新回到人的感受里。它们应该能看见我的犹豫、判断、烦躁、期待，也能看见一个想法从模糊到清楚的过程。",
+          "同日年轮的价值也在这里：它不急着给我一个结论，而是把每一年同一天放在一起，让变化自己浮出来。"
+        ]
+      },
+      "2025": {
+        date: "2025-05-16",
+        lastVersionDate: "2025-05-16 22:10",
+        title: "想法很多，担心停在文档里",
+        content: [
+          "这一年的同一天更像执行压力：知道自己想做一个长期工具，但还没有把愿景和产品形态真正扣住。",
+          "很多想法已经出现了，但它们还停在文档、草稿和碎片讨论里。那时候最担心的不是做不出来，而是做出来以后依然不像一个真正能陪人长期使用的东西。"
+        ]
+      },
+      "2024": {
+        date: "2024-05-16",
+        lastVersionDate: "2024-05-16 21:28",
+        title: "记录习惯还不稳定",
+        content: [
+          "这里第一次出现了“更低负担地记录”和“以后能回看零散想法”的主题，像这条纪念线的起点。",
+          "当时还没有明确的 Journal 形态，但已经有一个很朴素的愿望：不要让生活里的想法随手散掉。"
+        ]
+      },
+      "2023": {
+        date: "2023-05-16",
+        lastVersionDate: "2023-05-16 20:06",
+        title: "别忘了做自己的工具",
+        content: [
+          "内容很短，但方向很清楚：不是为了炫技，而是为了以后真的能用。",
+          "有时候一句短短的提醒，比完整计划更像种子。它没有解释太多，却把方向留住了。"
+        ]
+      },
+      "2021": {
+        date: "2021-05-16",
+        lastVersionDate: "2021-05-16 23:18",
+        title: "想拥有自己的长期系统",
+        content: [
+          "那时还没有清楚的产品形态，只是隐约觉得“长期记录”和“自我整理”会很重要。",
+          "现在回看，这句话已经有了同日年轮的影子：不是为了保存所有东西，而是为了让重要的今天可以在未来重新遇见。"
+        ]
+      }
+    };
+
+    const corridorPanel = document.getElementById("corridorPanel");
+    const corridorEyebrow = document.getElementById("corridorEyebrow");
+    const corridorHeading = document.getElementById("corridorHeading");
+    const corridorSubheading = document.getElementById("corridorSubheading");
+    const timelineWrap = document.getElementById("timelineWrap");
+    const corridorScroll = document.getElementById("corridorScroll");
+    const diaryReader = document.getElementById("diaryReader");
+    const readerDate = document.getElementById("readerDate");
+    const readerMeta = document.getElementById("readerMeta");
+    const readerContent = document.getElementById("readerContent");
+
+    function setDiaryContent(data) {
+      const heading = document.createElement("h1");
+      heading.textContent = data.title;
+      const paragraphs = data.content.map(item => {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = item;
+        return paragraph;
+      });
+      readerContent.replaceChildren(heading, ...paragraphs);
+    }
+
+    function selectYear(year, shouldScroll) {
+      document.querySelectorAll(".memory-card").forEach(item => item.classList.remove("is-active"));
+      document.querySelectorAll(".year-jump").forEach(item => item.classList.remove("is-active"));
+
+      const entry = document.querySelector(`.memory-entry[data-year="${year}"]`);
+      entry?.querySelector(".memory-card")?.classList.add("is-active");
+      document.querySelector(`.year-jump[data-year="${year}"]`)?.classList.add("is-active");
+
+      if (shouldScroll && entry) {
+        entry.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }
+
+    function showTimeline() {
+      corridorPanel.classList.remove("is-reading");
+      corridorEyebrow.textContent = "Timeline";
+      corridorHeading.textContent = "05-16 的十年同页";
+      corridorSubheading.textContent = "外层保留短摘要；点击年份卡上的眼睛按钮在中间阅读当年最后版本日记。";
+    }
+
+    function openDiary(year) {
+      const data = detailData[year];
+      if (!data) return;
+      selectYear(year, false);
+      readerDate.textContent = data.date;
+      readerMeta.textContent = `最后版本：${data.lastVersionDate}`;
+      setDiaryContent(data);
+      corridorEyebrow.textContent = "Diary";
+      corridorHeading.textContent = data.title;
+      corridorSubheading.textContent = `${data.date} · 阅读最后版本的正式日记。`;
+      corridorPanel.classList.add("is-reading");
+      diaryReader.scrollTop = 0;
+    }
+
+    document.querySelectorAll(".year-jump").forEach(button => {
+      button.addEventListener("click", () => {
+        showTimeline();
+        selectYear(button.dataset.year, true);
+      });
+    });
+
+    document.querySelectorAll(".eye-button").forEach(button => {
+      button.addEventListener("click", () => openDiary(button.dataset.detail));
+    });
+
+    document.getElementById("backToTimeline").addEventListener("click", () => {
+      showTimeline();
+    });
+
+    document.querySelectorAll(".density-switch button").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".density-switch button").forEach(item => item.classList.remove("active"));
+        button.classList.add("active");
+        timelineWrap.classList.toggle("compact", button.dataset.density === "compact");
+      });
+    });
+  </script>
+</body>
+</html>

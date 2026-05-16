@@ -2718,22 +2718,42 @@ button:focus-visible {
   gap: 16px;
 }
 
-.audit-date-field {
+.date-picker-field {
   display: grid;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.audit-date-field input {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  min-height: 34px;
+  min-height: 36px;
   border: 1px solid rgba(70, 66, 59, 0.16);
   border-radius: 8px;
   background: rgba(255, 253, 247, 0.78);
+  color: var(--muted);
+  padding: 7px 10px;
+}
+
+.date-picker-field-with-label {
+  grid-template-columns: auto minmax(64px, max-content) minmax(0, 1fr);
+}
+
+.date-picker-icon {
+  color: var(--sage);
+}
+
+.date-picker-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.date-picker-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
   color: var(--ink);
-  padding: 0 10px;
   font: inherit;
   font-size: 12px;
 }
@@ -3149,28 +3169,6 @@ button:focus-visible {
   min-height: 0;
   margin: 0;
   padding: 0;
-}
-
-.anniversary-picker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(70, 66, 59, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.78);
-  color: var(--muted);
-  padding: 8px 10px;
-}
-
-.anniversary-picker input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 12px;
 }
 
 .anniversary-quick-days {

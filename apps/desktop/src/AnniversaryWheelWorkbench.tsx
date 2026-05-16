@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, Eye, RefreshCw } from "lucide-react";
+import { ArrowLeft, Eye, RefreshCw } from "lucide-react";
 import type {
   JournalAnniversaryWheelResult,
   JournalEntryVersion,
@@ -6,6 +6,7 @@ import type {
   JournalHistoryEntrySummary,
   JournalVersionDetail
 } from "./api";
+import { DatePickerField } from "./DatePickerField";
 import { JournalPaperLoading } from "./JournalPaperLoading";
 import { MarkdownPreview } from "./MarkdownPreview";
 
@@ -28,12 +29,35 @@ type AnniversaryWheelWorkbenchProps = {
 
 const quickMonthDays = ["01-01", "05-14", "10-01", "12-31"];
 
-function toDateInputValue(monthDay: string, selectedDate: string) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(selectedDate) && selectedDate.slice(5) === monthDay) {
-    return selectedDate;
+function isValidDateInputValue(value: string, monthDay: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && value.slice(5) === monthDay;
+}
+
+function toDateInputValue(monthDay: string) {
+  if (!/^\d{2}-\d{2}$/.test(monthDay)) {
+    return "";
   }
 
-  return /^\d{2}-\d{2}$/.test(monthDay) ? `2000-${monthDay}` : "";
+  const currentYear = new Date().getFullYear();
+  const currentYearValue = `${currentYear}-${monthDay}`;
+  if (isValidDateInputValue(currentYearValue, monthDay)) {
+    return currentYearValue;
+  }
+
+  for (let offset = 1; offset <= 4; offset += 1) {
+    const previousYearValue = `${currentYear - offset}-${monthDay}`;
+    if (isValidDateInputValue(previousYearValue, monthDay)) {
+      return previousYearValue;
+    }
+
+    const nextYearValue = `${currentYear + offset}-${monthDay}`;
+    if (isValidDateInputValue(nextYearValue, monthDay)) {
+      return nextYearValue;
+    }
+  }
+
+  return "";
 }
 
 function toMonthDay(dateValue: string) {
@@ -107,7 +131,7 @@ export function AnniversaryWheelWorkbench({
   const isShowingVersion = matchingVersionDetail !== null;
   const expectsEntryDetail = selected !== null && selected.status !== "missing";
   const isEntryDetailLoading = expectsEntryDetail && !isShowingVersion && matchingDetail === null;
-  const dateInputValue = toDateInputValue(monthDay, selectedDate);
+  const dateInputValue = toDateInputValue(monthDay);
 
   return (
     <>
@@ -118,20 +142,17 @@ export function AnniversaryWheelWorkbench({
         </section>
 
         <section className="rail-section">
-          <label className="anniversary-picker">
-            <CalendarDays size={15} aria-hidden="true" />
-            <input
-              aria-label="选择同日年轮日期"
-              type="date"
-              value={dateInputValue}
-              onChange={event => {
-                const nextMonthDay = toMonthDay(event.target.value);
-                if (nextMonthDay) {
-                  onMonthDayChange(nextMonthDay);
-                }
-              }}
-            />
-          </label>
+          <DatePickerField
+            label="同日日期"
+            ariaLabel="选择同日年轮日期"
+            value={dateInputValue}
+            onChange={value => {
+              const nextMonthDay = toMonthDay(value);
+              if (nextMonthDay) {
+                onMonthDayChange(nextMonthDay);
+              }
+            }}
+          />
           <div className="anniversary-quick-days" aria-label="快捷日期">
             {quickMonthDays.map(day => (
               <button

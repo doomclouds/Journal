@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { JournalHarnessAuditRun, JournalHarnessAuditToolCall } from "./api";
+import { DatePickerField } from "./DatePickerField";
 
 type AuditWorkbenchProps = {
   runs: JournalHarnessAuditRun[];
@@ -37,15 +38,12 @@ export function AuditWorkbench({ runs, selectedDate, onDateChange, onReturnToday
         <section className="date-card audit-date-card">
           <p className="month">Audit</p>
           <h1>{selectedDate ? selectedDate.slice(5) : "-- --"}<span>当天 harness run</span></h1>
-          <label className="audit-date-field" htmlFor="audit-date">
-            <span>审计日期</span>
-            <input
-              id="audit-date"
-              type="date"
-              value={selectedDate}
-              onChange={event => onDateChange(event.target.value)}
-            />
-          </label>
+          <DatePickerField
+            id="audit-date"
+            label="审计日期"
+            value={selectedDate}
+            onChange={onDateChange}
+          />
         </section>
 
         <section className="rail-section">

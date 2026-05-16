@@ -157,6 +157,7 @@ describe("AnniversaryWheelWorkbench", () => {
 
     const dateInput = screen.getByLabelText("选择同日年轮日期");
     expect(dateInput).toHaveAttribute("type", "date");
+    expect(dateInput).toHaveValue(`${new Date().getFullYear()}-05-14`);
 
     fireEvent.change(dateInput, { target: { value: "2024-02-29" } });
     fireEvent.click(screen.getByRole("button", { name: /2025/ }));
