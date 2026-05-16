@@ -59,6 +59,50 @@ describe("release packaging", () => {
     expect(releaseWorkflow).toContain("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true");
   });
 
+  test("generates tag-range GitHub release notes before publishing", () => {
+    const releaseWorkflow = readFileSync(join(repoRoot, ".github", "workflows", "release-windows.yml"), "utf8");
+
+    expect(releaseWorkflow).toContain("fetch-depth: 0");
+    expect(releaseWorkflow).toContain("write-github-release-notes.ps1");
+    expect(releaseWorkflow).toContain("artifacts/installer/release-assets/GITHUB_RELEASE_NOTES.md");
+    expect(releaseWorkflow).not.toContain("body_path: docs/release/GITHUB_RELEASE_TEMPLATE.md");
+  });
+
+  test("writes release notes from the previous version tag to HEAD", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "journal-release-notes-"));
+    const outputPath = join(tempRoot, "release-notes.md");
+
+    try {
+      execFileSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          join(repoRoot, "scripts", "release", "write-github-release-notes.ps1"),
+          "-ReleaseVersion",
+          "0.1.1",
+          "-OutputPath",
+          outputPath
+        ],
+        { cwd: repoRoot, stdio: "pipe" }
+      );
+
+      const notes = readFileSync(outputPath, "utf8");
+      expect(notes).toContain("# Journal v0.1.1");
+      expect(notes).toContain("## Highlights");
+      expect(notes).toContain("Added an in-app legal document reader in About");
+      expect(notes).toContain("Changes Since v0.1.0");
+      expect(notes).toContain("add in-app legal document reader");
+      expect(notes).toMatch(/add in-app legal document reader \([0-9a-f]{7,}\)/);
+      expect(notes).not.toContain("$hash");
+      expect(notes).toContain("Journal-Setup-0.1.1.exe");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("about panel styles use concrete theme values", () => {
     const styles = readFileSync(join(repoRoot, "apps", "desktop", "src", "styles.css"), "utf8");
     const aboutPanelMatch = styles.match(/\.about-panel\s*\{(?<body>[^}]+)\}/);
