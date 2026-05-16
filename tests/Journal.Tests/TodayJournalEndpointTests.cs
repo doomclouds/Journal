@@ -451,6 +451,216 @@ public sealed class TodayJournalEndpointTests
         Assert.Equal("02-29", result.MonthDay);
     }
 
+    [Fact]
+    public async Task AnniversaryEndpoints_SaveReadAndAdoptNextYearNote()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        var saveResponse = await client.PostAsJsonAsync("/journal/anniversaries", new
+        {
+            monthDay = "05-16",
+            title = "Journal 阶段日",
+            type = "project-milestone",
+            originDate = "2024-05-16",
+            description = "从记录习惯走向记忆核心。",
+            pinned = true
+        });
+        saveResponse.EnsureSuccessStatusCode();
+        using var savedDocument = await JsonDocument.ParseAsync(await saveResponse.Content.ReadAsStreamAsync());
+        var savedId = savedDocument.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(savedId));
+
+        var noteResponse = await client.PostAsJsonAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes",
+            new { text = "明年回来看。" });
+        noteResponse.EnsureSuccessStatusCode();
+        using var noteDocument = await JsonDocument.ParseAsync(await noteResponse.Content.ReadAsStreamAsync());
+        var note = Assert.Single(noteDocument.RootElement.GetProperty("nextYearNotes").EnumerateArray());
+        var noteId = note.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(noteId));
+
+        var adoptResponse = await client.PostAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes/{noteId}/adopt",
+            null);
+        adoptResponse.EnsureSuccessStatusCode();
+
+        var listResponse = await client.GetAsync("/journal/anniversaries/05-16");
+        listResponse.EnsureSuccessStatusCode();
+        using var listDocument = await JsonDocument.ParseAsync(await listResponse.Content.ReadAsStreamAsync());
+        Assert.Contains(
+            listDocument.RootElement.EnumerateArray(),
+            item => item.GetProperty("title").GetString() == "Journal 阶段日");
+    }
+
+    [Fact]
+    public async Task AnniversaryAdoptEndpoint_WithMissingAnniversaryReturnsNotFound()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync(
+            "/journal/anniversaries/missing/next-year-notes/missing-note/adopt",
+            null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnniversaryAddNoteEndpoint_WithMalformedAnniversaryIdReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/journal/anniversaries/bad_id/next-year-notes",
+            new { text = "明年回来看。" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnniversaryDismissEndpoint_WithMissingNoteReturnsNotFound()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var saveResponse = await client.PostAsJsonAsync("/journal/anniversaries", new
+        {
+            monthDay = "05-16",
+            title = "Journal 阶段日",
+            type = "project-milestone",
+            originDate = "2024-05-16",
+            description = "从记录习惯走向记忆核心。",
+            pinned = true
+        });
+        saveResponse.EnsureSuccessStatusCode();
+        using var savedDocument = await JsonDocument.ParseAsync(await saveResponse.Content.ReadAsStreamAsync());
+        var savedId = savedDocument.RootElement.GetProperty("id").GetString();
+
+        var response = await client.PostAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes/missing-note/dismiss",
+            null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnniversaryAdoptEndpoint_WithMalformedNoteIdReturnsBadRequest()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var saveResponse = await client.PostAsJsonAsync("/journal/anniversaries", new
+        {
+            monthDay = "05-16",
+            title = "Journal 阶段日",
+            type = "project-milestone",
+            originDate = "2024-05-16",
+            description = "从记录习惯走向记忆核心。",
+            pinned = true
+        });
+        saveResponse.EnsureSuccessStatusCode();
+        using var savedDocument = await JsonDocument.ParseAsync(await saveResponse.Content.ReadAsStreamAsync());
+        var savedId = savedDocument.RootElement.GetProperty("id").GetString();
+
+        var response = await client.PostAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes/bad_note/adopt",
+            null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnniversaryAdoptEndpoint_WithRawInputCollisionReturnsConflict()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var saveResponse = await client.PostAsJsonAsync("/journal/anniversaries", new
+        {
+            monthDay = "05-16",
+            title = "Journal 阶段日",
+            type = "project-milestone",
+            originDate = "2024-05-16",
+            description = "从记录习惯走向记忆核心。",
+            pinned = true
+        });
+        saveResponse.EnsureSuccessStatusCode();
+        using var savedDocument = await JsonDocument.ParseAsync(await saveResponse.Content.ReadAsStreamAsync());
+        var savedId = savedDocument.RootElement.GetProperty("id").GetString();
+        var noteResponse = await client.PostAsJsonAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes",
+            new { text = "明年回来看。" });
+        noteResponse.EnsureSuccessStatusCode();
+        using var noteDocument = await JsonDocument.ParseAsync(await noteResponse.Content.ReadAsStreamAsync());
+        var note = Assert.Single(noteDocument.RootElement.GetProperty("nextYearNotes").EnumerateArray());
+        var noteId = note.GetProperty("id").GetString();
+        await new RawInputStore(paths).AppendAsync(
+            new RawInput(
+                $"raw-anniversary-{noteId}",
+                JournalDate.From(FixedDay),
+                FixedNow,
+                "text",
+                "明年回来看。"),
+            CancellationToken.None);
+
+        var response = await client.PostAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes/{noteId}/adopt",
+            null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnniversaryAdoptEndpoint_WhenCalledTwiceIsIdempotent()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var factory = CreateFactory(workspace.Root);
+        using var client = factory.CreateClient();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+
+        var saveResponse = await client.PostAsJsonAsync("/journal/anniversaries", new
+        {
+            monthDay = "05-16",
+            title = "Journal 阶段日",
+            type = "project-milestone",
+            originDate = "2024-05-16",
+            description = "从记录习惯走向记忆核心。",
+            pinned = true
+        });
+        saveResponse.EnsureSuccessStatusCode();
+        using var savedDocument = await JsonDocument.ParseAsync(await saveResponse.Content.ReadAsStreamAsync());
+        var savedId = savedDocument.RootElement.GetProperty("id").GetString();
+
+        var noteResponse = await client.PostAsJsonAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes",
+            new { text = "明年回来看。" });
+        noteResponse.EnsureSuccessStatusCode();
+        using var noteDocument = await JsonDocument.ParseAsync(await noteResponse.Content.ReadAsStreamAsync());
+        var note = Assert.Single(noteDocument.RootElement.GetProperty("nextYearNotes").EnumerateArray());
+        var noteId = note.GetProperty("id").GetString();
+
+        var firstResponse = await client.PostAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes/{noteId}/adopt",
+            null);
+        firstResponse.EnsureSuccessStatusCode();
+        using var firstDocument = await JsonDocument.ParseAsync(await firstResponse.Content.ReadAsStreamAsync());
+        var rawInputId = firstDocument.RootElement.GetProperty("rawInput").GetProperty("id").GetString();
+
+        var secondResponse = await client.PostAsync(
+            $"/journal/anniversaries/{savedId}/next-year-notes/{noteId}/adopt",
+            null);
+        secondResponse.EnsureSuccessStatusCode();
+
+        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
+        Assert.Single(rawInputs, raw => raw.Id == rawInputId && raw.Text == "明年回来看。");
+    }
+
     [Theory]
     [InlineData("/journal/history?from=not-a-date", "from must use yyyy-MM-dd")]
     [InlineData("/journal/history?to=2026-99-99", "to must use yyyy-MM-dd")]
