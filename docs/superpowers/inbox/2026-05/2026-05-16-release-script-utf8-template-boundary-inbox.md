@@ -13,9 +13,11 @@
 
 优化 GitHub Release 正文模板时，曾把中文发布正文直接写进 `scripts/release/write-github-release-notes.ps1`。`npm test --prefix apps/desktop -- releasePackaging.test.ts` 调用 Windows PowerShell 执行脚本后，PowerShell 按非 UTF-8 解析 BOM-less `.ps1`，中文字符串变成乱码并触发 parser error。
 
+2026-05-16 follow-up：`v0.1.1` tag 推送后，GitHub Actions `build-windows-installer` 的前端测试失败。原因是 build job 的 `actions/checkout` 仍是 shallow checkout，测试调用 release notes 脚本时拿不到 `v0.1.0`，生成正文退回 `repository history`。修复方向是 build job 也设置 `fetch-depth: 0`，并让测试显式传入 `-PreviousTag v0.1.0`，避免 release notes 测试隐式依赖当前 checkout 形态。
+
 ## Why It Might Matter
 
-Journal 的发布脚本需要同时服务本机 Windows PowerShell、GitHub Actions `pwsh` 和用户手动执行场景。中文 release 文案以后还会继续调整，如果直接把中文正文塞回 `.ps1`，同类错误很容易复发，而且失败表现会像语法错误，不像编码错误。
+Journal 的发布脚本需要同时服务本机 Windows PowerShell、GitHub Actions `pwsh` 和用户手动执行场景。中文 release 文案以后还会继续调整，如果直接把中文正文塞回 `.ps1`，同类错误很容易复发，而且失败表现会像语法错误，不像编码错误。Release notes 还依赖 tag range；CI 里 shallow checkout 会让“上一版本 tag”消失，导致测试或 release 正文悄悄退化。
 
 ## What Is Missing
 

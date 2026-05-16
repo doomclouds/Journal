@@ -83,6 +83,8 @@ describe("release packaging", () => {
           join(repoRoot, "scripts", "release", "write-github-release-notes.ps1"),
           "-ReleaseVersion",
           "0.1.1",
+          "-PreviousTag",
+          "v0.1.0",
           "-OutputPath",
           outputPath
         ],
