@@ -17,7 +17,7 @@ Journal 是本地优先的晨间日记桌面应用。核心产品链路是：
   -> version snapshot when overwriting
   -> formal Markdown entry
   -> rebuildable SQLite/FTS history index
-  -> history search / same-day anniversary / version restore workbench
+  -> history search / same-day memory corridor / version restore workbench
 ```
 
 V1 / `0.1.0` 已进入 Windows 本地发布闭环：安装版 Electron 加载打包前端，托管内置 `.NET` backend，并提供 About、法律声明、导入导出、Inno Setup 安装包和 GitHub Actions release workflow。
@@ -34,7 +34,7 @@ V1 / `0.1.0` 已进入 Windows 本地发布闭环：安装版 Electron 加载打
 - `.journal/versions/` 保存覆盖前 Markdown 和 metadata；首次写入不创建 snapshot。
 - `.journal/index/journal.db` 是可重建缓存，不是事实源。
 - History Workbench 支持搜索、日期详情、版本列表/详情、索引 scan/rebuild 和今日版本 restore-to-draft。
-- Same-Day Anniversary Wheel 是只读记忆回廊：按 `MM-DD` 查看多年同日 entry、raw material snippets 和版本快照。
+- Same-Day Memory Corridor 支持按 `MM-DD` 查看多年同日 timeline cards、formal-entry reading mode、saved anniversaries 和 next-year notes；持久数据写入 `.journal/anniversaries/anniversaries.json`。
 - Data backup UX：`GET /journal/data/summary` 展示当前 entry/raw input/version 计数；导出生成 ZIP；导入前备份当前 source material。
 - Windows release：本地 build/verify installer 脚本和 `.github/workflows/release-windows.yml` 已接入。
 
@@ -62,7 +62,7 @@ V1 / `0.1.0` 已进入 Windows 本地发布闭环：安装版 Electron 加载打
 - SQLite / FTS index 只是缓存，必须可由 Markdown、raw-input jsonl 和 version files 重建。
 - Editor save 永远是 draft write；formal entry 只能由用户确认写入。
 - Invalid source/block edit 应形成 `attention` draft 和修复信息，不得部分覆盖 formal entry。
-- Anniversary mode 只读，不暴露 restore/delete/diff/edit action。
+- Same-Day Memory Corridor 不暴露 restore/delete/diff/edit action；saved anniversaries 和 next-year notes 只写入 anniversary store，不改写 formal entry。
 - 当前 version restore 只允许恢复今天的版本为 `reviewing` draft。
 - UI 风格应保持安静、工具化、可扫描，服务每日写作工作流，不做 marketing landing page。
 

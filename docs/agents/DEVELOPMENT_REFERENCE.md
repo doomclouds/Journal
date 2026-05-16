@@ -21,6 +21,7 @@
 - Harness Core service/planner/audit: `JournalHarnessService.cs`, `JournalHarnessPlanner.cs`, `JournalHarnessToolCollector.cs`, `JournalHarnessOperationExecutor.cs`, `JournalHarnessAuditStore.cs`.
 - History storage/indexing: `JournalVersionStore.cs`, `EntryWritePipeline.cs`, `JournalIndexStore.cs`, `JournalIndexingService.cs`.
 - History service/API composition: `src/Journal.Infrastructure/Today/JournalHistoryService.cs`, `src/Journal.Api/Program.cs`.
+- Anniversary source model/store/service: `src/Journal.Api/Models/JournalAnniversaryModels.cs`, `src/Journal.Api/Services/JournalAnniversaryStore.cs`, `src/Journal.Api/Services/JournalAnniversaryService.cs`.
 - JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, editor request/state records.
 - JMF parse/validate/compose: `JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, `JmfMarkdownComposer.cs`.
 - Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.
@@ -30,7 +31,7 @@
 - LLM settings UI: `apps/desktop/src/LlmSettingsPanel.tsx`.
 - AI audit workbench UI: `apps/desktop/src/AuditWorkbench.tsx`.
 - History workbench UI: `apps/desktop/src/HistoryWorkbench.tsx`.
-- Same-day anniversary workbench UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
+- Memory corridor UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
 - API client/contracts: `apps/desktop/src/api.ts`.
 - Windows release workflow: `.github/workflows/release-windows.yml`.
 
@@ -52,6 +53,7 @@ dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JmfMarkdownParser
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalAiSettingsTests|JournalAiGenerationServiceTests|OpenAiCompatibleJournalAiProviderTests|TodayJournalEndpointTests"
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalVersionStoreTests|JournalIndexStoreTests|JournalIndexingServiceTests|EntryWritePipelineTests|JournalHistoryServiceTests|TodayJournalEndpointTests"
 dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalDataExportServiceTests|JournalDataImportServiceTests|TodayJournalEndpointTests"
+dotnet test tests/Journal.Tests/Journal.Tests.csproj --filter "JournalAnniversary|JournalIndexStoreTests|JournalHistoryServiceTests|JournalDataImportServiceTests|JournalDataExportServiceTests"
 ```
 
 Focused frontend checks:
@@ -60,6 +62,7 @@ Focused frontend checks:
 npm test --prefix apps/desktop -- App.test.tsx
 npm test --prefix apps/desktop -- HistoryWorkbench.test.tsx
 npm test --prefix apps/desktop -- AnniversaryWheelWorkbench.test.tsx
+npm test --prefix apps/desktop -- AnniversaryWheelWorkbench.test.tsx App.test.tsx
 ```
 
 Development run:
@@ -100,6 +103,7 @@ entries/yyyy/MM/yyyy-MM-dd.md
 .journal/audit/yyyy/MM/yyyy-MM-dd/<runId>.json
 .journal/versions/yyyy/MM/yyyy-MM-dd/<versionId>.md
 .journal/versions/yyyy/MM/yyyy-MM-dd/<versionId>.meta.json
+.journal/anniversaries/anniversaries.json
 .journal/index/journal.db
 .journal/settings/ai-providers.json
 .journal/exports/Journal-Export-*.zip
