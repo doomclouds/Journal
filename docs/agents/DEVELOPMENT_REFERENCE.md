@@ -21,7 +21,7 @@
 - Harness Core service/planner/audit: `JournalHarnessService.cs`, `JournalHarnessPlanner.cs`, `JournalHarnessToolCollector.cs`, `JournalHarnessOperationExecutor.cs`, `JournalHarnessAuditStore.cs`.
 - History storage/indexing: `JournalVersionStore.cs`, `EntryWritePipeline.cs`, `JournalIndexStore.cs`, `JournalIndexingService.cs`.
 - History service/API composition: `src/Journal.Infrastructure/Today/JournalHistoryService.cs`, `src/Journal.Api/Program.cs`.
-- Anniversary source model/store/service: `src/Journal.Api/Models/JournalAnniversaryModels.cs`, `src/Journal.Api/Services/JournalAnniversaryStore.cs`, `src/Journal.Api/Services/JournalAnniversaryService.cs`.
+- Anniversary source model/store/service: `src/Journal.Domain/Entries/JournalAnniversaryModels.cs`, `src/Journal.Infrastructure/Storage/JournalAnniversaryStore.cs`, `src/Journal.Infrastructure/Today/JournalAnniversaryService.cs`.
 - JMF editor structure: `src/Journal.Domain/Entries/JmfSectionCatalog.cs` plus `JmfSection*`, `JmfDocument`, `JmfValidation*`, editor request/state records.
 - JMF parse/validate/compose: `JmfMarkdownParser.cs`, `JmfMarkdownValidator.cs`, `JmfMarkdownComposer.cs`.
 - Local file layout: `src/Journal.Infrastructure/Storage/LocalJournalPaths.cs`.

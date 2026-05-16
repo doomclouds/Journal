@@ -200,6 +200,12 @@ public sealed class JournalAnniversaryService
                 throw new JournalAnniversaryStateConflictException("next-year note is not pending.");
             }
 
+            var targetDate = ParseTargetDate(note.TargetDate);
+            if (targetDate > _clock.Today)
+            {
+                throw new JournalAnniversaryStateConflictException("next-year note target date has not arrived.");
+            }
+
             var now = _clock.Now;
             var rawInputId = CreateAnniversaryRawInputId(note.Id);
             var rawInput = await FindExistingRawInputAsync(
@@ -367,6 +373,21 @@ public sealed class JournalAnniversaryService
 
     private static string CreateAnniversaryRawInputId(string noteId) =>
         $"raw-anniversary-{noteId}";
+
+    private static DateOnly ParseTargetDate(string targetDate)
+    {
+        if (!DateOnly.TryParseExact(
+            targetDate,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed))
+        {
+            throw new JournalAnniversaryStateConflictException("next-year note target date is invalid.");
+        }
+
+        return parsed;
+    }
 
     private string ResolveNextTargetDate(string monthDay)
     {

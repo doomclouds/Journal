@@ -1,3 +1,4 @@
+using System.Globalization;
 using Journal.Domain.Entries;
 using Journal.Infrastructure.Clock;
 using Journal.Infrastructure.Storage;
@@ -122,13 +123,38 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("明年检查 Journal 是否进入日常。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
+        var targetDate = TargetDate(note);
+        var targetService = CreateSubject(workspace.Root, targetDate, TargetNow(targetDate));
 
-        var result = await service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
+        var result = await targetService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
 
         Assert.Equal(JournalNextYearNoteStatus.Adopted, Assert.Single(result.Anniversary.NextYearNotes).Status);
         Assert.StartsWith("raw-", result.RawInput.Id, StringComparison.Ordinal);
-        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
+        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(targetDate), CancellationToken.None);
         Assert.Contains(rawInputs, raw => raw.Text.Contains("明年检查 Journal", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AdoptNextYearNoteAsync_BeforeTargetDateThrowsAndKeepsNotePending()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        var service = CreateSubject(workspace.Root);
+        var item = await service.SaveAsync(CreateRequest("05-16"), CancellationToken.None);
+        var withNote = await service.AddNextYearNoteAsync(
+            item.Id,
+            new JournalNextYearNoteCreateRequest("这句话只能明年再带回今天。"),
+            CancellationToken.None);
+        var note = Assert.Single(withNote.NextYearNotes);
+
+        var exception = await Assert.ThrowsAsync<JournalAnniversaryStateConflictException>(
+            () => service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None));
+
+        Assert.Contains("target date has not arrived", exception.Message, StringComparison.Ordinal);
+        var current = Assert.Single(await service.ListAsync(CancellationToken.None));
+        Assert.Equal(JournalNextYearNoteStatus.Pending, Assert.Single(current.NextYearNotes).Status);
+        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
+        Assert.Empty(rawInputs);
     }
 
     [Fact]
@@ -143,13 +169,15 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("明年只应该进入 raw 一次。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
+        var targetDate = TargetDate(note);
+        var targetService = CreateSubject(workspace.Root, targetDate, TargetNow(targetDate));
 
-        var first = await service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
-        var second = await service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
+        var first = await targetService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
+        var second = await targetService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
 
         Assert.Equal(JournalNextYearNoteStatus.Adopted, Assert.Single(second.Anniversary.NextYearNotes).Status);
         Assert.Equal(first.RawInput.Id, second.RawInput.Id);
-        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
+        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(targetDate), CancellationToken.None);
         Assert.Single(rawInputs, raw =>
             raw.Id == first.RawInput.Id
             && raw.Text == "明年只应该进入 raw 一次。");
@@ -167,18 +195,21 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("第二天重复点击也不应跨天复制。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
-        var first = await service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
+        var targetDate = TargetDate(note);
+        var targetService = CreateSubject(workspace.Root, targetDate, TargetNow(targetDate));
+        var first = await targetService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
+        var secondDate = targetDate.AddDays(1);
         var nextDayService = CreateSubject(
             workspace.Root,
-            new DateOnly(2026, 5, 17),
-            DateTimeOffset.Parse("2026-05-17T10:00:00+08:00"));
+            secondDate,
+            TargetNow(secondDate));
 
         var second = await nextDayService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
 
         Assert.Equal(first.RawInput.Id, second.RawInput.Id);
-        Assert.Equal(JournalDate.From(FixedDay), second.RawInput.Date);
-        var firstDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
-        var secondDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(new DateOnly(2026, 5, 17)), CancellationToken.None);
+        Assert.Equal(JournalDate.From(targetDate), second.RawInput.Date);
+        var firstDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(targetDate), CancellationToken.None);
+        var secondDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(secondDate), CancellationToken.None);
         Assert.Single(firstDayRawInputs, raw => raw.Id == first.RawInput.Id);
         Assert.Empty(secondDayRawInputs);
     }
@@ -195,28 +226,30 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("昨天 raw 已落盘，今天只补状态。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
+        var targetDate = TargetDate(note);
         var rawInputId = $"raw-anniversary-{note.Id}";
         await new RawInputStore(paths).AppendAsync(
             new RawInput(
                 rawInputId,
-                JournalDate.From(FixedDay),
-                FixedNow,
+                JournalDate.From(targetDate),
+                TargetNow(targetDate),
                 "anniversary-note",
                 note.Text),
             CancellationToken.None);
+        var secondDate = targetDate.AddDays(1);
         var nextDayService = CreateSubject(
             workspace.Root,
-            new DateOnly(2026, 5, 17),
-            DateTimeOffset.Parse("2026-05-17T10:00:00+08:00"));
+            secondDate,
+            TargetNow(secondDate));
 
         var result = await nextDayService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
 
         var adoptedNote = Assert.Single(result.Anniversary.NextYearNotes);
         Assert.Equal(JournalNextYearNoteStatus.Adopted, adoptedNote.Status);
         Assert.Equal(rawInputId, adoptedNote.RawInputId);
-        Assert.Equal(JournalDate.From(FixedDay), result.RawInput.Date);
-        var firstDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
-        var secondDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(new DateOnly(2026, 5, 17)), CancellationToken.None);
+        Assert.Equal(JournalDate.From(targetDate), result.RawInput.Date);
+        var firstDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(targetDate), CancellationToken.None);
+        var secondDayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(secondDate), CancellationToken.None);
         Assert.Single(firstDayRawInputs, raw => raw.Id == rawInputId);
         Assert.Empty(secondDayRawInputs);
     }
@@ -233,25 +266,26 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("窗口外旧 raw 不应阻断今天采纳。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
+        var targetDate = TargetDate(note);
         var rawInputId = $"raw-anniversary-{note.Id}";
         await new RawInputStore(paths).AppendAsync(
             new RawInput(
                 rawInputId,
-                JournalDate.From(FixedDay),
-                FixedNow,
+                JournalDate.From(targetDate),
+                TargetNow(targetDate),
                 "text",
                 note.Text),
             CancellationToken.None);
-        var today = new DateOnly(2026, 5, 24);
+        var today = targetDate.AddDays(8);
         var todayService = CreateSubject(
             workspace.Root,
             today,
-            DateTimeOffset.Parse("2026-05-24T10:00:00+08:00"));
+            TargetNow(today));
 
         var result = await todayService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
 
         Assert.Equal(JournalDate.From(today), result.RawInput.Date);
-        var oldRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
+        var oldRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(targetDate), CancellationToken.None);
         var todayRawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(today), CancellationToken.None);
         Assert.Single(oldRawInputs, raw => raw.Id == rawInputId && raw.Source == "text");
         Assert.Single(todayRawInputs, raw =>
@@ -272,23 +306,25 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("已先落盘的明年提醒。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
+        var targetDate = TargetDate(note);
         var rawInputId = $"raw-anniversary-{note.Id}";
         await new RawInputStore(paths).AppendAsync(
             new RawInput(
                 rawInputId,
-                JournalDate.From(FixedDay),
-                FixedNow,
+                JournalDate.From(targetDate),
+                TargetNow(targetDate),
                 "anniversary-note",
                 note.Text),
             CancellationToken.None);
+        var targetService = CreateSubject(workspace.Root, targetDate, TargetNow(targetDate));
 
-        var result = await service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
+        var result = await targetService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None);
 
         var adoptedNote = Assert.Single(result.Anniversary.NextYearNotes);
         Assert.Equal(JournalNextYearNoteStatus.Adopted, adoptedNote.Status);
         Assert.Equal(rawInputId, adoptedNote.RawInputId);
         Assert.Equal(rawInputId, result.RawInput.Id);
-        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(FixedDay), CancellationToken.None);
+        var rawInputs = await new RawInputStore(paths).ReadAsync(JournalDate.From(targetDate), CancellationToken.None);
         Assert.Single(rawInputs, raw => raw.Id == rawInputId && raw.Text == note.Text);
     }
 
@@ -304,26 +340,34 @@ public sealed class JournalAnniversaryServiceTests
             new JournalNextYearNoteCreateRequest("应该保持一致的提醒。"),
             CancellationToken.None);
         var note = Assert.Single(withNote.NextYearNotes);
+        var targetDate = TargetDate(note);
         var rawInputId = $"raw-anniversary-{note.Id}";
         await new RawInputStore(paths).AppendAsync(
             new RawInput(
                 rawInputId,
-                JournalDate.From(FixedDay),
-                FixedNow,
+                JournalDate.From(targetDate),
+                TargetNow(targetDate),
                 "text",
                 note.Text),
             CancellationToken.None);
+        var targetService = CreateSubject(workspace.Root, targetDate, TargetNow(targetDate));
 
         var exception = await Assert.ThrowsAsync<JournalAnniversaryStateConflictException>(
-            () => service.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None));
+            () => targetService.AdoptNextYearNoteAsync(item.Id, note.Id, CancellationToken.None));
 
         Assert.Contains("anniversary raw input is inconsistent", exception.Message, StringComparison.Ordinal);
-        var current = Assert.Single(await service.ListAsync(CancellationToken.None));
+        var current = Assert.Single(await targetService.ListAsync(CancellationToken.None));
         Assert.Equal(JournalNextYearNoteStatus.Pending, Assert.Single(current.NextYearNotes).Status);
     }
 
     private static JournalAnniversarySaveRequest CreateRequest(string monthDay) =>
         new(monthDay, "纪念日", "self-reminder", null, "说明", true);
+
+    private static DateOnly TargetDate(JournalNextYearNote note) =>
+        DateOnly.ParseExact(note.TargetDate, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset TargetNow(DateOnly date) =>
+        new(date.Year, date.Month, date.Day, 10, 0, 0, TimeSpan.FromHours(8));
 
     private static JournalAnniversaryService CreateSubject(
         string root,
