@@ -1,7 +1,12 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AnniversaryWheelWorkbench } from "./AnniversaryWheelWorkbench";
-import type { JournalAnniversaryWheelResult, JournalEntryVersion, JournalHistoryEntryDetail } from "./api";
+import type {
+  JournalAnniversaryItem,
+  JournalAnniversaryWheelResult,
+  JournalEntryVersion,
+  JournalHistoryEntryDetail
+} from "./api";
 
 const date2026 = {
   value: "2026-05-14",
@@ -29,6 +34,11 @@ const result: JournalAnniversaryWheelResult = {
       mood: "期待",
       rawInputCount: 2,
       versionCount: 1,
+      entryUpdatedAt: "2026-05-14T08:30:00+08:00",
+      cardPreview: {
+        title: "年轮卡片标题",
+        lines: ["卡片第一行", "卡片第二行"]
+      },
       attentionReason: null,
       hits: [{
         sourceType: "section",
@@ -44,6 +54,11 @@ const result: JournalAnniversaryWheelResult = {
       mood: null,
       rawInputCount: 1,
       versionCount: 0,
+      entryUpdatedAt: null,
+      cardPreview: {
+        title: "去年卡片",
+        lines: ["去年卡片摘要"]
+      },
       attentionReason: null,
       hits: [{
         sourceType: "raw-input",
@@ -54,6 +69,65 @@ const result: JournalAnniversaryWheelResult = {
       }]
     }
   ]
+};
+
+const savedAnniversary: JournalAnniversaryItem = {
+  id: "anniversary-1",
+  monthDay: "05-14",
+  type: "self-reminder",
+  title: "常看的这一天",
+  description: "每年都回来看看",
+  originDate: "2025-05-14",
+  pinned: true,
+  createdAt: "2026-05-14T09:00:00+08:00",
+  updatedAt: "2026-05-14T09:00:00+08:00",
+  nextYearNotes: [{
+    id: "note-1",
+    targetDate: "2027-05-14",
+    text: "明年提醒",
+    status: "pending",
+    createdAt: "2026-05-14T09:05:00+08:00",
+    adoptedAt: null,
+    rawInputId: null
+  }]
+};
+
+const yearEndAnniversary: JournalAnniversaryItem = {
+  ...savedAnniversary,
+  id: "anniversary-12-31",
+  monthDay: "12-31",
+  type: "gratitude",
+  title: "年末常看日",
+  description: "年末回来复盘",
+  originDate: "2025-12-31",
+  nextYearNotes: []
+};
+
+const dueAnniversary: JournalAnniversaryItem = {
+  ...savedAnniversary,
+  nextYearNotes: savedAnniversary.nextYearNotes.map(note => ({
+    ...note,
+    targetDate: "2026-05-01"
+  }))
+};
+
+const secondSameDayAnniversary: JournalAnniversaryItem = {
+  ...savedAnniversary,
+  id: "anniversary-second",
+  type: "growth",
+  title: "第二个同日纪念日",
+  description: "编辑第二个",
+  originDate: "2024-05-14",
+  updatedAt: "2026-05-14T09:30:00+08:00",
+  nextYearNotes: [{
+    id: "note-second",
+    targetDate: "2026-05-01",
+    text: "第二个提醒",
+    status: "pending",
+    createdAt: "2026-05-14T09:35:00+08:00",
+    adoptedAt: null,
+    rawInputId: null
+  }]
 };
 
 const detail: JournalHistoryEntryDetail = {
@@ -81,7 +155,7 @@ afterEach(() => {
 });
 
 describe("AnniversaryWheelWorkbench", () => {
-  test("renders same-day year cards and selected markdown detail", () => {
+  test("renders same-day year cards and timeline previews", () => {
     render(
       <AnniversaryWheelWorkbench
         isBusy={false}
@@ -90,22 +164,26 @@ describe("AnniversaryWheelWorkbench", () => {
         selectedDate="2026-05-14"
         detail={detail}
         versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
         error=""
         onBack={vi.fn()}
         onRefresh={vi.fn()}
         onMonthDayChange={vi.fn()}
         onSelectDate={vi.fn()}
-        onViewVersion={vi.fn()}
-        onClearVersion={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
       />
     );
 
     const preview = screen.getByRole("region", { name: "同日年轮预览" });
+    const years = screen.getByLabelText("同日年份列表");
     expect(preview).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /2026/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /2025/ })).toBeInTheDocument();
-    expect(within(preview).getByText("打磨同日年轮")).toBeInTheDocument();
-    expect(screen.getByText("去年今天只有原始材料")).toBeInTheDocument();
+    expect(within(years).getByRole("button", { name: /2026/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(years).getByRole("button", { name: /2025/ })).toBeInTheDocument();
+    expect(within(preview).getByText("年轮卡片标题")).toBeInTheDocument();
+    expect(within(preview).getByText("卡片第一行")).toBeInTheDocument();
+    expect(screen.getAllByText("去年卡片摘要").length).toBeGreaterThan(0);
   });
 
   test("waits for selected entry detail instead of flashing summary hits", () => {
@@ -117,15 +195,19 @@ describe("AnniversaryWheelWorkbench", () => {
         selectedDate="2026-05-14"
         detail={null}
         versions={[]}
+        anniversaries={[]}
+        anniversaryError=""
         error=""
         onBack={vi.fn()}
         onRefresh={vi.fn()}
         onMonthDayChange={vi.fn()}
         onSelectDate={vi.fn()}
-        onViewVersion={vi.fn()}
-        onClearVersion={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
       />
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-14 日记" }));
 
     const preview = screen.getByRole("region", { name: "同日年轮预览" });
     expect(within(preview).getByLabelText("同日当前日记读取中")).toBeInTheDocument();
@@ -145,13 +227,15 @@ describe("AnniversaryWheelWorkbench", () => {
         selectedDate="2026-05-14"
         detail={detail}
         versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
         error=""
         onBack={vi.fn()}
         onRefresh={vi.fn()}
         onMonthDayChange={onMonthDayChange}
         onSelectDate={onSelectDate}
-        onViewVersion={vi.fn()}
-        onClearVersion={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
       />
     );
 
@@ -160,15 +244,13 @@ describe("AnniversaryWheelWorkbench", () => {
     expect(dateInput).toHaveValue(`${new Date().getFullYear()}-05-14`);
 
     fireEvent.change(dateInput, { target: { value: "2024-02-29" } });
-    fireEvent.click(screen.getByRole("button", { name: /2025/ }));
+    fireEvent.click(within(screen.getByLabelText("同日年份列表")).getByRole("button", { name: /2025/ }));
 
     expect(onMonthDayChange).toHaveBeenCalledWith("02-29");
     expect(onSelectDate).toHaveBeenCalledWith("2025-05-14");
   });
 
-  test("shows selected version preview and can return to current entry", () => {
-    const onClearVersion = vi.fn();
-
+  test("does not render version snapshot actions in the anniversary inspector", () => {
     render(
       <AnniversaryWheelWorkbench
         isBusy={false}
@@ -177,24 +259,25 @@ describe("AnniversaryWheelWorkbench", () => {
         selectedDate="2026-05-14"
         detail={detail}
         versions={[version]}
-        selectedVersionDetail={{ version, markdown: "# Snapshot\n\n历史版本内容" }}
+        anniversaries={[]}
+        anniversaryError=""
         error=""
         onBack={vi.fn()}
         onRefresh={vi.fn()}
         onMonthDayChange={vi.fn()}
         onSelectDate={vi.fn()}
-        onViewVersion={vi.fn()}
-        onClearVersion={onClearVersion}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
       />
     );
 
-    const preview = screen.getByRole("region", { name: "同日年轮预览" });
-    expect(within(preview).getByText("历史版本内容")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /查看当前日记/ }));
-    expect(onClearVersion).toHaveBeenCalledTimes(1);
+    const inspector = screen.getByRole("complementary", { name: "同日年轮详情" });
+    expect(within(inspector).queryByRole("button", { name: /查看版本/ })).not.toBeInTheDocument();
+    expect(within(inspector).queryByText("这一天还没有覆盖前快照。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /恢复版本/ })).not.toBeInTheDocument();
   });
 
-  test("keeps anniversary versions read-only without restore actions", () => {
+  test("renders card preview lines instead of raw hit snippets", () => {
     render(
       <AnniversaryWheelWorkbench
         isBusy={false}
@@ -203,17 +286,637 @@ describe("AnniversaryWheelWorkbench", () => {
         selectedDate="2026-05-14"
         detail={detail}
         versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
         error=""
         onBack={vi.fn()}
         onRefresh={vi.fn()}
         onMonthDayChange={vi.fn()}
         onSelectDate={vi.fn()}
-        onViewVersion={vi.fn()}
-        onClearVersion={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
       />
     );
 
-    expect(screen.getByRole("button", { name: /查看版本/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /恢复版本/ })).not.toBeInTheDocument();
+    const timeline = screen.getByLabelText("同日年份列表");
+    const stageTimeline = screen.getByLabelText("同日年轮时间线");
+    expect(within(timeline).getByText("年轮卡片标题")).toBeInTheDocument();
+    expect(within(stageTimeline).getByText("年轮卡片标题")).toBeInTheDocument();
+    expect(within(timeline).getByText("卡片第一行 / 卡片第二行")).toBeInTheDocument();
+    expect(within(stageTimeline).getByText("卡片第一行")).toBeInTheDocument();
+    expect(within(stageTimeline).getByText("卡片第二行")).toBeInTheDocument();
+    expect(within(stageTimeline).queryByText("- 打磨同日年轮")).not.toBeInTheDocument();
+  });
+
+  test("opens selected date markdown in reading mode and returns to timeline", () => {
+    const onSelectDate = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={onSelectDate}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-14 日记" }));
+
+    const preview = screen.getByRole("region", { name: "同日年轮预览" });
+    expect(onSelectDate).toHaveBeenCalledWith("2026-05-14");
+    expect(within(preview).getByLabelText("同日当前日记内容")).toBeInTheDocument();
+    expect(within(preview).getByText("打磨同日年轮")).toBeInTheDocument();
+    expect(within(preview).queryByText("年轮卡片标题")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回年轮" }));
+
+    expect(within(preview).getByText("年轮卡片标题")).toBeInTheDocument();
+  });
+
+  test("shows entry updated time in reading mode", () => {
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-14 日记" }));
+
+    expect(screen.getByText("最后写入 05/14 08:30")).toBeInTheDocument();
+  });
+
+  test("returns to timeline when changing month day from reading mode", () => {
+    const onMonthDayChange = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary, yearEndAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={onMonthDayChange}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-14 日记" }));
+    expect(screen.getByLabelText("同日当前日记内容")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "2026-12-31" } });
+
+    expect(onMonthDayChange).toHaveBeenCalledWith("12-31");
+    expect(screen.getByLabelText("同日年轮时间线")).toBeInTheDocument();
+    expect(screen.queryByLabelText("同日当前日记内容")).not.toBeInTheDocument();
+  });
+
+  test("returns to timeline when opening a saved anniversary from reading mode", () => {
+    const onMonthDayChange = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary, yearEndAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={onMonthDayChange}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-14 日记" }));
+    expect(screen.getByLabelText("同日当前日记内容")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /年末常看日/ }));
+
+    expect(onMonthDayChange).toHaveBeenCalledWith("12-31");
+    expect(screen.getByLabelText("同日年轮时间线")).toBeInTheDocument();
+    expect(screen.queryByLabelText("同日当前日记内容")).not.toBeInTheDocument();
+  });
+
+  test("shows empty anniversary list until user saves a pinned anniversary", () => {
+    const onSaveAnniversary = vi.fn();
+
+    const { rerender } = render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={onSaveAnniversary}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("还没有保存常看日期。")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("纪念日名称"), { target: { value: "常看的这一天" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存纪念日" }));
+
+    expect(onSaveAnniversary).toHaveBeenCalledWith(null, expect.objectContaining({
+      monthDay: "05-14",
+      title: "常看的这一天",
+      type: "self-reminder",
+      originDate: "2026-05-14",
+      pinned: true
+    }));
+
+    rerender(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={onSaveAnniversary}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("还没有保存常看日期。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /常看的这一天/ })).toBeInTheDocument();
+  });
+
+  test("keeps anniversary form drafts when selecting another year", () => {
+    const { rerender } = render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    const titleInput = screen.getByLabelText("纪念日名称");
+    const noteInput = screen.getByLabelText("写给下一年同一天");
+    fireEvent.change(titleInput, { target: { value: "未保存标题" } });
+    fireEvent.change(noteInput, { target: { value: "未保存提醒" } });
+    fireEvent.click(within(screen.getByLabelText("同日年份列表")).getByRole("button", { name: /2025/ }));
+
+    rerender(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2025-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(titleInput).toHaveValue("未保存标题");
+    expect(noteInput).toHaveValue("未保存提醒");
+  });
+
+  test("clears next-year note only after a successful save", async () => {
+    const onAddNextYearNote = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={onAddNextYearNote}
+      />
+    );
+
+    const noteInput = screen.getByLabelText("写给下一年同一天");
+    fireEvent.change(noteInput, { target: { value: "明年继续复盘" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存下一年提醒" }));
+
+    expect(onAddNextYearNote).toHaveBeenCalledWith("anniversary-1", "明年继续复盘");
+    await waitFor(() => expect(noteInput).toHaveValue(""));
+  });
+
+  test("does not treat an in-flight next-year note submission as success", () => {
+    const onAddNextYearNote = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        isNextYearNoteSaving={true}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={onAddNextYearNote}
+      />
+    );
+
+    const noteInput = screen.getByLabelText("写给下一年同一天");
+    fireEvent.change(noteInput, { target: { value: "提交中别清空" } });
+    fireEvent.submit(noteInput.closest("form") as HTMLFormElement);
+
+    expect(onAddNextYearNote).not.toHaveBeenCalled();
+    expect(noteInput).toHaveValue("提交中别清空");
+  });
+
+  test("renders adopt action only for due pending next-year notes", () => {
+    const onAdoptNextYearNote = vi.fn();
+    const onDismissNextYearNote = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[dueAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={onAdoptNextYearNote}
+        onDismissNextYearNote={onDismissNextYearNote}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "采纳提醒" }));
+    fireEvent.click(screen.getByRole("button", { name: "忽略提醒" }));
+
+    expect(onAdoptNextYearNote).toHaveBeenCalledWith("anniversary-1", "note-1");
+    expect(onDismissNextYearNote).toHaveBeenCalledWith("anniversary-1", "note-1");
+  });
+
+  test("hides adopt action for future pending next-year notes", () => {
+    const onAdoptNextYearNote = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={onAdoptNextYearNote}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("待处理")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "采纳提醒" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "忽略提醒" })).toBeInTheDocument();
+  });
+
+  test("selects a specific saved anniversary when multiple share the same month day", () => {
+    const onSaveAnniversary = vi.fn();
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary, secondSameDayAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={onSaveAnniversary}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /第二个同日纪念日/ }));
+
+    expect(screen.getByLabelText("纪念日名称")).toHaveValue("第二个同日纪念日");
+    expect(screen.getByLabelText("说明")).toHaveValue("编辑第二个");
+    expect(screen.getByText("第二个提醒")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存纪念日" }));
+
+    expect(onSaveAnniversary).toHaveBeenCalledWith("anniversary-second", expect.objectContaining({
+      title: "第二个同日纪念日",
+      type: "growth"
+    }));
+  });
+
+  test("keeps anniversary form draft when selected anniversary refreshes", () => {
+    const refreshedAnniversary: JournalAnniversaryItem = {
+      ...savedAnniversary,
+      title: "服务端刷新后的标题",
+      description: "服务端刷新后的说明",
+      updatedAt: "2026-05-14T10:00:00+08:00"
+    };
+
+    const { rerender } = render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    const titleInput = screen.getByLabelText("纪念日名称");
+    const descriptionInput = screen.getByLabelText("说明");
+    fireEvent.change(titleInput, { target: { value: "未保存资料标题" } });
+    fireEvent.change(descriptionInput, { target: { value: "未保存资料说明" } });
+
+    rerender(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[refreshedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(titleInput).toHaveValue("未保存资料标题");
+    expect(descriptionInput).toHaveValue("未保存资料说明");
+  });
+
+  test("keeps next-year note draft when note actions refresh the selected anniversary", () => {
+    const refreshedAnniversary: JournalAnniversaryItem = {
+      ...savedAnniversary,
+      updatedAt: "2026-05-14T10:00:00+08:00",
+      nextYearNotes: savedAnniversary.nextYearNotes.map(note => ({
+        ...note,
+        status: "adopted",
+        adoptedAt: "2026-05-14T10:00:00+08:00",
+        rawInputId: "raw-adopted"
+      }))
+    };
+
+    const { rerender } = render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    const noteInput = screen.getByLabelText("写给下一年同一天");
+    fireEvent.change(noteInput, { target: { value: "新的未保存提醒" } });
+
+    rerender(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[refreshedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(noteInput).toHaveValue("新的未保存提醒");
+  });
+
+  test("renders next-year note statuses in Chinese", () => {
+    const anniversaryWithStatuses: JournalAnniversaryItem = {
+      ...savedAnniversary,
+      nextYearNotes: [
+        savedAnniversary.nextYearNotes[0],
+        {
+          ...savedAnniversary.nextYearNotes[0],
+          id: "note-adopted",
+          text: "已经采纳",
+          status: "adopted",
+          adoptedAt: "2026-05-14T10:00:00+08:00",
+          rawInputId: "raw-adopted"
+        },
+        {
+          ...savedAnniversary.nextYearNotes[0],
+          id: "note-dismissed",
+          text: "已经忽略",
+          status: "dismissed"
+        }
+      ]
+    };
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[anniversaryWithStatuses]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+        onAdoptNextYearNote={vi.fn()}
+        onDismissNextYearNote={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("待处理")).toBeInTheDocument();
+    expect(screen.getByText("已采纳")).toBeInTheDocument();
+    expect(screen.getByText("已忽略")).toBeInTheDocument();
+  });
+
+  test("keeps next-year note text and shows an error when save fails", async () => {
+    const onAddNextYearNote = vi.fn().mockRejectedValue(new Error("保存提醒失败"));
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={onAddNextYearNote}
+      />
+    );
+
+    const noteInput = screen.getByLabelText("写给下一年同一天");
+    fireEvent.change(noteInput, { target: { value: "失败也不能丢" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存下一年提醒" }));
+
+    await screen.findByRole("alert");
+    expect(screen.getByText("保存提醒失败")).toBeInTheDocument();
+    expect(noteInput).toHaveValue("失败也不能丢");
   });
 });

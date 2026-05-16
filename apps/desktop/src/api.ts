@@ -256,12 +256,19 @@ export type JournalHistoryHit = {
   snippet: string;
 };
 
+export type JournalHistoryCardPreview = {
+  title: string;
+  lines: string[];
+};
+
 export type JournalHistoryEntrySummary = {
   date: JournalDate;
   status: JournalStatus;
   mood: string | null;
   rawInputCount: number;
   versionCount: number;
+  entryUpdatedAt: string | null;
+  cardPreview: JournalHistoryCardPreview;
   hits: JournalHistoryHit[];
   attentionReason: string | null;
 };
@@ -273,6 +280,45 @@ export type JournalHistorySearchResult = {
 export type JournalAnniversaryWheelResult = {
   monthDay: string;
   items: JournalHistoryEntrySummary[];
+};
+
+export type JournalNextYearNoteStatus = "pending" | "adopted" | "dismissed";
+
+export type JournalNextYearNote = {
+  id: string;
+  targetDate: string;
+  text: string;
+  status: JournalNextYearNoteStatus;
+  createdAt: string;
+  adoptedAt: string | null;
+  rawInputId: string | null;
+};
+
+export type JournalAnniversaryItem = {
+  id: string;
+  monthDay: string;
+  type: string;
+  title: string;
+  description: string;
+  originDate: string | null;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  nextYearNotes: JournalNextYearNote[];
+};
+
+export type JournalAnniversarySaveRequest = {
+  monthDay: string;
+  type: string;
+  title: string;
+  description: string;
+  originDate: string | null;
+  pinned: boolean;
+};
+
+export type JournalNextYearNoteAdoptResult = {
+  anniversary: JournalAnniversaryItem;
+  rawInput: RawInput | null;
 };
 
 export type JournalEntryVersion = {
@@ -572,6 +618,72 @@ export function getJournalAnniversaryWheel(monthDay: string, limit = 50): Promis
   search.set("limit", String(limit));
   return requestJson<JournalAnniversaryWheelResult>(
     `/journal/history/anniversary/${encodeURIComponent(monthDay)}?${search.toString()}`
+  );
+}
+
+export function getJournalAnniversaries(monthDay?: string): Promise<JournalAnniversaryItem[]> {
+  return requestJson<JournalAnniversaryItem[]>(
+    monthDay
+      ? `/journal/anniversaries/${encodeURIComponent(monthDay)}`
+      : "/journal/anniversaries"
+  );
+}
+
+export function saveJournalAnniversary(
+  request: JournalAnniversarySaveRequest
+): Promise<JournalAnniversaryItem> {
+  return requestJson<JournalAnniversaryItem>("/journal/anniversaries", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+}
+
+export function updateJournalAnniversary(
+  id: string,
+  request: JournalAnniversarySaveRequest
+): Promise<JournalAnniversaryItem> {
+  return requestJson<JournalAnniversaryItem>(`/journal/anniversaries/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+}
+
+export function addJournalNextYearNote(id: string, text: string): Promise<JournalAnniversaryItem> {
+  return requestJson<JournalAnniversaryItem>(
+    `/journal/anniversaries/${encodeURIComponent(id)}/next-year-notes`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text })
+    }
+  );
+}
+
+export function adoptJournalNextYearNote(
+  anniversaryId: string,
+  noteId: string
+): Promise<JournalNextYearNoteAdoptResult> {
+  return requestJson<JournalNextYearNoteAdoptResult>(
+    `/journal/anniversaries/${encodeURIComponent(anniversaryId)}/next-year-notes/${encodeURIComponent(noteId)}/adopt`,
+    { method: "POST" }
+  );
+}
+
+export function dismissJournalNextYearNote(
+  anniversaryId: string,
+  noteId: string
+): Promise<JournalAnniversaryItem> {
+  return requestJson<JournalAnniversaryItem>(
+    `/journal/anniversaries/${encodeURIComponent(anniversaryId)}/next-year-notes/${encodeURIComponent(noteId)}/dismiss`,
+    { method: "POST" }
   );
 }
 

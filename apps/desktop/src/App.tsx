@@ -2,7 +2,10 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { DatabaseBackup, FileText, FolderOpen, History, RefreshCw, Save, SendHorizontal, X } from "lucide-react";
 import {
   activateAiSettings,
+  addJournalNextYearNote,
+  adoptJournalNextYearNote,
   confirmTodayDraft,
+  dismissJournalNextYearNote,
   exportJournalData,
   frontendBuildInfo,
   getAiSettings,
@@ -11,6 +14,7 @@ import {
   initializeApiBaseUrlFromDesktop,
   importJournalData,
   getJournalAudit,
+  getJournalAnniversaries,
   getJournalAnniversaryWheel,
   getJournalDataSummary,
   getJournalHistory,
@@ -22,9 +26,11 @@ import {
   revealAiProviderApiKey,
   restoreJournalHistoryVersionDraft,
   saveBlockDraft,
+  saveJournalAnniversary,
   startAppendHarnessRun,
   startReorganizeHarnessRun,
   testAiProvider,
+  updateJournalAnniversary,
   type AppInfo,
   type AiSettingsActivationResult,
   type AiSettingsSaveRequest,
@@ -35,6 +41,8 @@ import {
   type JournalHarnessAuditRun,
   type JournalHarnessRunEvent,
   type JournalAnniversaryWheelResult,
+  type JournalAnniversaryItem,
+  type JournalAnniversarySaveRequest,
   type JournalDataExportManifest,
   type JournalDataExportResult,
   type JournalDataImportResult,
@@ -215,6 +223,11 @@ export default function App() {
   const auditRequestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
   const historyVersionRequestIdRef = useRef(0);
+  const anniversarySaveRequestIdRef = useRef(0);
+  const nextYearNoteRequestIdRef = useRef(0);
+  const anniversaryMonthDayRef = useRef("");
+  const anniversarySaveInFlightRef = useRef(false);
+  const nextYearNoteInFlightRef = useRef(false);
   const dataSummaryRequestIdRef = useRef(0);
   const aboutRequestIdRef = useRef(0);
   const aboutInFlightRef = useRef<Promise<AppInfo> | null>(null);
@@ -268,6 +281,11 @@ export default function App() {
   const [historyEntries, setHistoryEntries] = useState<JournalHistoryEntrySummary[]>([]);
   const [anniversaryMonthDay, setAnniversaryMonthDay] = useState("");
   const [anniversaryResult, setAnniversaryResult] = useState<JournalAnniversaryWheelResult | null>(null);
+  const [anniversaryItems, setAnniversaryItems] = useState<JournalAnniversaryItem[]>([]);
+  const [currentAnniversaryItems, setCurrentAnniversaryItems] = useState<JournalAnniversaryItem[]>([]);
+  const [anniversaryError, setAnniversaryError] = useState("");
+  const [isAnniversarySaving, setIsAnniversarySaving] = useState(false);
+  const [isNextYearNoteSaving, setIsNextYearNoteSaving] = useState(false);
   const [historyDetail, setHistoryDetail] = useState<JournalHistoryEntryDetail | null>(null);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
   const [historyVersions, setHistoryVersions] = useState<JournalEntryVersion[]>([]);
@@ -523,8 +541,15 @@ export default function App() {
   const inputCount = today?.rawInputs.length ?? 0;
   const isInitialLoading = loadState === "loading";
   const isBusy = isInitialLoading || isSubmitting;
+  const anniversaryWorkbenchItems = [
+    ...currentAnniversaryItems,
+    ...anniversaryItems.filter(
+      item => !currentAnniversaryItems.some(current => current.id === item.id)
+    )
+  ];
   const isDataBusy = isDataExporting || isDataImporting;
-  const isDataBackupEntryDisabled = isBusy || isSettingsSubmitting || isDataBusy;
+  const isAnniversaryMutationBusy = isAnniversarySaving || isNextYearNoteSaving;
+  const isDataBackupEntryDisabled = isBusy || isSettingsSubmitting || isDataBusy || isAnniversaryMutationBusy;
   const isDataBackupActionDisabled = isDataBackupEntryDisabled;
   dataBackupEntryDisabledRef.current = isDataBackupEntryDisabled;
   const editableSectionCount = editor?.sections.filter(section => section.isEditableInBlockMode).length ?? 0;
@@ -804,15 +829,27 @@ export default function App() {
     auditRequestIdRef.current += 1;
     historyRequestIdRef.current += 1;
     historyVersionRequestIdRef.current += 1;
+    anniversarySaveRequestIdRef.current += 1;
+    nextYearNoteRequestIdRef.current += 1;
+    anniversaryMonthDayRef.current = "";
     aboutRequestIdRef.current += 1;
     aboutInFlightRef.current = null;
+    anniversarySaveInFlightRef.current = false;
+    nextYearNoteInFlightRef.current = false;
     harnessEventsRef.current?.close();
     harnessEventsRef.current = null;
     setIsSubmitting(false);
     setIsSettingsSubmitting(false);
+    setIsAnniversarySaving(false);
+    setIsNextYearNoteSaving(false);
   }
 
   function resetWorkspaceStateAfterDataImport() {
+    anniversarySaveRequestIdRef.current += 1;
+    nextYearNoteRequestIdRef.current += 1;
+    anniversaryMonthDayRef.current = "";
+    anniversarySaveInFlightRef.current = false;
+    nextYearNoteInFlightRef.current = false;
     setWorkspaceMode("today");
     setWorkbenchView("assistant");
     setJournalCorridorMenu(null);
@@ -824,6 +861,11 @@ export default function App() {
     setHistoryEntries([]);
     setAnniversaryMonthDay("");
     setAnniversaryResult(null);
+    setAnniversaryItems([]);
+    setCurrentAnniversaryItems([]);
+    setAnniversaryError("");
+    setIsAnniversarySaving(false);
+    setIsNextYearNoteSaving(false);
     setHistoryDetail(null);
     setHistorySelectedDate("");
     setHistoryVersions([]);
@@ -1173,18 +1215,43 @@ export default function App() {
     const historyRequestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = historyRequestId;
     setHistoryError("");
+    setAnniversaryError("");
     setAnniversaryResult(null);
+    setCurrentAnniversaryItems([]);
+    setAnniversaryItems([]);
     setHistorySelectedDate("");
     setHistoryDetail(null);
     setHistoryVersions([]);
     setHistoryVersionDetail(null);
 
     try {
-      const result = await getJournalAnniversaryWheel(monthDay, 50);
+      const [wheelOutcome, anniversariesOutcome] = await Promise.allSettled([
+        getJournalAnniversaryWheel(monthDay, 50),
+        Promise.all([
+          getJournalAnniversaries(monthDay),
+          getJournalAnniversaries()
+        ])
+      ]);
       if (historyRequestId !== historyRequestIdRef.current) {
         return;
       }
 
+      if (anniversariesOutcome.status === "fulfilled") {
+        setCurrentAnniversaryItems(anniversariesOutcome.value[0]);
+        setAnniversaryItems(anniversariesOutcome.value[1]);
+        setAnniversaryError("");
+      } else {
+        setCurrentAnniversaryItems([]);
+        setAnniversaryItems([]);
+        setAnniversaryError(getErrorMessage(anniversariesOutcome.reason));
+      }
+
+      if (wheelOutcome.status === "rejected") {
+        setHistoryError(getErrorMessage(wheelOutcome.reason));
+        return;
+      }
+
+      const result = wheelOutcome.value;
       const selectedStillExists = result.items.some(item => item.date.isoDate === historySelectedDate);
       const selectedDate = selectedStillExists
         ? historySelectedDate
@@ -1199,6 +1266,8 @@ export default function App() {
       await loadHistoryEntryForRequest(selectedDate, historyRequestId);
     } catch (caught) {
       if (historyRequestId === historyRequestIdRef.current) {
+        setCurrentAnniversaryItems([]);
+        setAnniversaryItems([]);
         setHistoryError(getErrorMessage(caught));
       }
     }
@@ -1233,6 +1302,7 @@ export default function App() {
     resetPendingRegenerateDraft();
     setValidationError("");
     setHistoryViewMode("anniversary");
+    anniversaryMonthDayRef.current = monthDay;
     setAnniversaryMonthDay(monthDay);
     setWorkspaceMode("history");
     await refreshAnniversary(monthDay);
@@ -1249,6 +1319,7 @@ export default function App() {
   }
 
   function handleAnniversaryMonthDayChange(monthDay: string) {
+    anniversaryMonthDayRef.current = monthDay;
     setAnniversaryMonthDay(monthDay);
     if (isValidAnniversaryMonthDay(monthDay)) {
       void refreshAnniversary(monthDay);
@@ -1257,12 +1328,174 @@ export default function App() {
 
     historyRequestIdRef.current += 1;
     historyVersionRequestIdRef.current += 1;
+    anniversarySaveRequestIdRef.current += 1;
+    nextYearNoteRequestIdRef.current += 1;
+    anniversarySaveInFlightRef.current = false;
+    nextYearNoteInFlightRef.current = false;
+    setIsAnniversarySaving(false);
+    setIsNextYearNoteSaving(false);
     setAnniversaryResult(null);
+    setAnniversaryItems([]);
+    setCurrentAnniversaryItems([]);
+    setAnniversaryError("");
     setHistorySelectedDate("");
     setHistoryDetail(null);
     setHistoryVersions([]);
     setHistoryVersionDetail(null);
     setHistoryError("monthDay is invalid");
+  }
+
+  async function handleSaveAnniversary(
+    id: string | null,
+    request: JournalAnniversarySaveRequest
+  ) {
+    if (anniversarySaveInFlightRef.current) {
+      throw new Error("纪念日正在保存中。");
+    }
+
+    const mutationRequestId = anniversarySaveRequestIdRef.current + 1;
+    anniversarySaveRequestIdRef.current = mutationRequestId;
+    const requestMonthDay = request.monthDay;
+    anniversarySaveInFlightRef.current = true;
+    setIsAnniversarySaving(true);
+    setAnniversaryError("");
+    try {
+      const saved = id
+        ? await updateJournalAnniversary(id, request)
+        : await saveJournalAnniversary(request);
+      const [currentAnniversaries, anniversaries] = await Promise.all([
+        getJournalAnniversaries(saved.monthDay),
+        getJournalAnniversaries()
+      ]);
+      if (
+        mutationRequestId !== anniversarySaveRequestIdRef.current
+        || anniversaryMonthDayRef.current !== requestMonthDay
+      ) {
+        return;
+      }
+
+      anniversaryMonthDayRef.current = saved.monthDay;
+      setAnniversaryMonthDay(saved.monthDay);
+      setCurrentAnniversaryItems(currentAnniversaries);
+      setAnniversaryItems(anniversaries);
+      setAnniversaryError("");
+    } catch (caught) {
+      if (
+        mutationRequestId === anniversarySaveRequestIdRef.current
+        && anniversaryMonthDayRef.current === requestMonthDay
+      ) {
+        setAnniversaryError(getErrorMessage(caught));
+      }
+    } finally {
+      if (mutationRequestId === anniversarySaveRequestIdRef.current) {
+        anniversarySaveInFlightRef.current = false;
+        setIsAnniversarySaving(false);
+      }
+    }
+  }
+
+  async function handleAddNextYearNote(anniversaryId: string, text: string) {
+    if (nextYearNoteInFlightRef.current) {
+      throw new Error("下一年提醒正在保存中。");
+    }
+
+    const mutationRequestId = nextYearNoteRequestIdRef.current + 1;
+    nextYearNoteRequestIdRef.current = mutationRequestId;
+    const requestMonthDay = anniversaryMonthDayRef.current;
+    nextYearNoteInFlightRef.current = true;
+    setIsNextYearNoteSaving(true);
+    setAnniversaryError("");
+    try {
+      await addJournalNextYearNote(anniversaryId, text);
+      const [currentAnniversaries, anniversaries] = await Promise.all([
+        getJournalAnniversaries(requestMonthDay),
+        getJournalAnniversaries()
+      ]);
+      if (
+        mutationRequestId !== nextYearNoteRequestIdRef.current
+        || anniversaryMonthDayRef.current !== requestMonthDay
+      ) {
+        return;
+      }
+
+      setCurrentAnniversaryItems(currentAnniversaries);
+      setAnniversaryItems(anniversaries);
+      setAnniversaryError("");
+    } catch (caught) {
+      if (
+        mutationRequestId === nextYearNoteRequestIdRef.current
+        && anniversaryMonthDayRef.current === requestMonthDay
+      ) {
+        setAnniversaryError(getErrorMessage(caught));
+      }
+      throw caught;
+    } finally {
+      if (mutationRequestId === nextYearNoteRequestIdRef.current) {
+        nextYearNoteInFlightRef.current = false;
+        setIsNextYearNoteSaving(false);
+      }
+    }
+  }
+
+  async function runNextYearNoteMutation(
+    operation: () => Promise<unknown>,
+    options: { refreshEditor?: boolean } = {}
+  ) {
+    if (nextYearNoteInFlightRef.current) {
+      throw new Error("下一年提醒正在保存中。");
+    }
+
+    const mutationRequestId = nextYearNoteRequestIdRef.current + 1;
+    nextYearNoteRequestIdRef.current = mutationRequestId;
+    const requestMonthDay = anniversaryMonthDayRef.current;
+    nextYearNoteInFlightRef.current = true;
+    setIsNextYearNoteSaving(true);
+    setAnniversaryError("");
+    try {
+      await operation();
+      const [currentAnniversaries, anniversaries, nextEditor] = await Promise.all([
+        getJournalAnniversaries(requestMonthDay),
+        getJournalAnniversaries(),
+        options.refreshEditor ? getTodayEditor() : Promise.resolve(null)
+      ]);
+      if (
+        mutationRequestId !== nextYearNoteRequestIdRef.current
+        || anniversaryMonthDayRef.current !== requestMonthDay
+      ) {
+        return;
+      }
+
+      setCurrentAnniversaryItems(currentAnniversaries);
+      setAnniversaryItems(anniversaries);
+      if (nextEditor) {
+        setEditor(nextEditor);
+      }
+      setAnniversaryError("");
+    } catch (caught) {
+      if (
+        mutationRequestId === nextYearNoteRequestIdRef.current
+        && anniversaryMonthDayRef.current === requestMonthDay
+      ) {
+        setAnniversaryError(getErrorMessage(caught));
+      }
+      throw caught;
+    } finally {
+      if (mutationRequestId === nextYearNoteRequestIdRef.current) {
+        nextYearNoteInFlightRef.current = false;
+        setIsNextYearNoteSaving(false);
+      }
+    }
+  }
+
+  async function handleAdoptNextYearNote(anniversaryId: string, noteId: string) {
+    await runNextYearNoteMutation(
+      () => adoptJournalNextYearNote(anniversaryId, noteId),
+      { refreshEditor: true }
+    );
+  }
+
+  async function handleDismissNextYearNote(anniversaryId: string, noteId: string) {
+    await runNextYearNoteMutation(() => dismissJournalNextYearNote(anniversaryId, noteId));
   }
 
   function clearHistoryVersionDetail() {
@@ -1390,19 +1623,24 @@ export default function App() {
           historyViewMode === "anniversary" ? (
             <AnniversaryWheelWorkbench
               isBusy={isBusy}
+              isAnniversarySaving={isAnniversarySaving}
+              isNextYearNoteSaving={isNextYearNoteSaving}
               monthDay={anniversaryMonthDay}
               result={anniversaryResult}
+              anniversaries={anniversaryWorkbenchItems}
+              anniversaryError={anniversaryError}
               selectedDate={historySelectedDate}
               detail={historyDetail}
               versions={historyVersions}
-              selectedVersionDetail={historyVersionDetail}
               error={historyError}
               onBack={() => setWorkspaceMode("today")}
               onRefresh={() => void refreshAnniversary()}
               onMonthDayChange={handleAnniversaryMonthDayChange}
               onSelectDate={date => void handleHistorySelectDate(date)}
-              onViewVersion={version => void handleViewHistoryVersion(version)}
-              onClearVersion={clearHistoryVersionDetail}
+              onSaveAnniversary={handleSaveAnniversary}
+              onAddNextYearNote={handleAddNextYearNote}
+              onAdoptNextYearNote={handleAdoptNextYearNote}
+              onDismissNextYearNote={handleDismissNextYearNote}
             />
           ) : (
             <HistoryWorkbench

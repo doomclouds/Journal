@@ -1,10 +1,13 @@
-import { ArrowLeft, Eye, RefreshCw } from "lucide-react";
+import { ArrowLeft, BookOpen, RefreshCw } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
+  JournalAnniversaryItem,
+  JournalAnniversarySaveRequest,
   JournalAnniversaryWheelResult,
   JournalEntryVersion,
   JournalHistoryEntryDetail,
   JournalHistoryEntrySummary,
-  JournalVersionDetail
+  JournalNextYearNoteStatus
 } from "./api";
 import { DatePickerField } from "./DatePickerField";
 import { JournalPaperLoading } from "./JournalPaperLoading";
@@ -12,22 +15,51 @@ import { MarkdownPreview } from "./MarkdownPreview";
 
 type AnniversaryWheelWorkbenchProps = {
   isBusy: boolean;
+  isAnniversarySaving?: boolean;
+  isNextYearNoteSaving?: boolean;
   monthDay: string;
   result: JournalAnniversaryWheelResult | null;
+  anniversaries: JournalAnniversaryItem[];
+  anniversaryError: string;
   selectedDate: string;
   detail: JournalHistoryEntryDetail | null;
   versions: JournalEntryVersion[];
-  selectedVersionDetail?: JournalVersionDetail | null;
   error: string;
   onBack: () => void;
   onRefresh: () => void;
   onMonthDayChange: (monthDay: string) => void;
   onSelectDate: (date: string) => void;
-  onViewVersion?: (version: JournalEntryVersion) => void;
-  onClearVersion?: () => void;
+  onSaveAnniversary: (id: string | null, request: JournalAnniversarySaveRequest) => void | Promise<void>;
+  onAddNextYearNote: (anniversaryId: string, text: string) => void | Promise<void>;
+  onAdoptNextYearNote?: (anniversaryId: string, noteId: string) => void | Promise<void>;
+  onDismissNextYearNote?: (anniversaryId: string, noteId: string) => void | Promise<void>;
 };
 
 const quickMonthDays = ["01-01", "05-14", "10-01", "12-31"];
+const anniversaryTypeOptions = [
+  { value: "project-milestone", label: "项目里程碑" },
+  { value: "growth", label: "成长" },
+  { value: "relationship", label: "关系" },
+  { value: "gratitude", label: "感恩" },
+  { value: "self-reminder", label: "自我提醒" }
+];
+const nextYearNoteStatusLabels: Record<JournalNextYearNoteStatus, string> = {
+  pending: "待处理",
+  adopted: "已采纳",
+  dismissed: "已忽略"
+};
+
+function getLocalTodayIsoDate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isNextYearNoteDue(targetDate: string) {
+  return targetDate <= getLocalTodayIsoDate();
+}
 
 function isValidDateInputValue(value: string, monthDay: string) {
   const parsed = new Date(`${value}T00:00:00`);
@@ -84,6 +116,18 @@ function getStatusLabel(status: string) {
   }
 }
 
+function getLocalErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "操作失败";
+}
+
+function getAnniversaryTypeValue(value: string | null | undefined): string {
+  if (value && anniversaryTypeOptions.some(option => option.value === value)) {
+    return value;
+  }
+
+  return "self-reminder";
+}
+
 function formatHistoryTime(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -102,36 +146,159 @@ function firstLine(item: JournalHistoryEntrySummary) {
   return item.hits[0]?.snippet?.replace(/^[-\s]+/, "") || item.mood || `${item.rawInputCount} 条材料`;
 }
 
+function getCardPreview(item: JournalHistoryEntrySummary) {
+  const title = item.cardPreview?.title ?? item.hits[0]?.title ?? item.mood ?? "日记";
+  const lines = item.cardPreview?.lines?.length ? item.cardPreview.lines : [firstLine(item)];
+  return { title, lines };
+}
+
 export function AnniversaryWheelWorkbench({
   isBusy,
   monthDay,
   result,
+  isAnniversarySaving = false,
+  isNextYearNoteSaving = false,
+  anniversaries,
+  anniversaryError,
   selectedDate,
   detail,
   versions,
-  selectedVersionDetail = null,
   error,
   onBack,
   onRefresh,
   onMonthDayChange,
   onSelectDate,
-  onViewVersion,
-  onClearVersion
+  onSaveAnniversary,
+  onAddNextYearNote,
+  onAdoptNextYearNote,
+  onDismissNextYearNote
 }: AnniversaryWheelWorkbenchProps) {
+  const [isReading, setIsReading] = useState(false);
+  const [selectedAnniversaryId, setSelectedAnniversaryId] = useState<string | null>(null);
+  const [anniversaryTitle, setAnniversaryTitle] = useState("");
+  const [anniversaryType, setAnniversaryType] = useState("self-reminder");
+  const [anniversaryOriginDate, setAnniversaryOriginDate] = useState("");
+  const [anniversaryDescription, setAnniversaryDescription] = useState("");
+  const [nextYearNoteText, setNextYearNoteText] = useState("");
+  const [nextYearNoteError, setNextYearNoteError] = useState("");
   const items = result?.items ?? [];
   const selected = items.find(item => item.date.isoDate === selectedDate) ?? items[0] ?? null;
+  const pinnedAnniversaries = useMemo(
+    () => anniversaries.filter(item => item.pinned),
+    [anniversaries]
+  );
+  const selectedAnniversaryById = anniversaries.find(item =>
+    item.id === selectedAnniversaryId && item.monthDay === monthDay
+  ) ?? null;
+  const selectedAnniversary = selectedAnniversaryById
+    ?? pinnedAnniversaries.find(item => item.monthDay === monthDay)
+    ?? anniversaries.find(item => item.monthDay === monthDay)
+    ?? null;
   const matchingDetail = detail?.date.isoDate === selected?.date.isoDate ? detail : null;
   const matchingVersions = selected
     ? versions.filter(version => version.date.isoDate === selected.date.isoDate)
     : [];
-  const matchingVersionDetail = selectedVersionDetail?.version.date.isoDate === selected?.date.isoDate
-    ? selectedVersionDetail
-    : null;
   const currentDetailMarkdown = matchingDetail?.markdown?.trim() ?? "";
-  const isShowingVersion = matchingVersionDetail !== null;
   const expectsEntryDetail = selected !== null && selected.status !== "missing";
-  const isEntryDetailLoading = expectsEntryDetail && !isShowingVersion && matchingDetail === null;
+  const isEntryDetailLoading = expectsEntryDetail && matchingDetail === null;
   const dateInputValue = toDateInputValue(monthDay);
+
+  useEffect(() => {
+    setAnniversaryTitle(selectedAnniversary?.title ?? "");
+    setAnniversaryType(getAnniversaryTypeValue(selectedAnniversary?.type));
+    setAnniversaryOriginDate(selectedAnniversary?.originDate ?? selected?.date.isoDate ?? "");
+    setAnniversaryDescription(selectedAnniversary?.description ?? "");
+    setNextYearNoteError("");
+  }, [selectedAnniversary?.id, monthDay]);
+
+  useEffect(() => {
+    setNextYearNoteText("");
+  }, [selectedAnniversary?.id, monthDay]);
+
+  function openReading(date: string) {
+    setIsReading(true);
+    onSelectDate(date);
+  }
+
+  function returnToTimeline() {
+    setIsReading(false);
+  }
+
+  function selectYear(date: string) {
+    if (isReading) {
+      setIsReading(false);
+    }
+    onSelectDate(date);
+  }
+
+  function changeMonthDay(nextMonthDay: string, anniversaryId: string | null = null) {
+    setSelectedAnniversaryId(anniversaryId);
+    setIsReading(false);
+    onMonthDayChange(nextMonthDay);
+  }
+
+  function handleSaveAnniversary(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isAnniversarySaving) {
+      return;
+    }
+
+    const request: JournalAnniversarySaveRequest = {
+      monthDay,
+      type: getAnniversaryTypeValue(anniversaryType),
+      title: anniversaryTitle.trim(),
+      description: anniversaryDescription.trim(),
+      originDate: anniversaryOriginDate || selected?.date.isoDate || null,
+      pinned: true
+    };
+    void onSaveAnniversary(selectedAnniversary?.id ?? null, request);
+  }
+
+  async function handleSaveNextYearNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isNextYearNoteSaving) {
+      return;
+    }
+
+    const text = nextYearNoteText.trim();
+    if (!selectedAnniversary || !text) {
+      return;
+    }
+
+    setNextYearNoteError("");
+    try {
+      await onAddNextYearNote(selectedAnniversary.id, text);
+      setNextYearNoteText("");
+    } catch (caught) {
+      setNextYearNoteError(getLocalErrorMessage(caught));
+    }
+  }
+
+  async function handleAdoptNextYearNote(noteId: string) {
+    if (!selectedAnniversary || isNextYearNoteSaving || !onAdoptNextYearNote) {
+      return;
+    }
+
+    setNextYearNoteError("");
+    try {
+      await onAdoptNextYearNote(selectedAnniversary.id, noteId);
+    } catch (caught) {
+      setNextYearNoteError(getLocalErrorMessage(caught));
+    }
+  }
+
+  async function handleDismissNextYearNote(noteId: string) {
+    if (!selectedAnniversary || isNextYearNoteSaving || !onDismissNextYearNote) {
+      return;
+    }
+
+    setNextYearNoteError("");
+    try {
+      await onDismissNextYearNote(selectedAnniversary.id, noteId);
+    } catch (caught) {
+      setNextYearNoteError(getLocalErrorMessage(caught));
+    }
+  }
 
   return (
     <>
@@ -149,7 +316,7 @@ export function AnniversaryWheelWorkbench({
             onChange={value => {
               const nextMonthDay = toMonthDay(value);
               if (nextMonthDay) {
-                onMonthDayChange(nextMonthDay);
+                changeMonthDay(nextMonthDay);
               }
             }}
           />
@@ -159,7 +326,7 @@ export function AnniversaryWheelWorkbench({
                 key={day}
                 type="button"
                 className={monthDay === day ? "active" : ""}
-                onClick={() => onMonthDayChange(day)}
+                onClick={() => changeMonthDay(day)}
               >
                 {day}
               </button>
@@ -169,26 +336,56 @@ export function AnniversaryWheelWorkbench({
 
         <section className="rail-section">
           <div className="section-head">
+            <h2>常看日期</h2>
+            <span>{pinnedAnniversaries.length} 个</span>
+          </div>
+          <div className="history-result-list anniversary-saved-list" aria-label="常看纪念日列表">
+            {pinnedAnniversaries.length > 0 ? pinnedAnniversaries.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className={`source-item history-result anniversary-saved ${item.monthDay === monthDay ? "is-active" : ""}`}
+                onClick={() => changeMonthDay(item.monthDay, item.id)}
+                aria-pressed={selectedAnniversary?.id === item.id}
+              >
+                <span className="source-meta">
+                  <span>{item.monthDay}</span>
+                  <span>{item.type}</span>
+                </span>
+                <strong>{item.title}</strong>
+                {item.description ? <p>{item.description}</p> : null}
+              </button>
+            )) : (
+              <p className="muted">还没有保存常看日期。</p>
+            )}
+          </div>
+        </section>
+
+        <section className="rail-section">
+          <div className="section-head">
             <h2>年份</h2>
             <span>{items.length} 年</span>
           </div>
           <div className="history-result-list anniversary-year-list" aria-label="同日年份列表">
-            {items.length > 0 ? items.map(item => (
-              <button
-                key={item.date.isoDate}
-                type="button"
-                className={`source-item history-result anniversary-year ${selected?.date.isoDate === item.date.isoDate ? "is-active" : ""}`}
-                onClick={() => onSelectDate(item.date.isoDate)}
-                aria-pressed={selected?.date.isoDate === item.date.isoDate}
-              >
-                <span className="source-meta">
-                  <span>{item.date.year}</span>
-                  <span>{getStatusLabel(item.status)}</span>
-                </span>
-                <strong>{item.hits[0]?.title ?? item.mood ?? "日记"}</strong>
-                <p>{firstLine(item)}</p>
-              </button>
-            )) : (
+            {items.length > 0 ? items.map(item => {
+              const preview = getCardPreview(item);
+              return (
+                <button
+                  key={item.date.isoDate}
+                  type="button"
+                  className={`source-item history-result anniversary-year ${selected?.date.isoDate === item.date.isoDate ? "is-active" : ""}`}
+                  onClick={() => selectYear(item.date.isoDate)}
+                  aria-pressed={selected?.date.isoDate === item.date.isoDate}
+                >
+                  <span className="source-meta">
+                    <span>{item.date.year}</span>
+                    <span>{getStatusLabel(item.status)}</span>
+                  </span>
+                  <strong>{preview.title}</strong>
+                  <p>{preview.lines.join(" / ")}</p>
+                </button>
+              );
+            }) : (
               <p className="muted">这一天还没有可回看的历史。</p>
             )}
           </div>
@@ -198,14 +395,14 @@ export function AnniversaryWheelWorkbench({
       <section className="journal-stage history-stage anniversary-stage" aria-label="同日年轮预览">
         <div className="stage-toolbar">
           <div className="stage-title">
-            <p>同日年轮</p>
-            <h2>{monthDay} 的历年回声</h2>
+            <p>{isReading ? "同日阅读" : "同日年轮"}</p>
+            <h2>{isReading && selected ? selected.date.isoDate : `${monthDay} 的历年回声`}</h2>
           </div>
           <div className="history-stage-actions">
-            {isShowingVersion ? (
-              <button type="button" className="secondary-action secondary" onClick={onClearVersion}>
-                <Eye size={15} aria-hidden="true" />
-                查看当前日记
+            {isReading ? (
+              <button type="button" className="secondary-action secondary" onClick={returnToTimeline}>
+                <ArrowLeft size={15} aria-hidden="true" />
+                返回年轮
               </button>
             ) : null}
             <button type="button" className="secondary-action secondary" onClick={onRefresh} disabled={isBusy}>
@@ -223,52 +420,71 @@ export function AnniversaryWheelWorkbench({
           <article className="journal-paper history-paper anniversary-paper">
             {error ? <p className="api-error history-error" role="alert">{error}</p> : null}
             {selected ? (
-              <>
-                <header className="history-document-head">
-                  <p className="kicker">{isShowingVersion ? "Version Snapshot" : "Anniversary Wheel"}</p>
-                  <h1>{selected.date.isoDate}</h1>
-                  <p>
-                    {isShowingVersion ? (
-                      <>
-                        <span>历史版本</span>
-                        <span>{formatHistoryTime(matchingVersionDetail.version.createdAt)}</span>
-                        <span>{matchingVersionDetail.version.reason}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>{getStatusLabel(matchingDetail?.status ?? selected.status)}</span>
-                        <span>{selected.rawInputCount} 条材料</span>
-                        <span>{matchingVersions.length || selected.versionCount} 个版本</span>
-                      </>
-                    )}
-                  </p>
-                </header>
-
-                {!isShowingVersion && (matchingDetail?.attentionReason ?? selected.attentionReason) ? (
-                  <p className="attention-copy">{matchingDetail?.attentionReason ?? selected.attentionReason}</p>
-                ) : null}
-
-                {isShowingVersion ? (
-                  <section className="history-version-main-preview" aria-label="同日版本内容">
-                    <MarkdownPreview markdown={matchingVersionDetail.markdown} />
-                  </section>
-                ) : isEntryDetailLoading ? (
-                  <JournalPaperLoading label="同日当前日记读取中" />
-                ) : currentDetailMarkdown ? (
-                  <section className="history-current-main-preview" aria-label="同日当前日记内容">
-                    <MarkdownPreview markdown={currentDetailMarkdown} />
-                  </section>
-                ) : (
-                  <div className="history-hit-list">
-                    {selected.hits.map(hit => (
-                      <section key={`${hit.sourceType}-${hit.sectionId ?? hit.rawInputId ?? hit.title}`} className="history-hit">
-                        <span>{hit.sourceType === "raw-input" ? "原始材料" : hit.title}</span>
-                        <p>{hit.snippet}</p>
-                      </section>
-                    ))}
+              isReading ? (
+                <>
+                  <header className="history-document-head">
+                    <p className="kicker">Reading</p>
+                    <h1>{selected.date.isoDate}</h1>
+                    <p>
+                      <span>{getStatusLabel(matchingDetail?.status ?? selected.status)}</span>
+                      <span>{selected.rawInputCount} 条材料</span>
+                      <span>{matchingVersions.length || selected.versionCount} 个版本</span>
+                      {selected.entryUpdatedAt ? <span>最后写入 {formatHistoryTime(selected.entryUpdatedAt)}</span> : null}
+                    </p>
+                  </header>
+                  {isEntryDetailLoading ? (
+                    <JournalPaperLoading label="同日当前日记读取中" />
+                  ) : currentDetailMarkdown ? (
+                    <section className="anniversary-reading-paper" aria-label="同日当前日记内容">
+                      <MarkdownPreview markdown={currentDetailMarkdown} />
+                    </section>
+                  ) : (
+                    <section className="empty-paper audit-empty-state">
+                      <h2>没有可阅读的当前日记</h2>
+                      <p>这一天可能只有原始材料或记录缺失。</p>
+                    </section>
+                  )}
+                </>
+              ) : (
+                <>
+                  <header className="history-document-head">
+                    <p className="kicker">Anniversary Wheel</p>
+                    <h1>{monthDay}</h1>
+                    <p>
+                      <span>{items.length} 年记录</span>
+                      <span>{pinnedAnniversaries.length} 个常看日期</span>
+                    </p>
+                  </header>
+                  <div className="anniversary-timeline" aria-label="同日年轮时间线">
+                    {items.map(item => {
+                      const preview = getCardPreview(item);
+                      return (
+                        <article className="anniversary-timeline-card" key={item.date.isoDate}>
+                          <div className="anniversary-timeline-card-head">
+                            <div>
+                              <span>{item.date.year}</span>
+                              <strong>{preview.title}</strong>
+                            </div>
+                            <span>{getStatusLabel(item.status)}</span>
+                          </div>
+                          <div className="anniversary-card-preview">
+                            {preview.lines.map(line => <p key={`${item.date.isoDate}-${line}`}>{line}</p>)}
+                          </div>
+                          <button
+                            type="button"
+                            className="assistant-inline-action"
+                            aria-label={`阅读 ${item.date.isoDate} 日记`}
+                            onClick={() => openReading(item.date.isoDate)}
+                          >
+                            <BookOpen size={14} aria-hidden="true" />
+                            阅读
+                          </button>
+                        </article>
+                      );
+                    })}
                   </div>
-                )}
-              </>
+                </>
+              )
             ) : (
               <section className="empty-paper audit-empty-state">
                 <h2>没有同日记录</h2>
@@ -282,46 +498,115 @@ export function AnniversaryWheelWorkbench({
       <aside className="assistant-panel today-assistant history-inspector anniversary-inspector" aria-label="同日年轮详情">
         <div className="assistant-head">
           <div>
-            <p className="assistant-eyebrow">Raw & Versions</p>
-            <h2>材料与版本</h2>
+            <p className="assistant-eyebrow">Anniversary</p>
+            <h2>纪念日资料</h2>
           </div>
-          <span className="assistant-time">{matchingVersions.length} 个版本</span>
+          <span className="assistant-time">{monthDay}</span>
         </div>
 
         <div className="assistant-body">
-          {selected?.hits.map(hit => (
-            <section className="assistant-card anniversary-raw-card" key={`${hit.sourceType}-${hit.sectionId ?? hit.rawInputId ?? hit.title}`}>
-              <div className="assistant-card-head">
-                <h3>{hit.sourceType === "raw-input" ? "原始材料" : hit.title}</h3>
-                <span>{hit.sourceType === "raw-input" ? "Raw" : "Section"}</span>
-              </div>
-              <p>{hit.snippet}</p>
-            </section>
-          ))}
+          {anniversaryError ? <p className="api-error history-error" role="alert">{anniversaryError}</p> : null}
+          {nextYearNoteError ? <p className="api-error history-error" role="alert">{nextYearNoteError}</p> : null}
 
-          {matchingVersions.length === 0 ? (
+          <form className="assistant-card anniversary-form" onSubmit={handleSaveAnniversary}>
+            <label>
+              <span>纪念日名称</span>
+              <input
+                value={anniversaryTitle}
+                onChange={event => setAnniversaryTitle(event.target.value)}
+                placeholder="给这一天起个名字"
+              />
+            </label>
+            <label>
+              <span>纪念日类型</span>
+              <select value={anniversaryType} onChange={event => setAnniversaryType(event.target.value)}>
+                {anniversaryTypeOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>起点日期</span>
+              <input
+                type="date"
+                value={anniversaryOriginDate}
+                onChange={event => setAnniversaryOriginDate(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>说明</span>
+              <textarea
+                rows={3}
+                value={anniversaryDescription}
+                onChange={event => setAnniversaryDescription(event.target.value)}
+                placeholder="这一天为什么值得常看"
+              />
+            </label>
+            <button
+              type="submit"
+              className="primary-action"
+              disabled={isBusy || isAnniversarySaving || !anniversaryTitle.trim()}
+            >
+              保存纪念日
+            </button>
+          </form>
+
+          <form className="assistant-card anniversary-form" onSubmit={handleSaveNextYearNote}>
+            <label>
+              <span>写给下一年同一天</span>
+              <textarea
+                rows={3}
+                value={nextYearNoteText}
+                onChange={event => setNextYearNoteText(event.target.value)}
+                placeholder="给明年的自己留一句提醒"
+              />
+            </label>
+            <button
+              type="submit"
+              className="secondary-action"
+              disabled={isBusy || isNextYearNoteSaving || !selectedAnniversary || !nextYearNoteText.trim()}
+            >
+              保存下一年提醒
+            </button>
+          </form>
+
+          {selectedAnniversary?.nextYearNotes.length ? (
             <section className="assistant-card">
-              <p className="muted">这一天还没有覆盖前快照。</p>
-            </section>
-          ) : matchingVersions.map(version => (
-            <section className="assistant-card history-version-card" key={version.id}>
               <div className="assistant-card-head">
-                <h3>{formatHistoryTime(version.createdAt)}</h3>
-                <span>{version.reason}</span>
+                <h3>下一年提醒</h3>
+                <span>{selectedAnniversary.nextYearNotes.length} 条</span>
               </div>
-              <p>{version.contentHash}</p>
-              <button
-                type="button"
-                className="assistant-inline-action"
-                aria-label={`查看版本 ${version.id}`}
-                onClick={() => onViewVersion?.(version)}
-                disabled={isBusy}
-              >
-                <Eye size={14} aria-hidden="true" />
-                查看版本
-              </button>
+              {selectedAnniversary.nextYearNotes.map(note => (
+                <div className="anniversary-next-year-note" key={note.id}>
+                  <p>{note.text}</p>
+                  <span className="source-meta">{nextYearNoteStatusLabels[note.status]}</span>
+                  {note.status === "pending" ? (
+                    <div className="anniversary-note-actions">
+                      {isNextYearNoteDue(note.targetDate) ? (
+                        <button
+                          type="button"
+                          className="assistant-inline-action"
+                          onClick={() => void handleAdoptNextYearNote(note.id)}
+                          disabled={isBusy || isNextYearNoteSaving}
+                        >
+                          采纳提醒
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="assistant-inline-action"
+                        onClick={() => void handleDismissNextYearNote(note.id)}
+                        disabled={isBusy || isNextYearNoteSaving}
+                      >
+                        忽略提醒
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </section>
-          ))}
+          ) : null}
+
         </div>
       </aside>
     </>

@@ -3199,7 +3199,77 @@ button:focus-visible {
   font-size: 12px;
 }
 
+.anniversary-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.anniversary-timeline-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(52, 45, 36, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 253, 247, 0.78);
+  padding: 14px;
+}
+
+.anniversary-timeline-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.anniversary-timeline-card-head div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.anniversary-timeline-card-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.anniversary-timeline-card-head > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(47, 111, 95, 0.1);
+  color: var(--sage);
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.anniversary-timeline-card-head strong {
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.anniversary-card-preview {
+  display: grid;
+  gap: 6px;
+  border-left: 3px solid rgba(47, 111, 95, 0.24);
+  padding-left: 10px;
+}
+
+.anniversary-card-preview p {
+  margin: 0;
+  color: #4d463e;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
 .anniversary-paper .markdown-preview {
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.anniversary-reading-paper .markdown-preview {
   max-width: none;
   min-height: 0;
   margin: 0;
@@ -3208,6 +3278,43 @@ button:focus-visible {
 
 .anniversary-raw-card p {
   white-space: pre-wrap;
+}
+
+.anniversary-form {
+  display: grid;
+  gap: 10px;
+}
+
+.anniversary-form label {
+  display: grid;
+  gap: 6px;
+  color: #2d2823;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.anniversary-form input,
+.anniversary-form select,
+.anniversary-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #c9c5bb;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: #252525;
+  padding: 0 10px;
+  font: inherit;
+}
+
+.anniversary-form input,
+.anniversary-form select {
+  min-height: 36px;
+}
+
+.anniversary-form textarea {
+  min-height: 84px;
+  padding-top: 8px;
+  resize: vertical;
 }
 
 .data-backup-panel {
