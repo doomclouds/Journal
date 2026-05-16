@@ -138,19 +138,32 @@ describe("Today workbench productized CSS contract", () => {
     expect(css).toMatch(/\.source-meta\s+span:first-child\s*\{[^}]*color:\s*var\(--gold\);/s);
   });
 
-  test("keeps today workbench scrollbars quiet until users interact", () => {
+  test("keeps app scrollbars quiet until users interact", () => {
     expect(css).toMatch(
-      /\.command-workspace\s+\.context-rail,\s*\.document-scroll,\s*\.assistant-body\s*\{[^}]*scrollbar-width:\s*thin;[^}]*scrollbar-color:\s*transparent\s+transparent;[^}]*scrollbar-gutter:\s*stable;/s
+      /\.command-workspace\s+\.context-rail,[^}]*\.about-legal-document-reader\s+pre\s*\{[^}]*scrollbar-width:\s*thin;[^}]*scrollbar-color:\s*transparent\s+transparent;[^}]*scrollbar-gutter:\s*stable;/s
     );
     expect(css).toMatch(
-      /\.command-workspace\s+\.context-rail:hover,[^}]*\.assistant-body:focus-within\s*\{[^}]*scrollbar-color:\s*rgba\(52,\s*45,\s*36,\s*0\.26\)\s+transparent;/s
+      /\.command-workspace\s+\.context-rail:hover,[^}]*\.about-legal-document-reader\s+pre:focus-within\s*\{[^}]*scrollbar-color:\s*rgba\(52,\s*45,\s*36,\s*0\.26\)\s+transparent;/s
     );
     expect(css).toMatch(
-      /\.command-workspace\s+\.context-rail::-webkit-scrollbar-thumb,[^}]*\.assistant-body::-webkit-scrollbar-thumb\s*\{[^}]*background-color:\s*transparent;[^}]*background-clip:\s*content-box;/s
+      /\.command-workspace\s+\.context-rail::-webkit-scrollbar-thumb,[^}]*\.about-legal-document-reader\s+pre::-webkit-scrollbar-thumb\s*\{[^}]*background-color:\s*transparent;[^}]*background-clip:\s*content-box;/s
     );
     expect(css).toMatch(
-      /\.command-workspace\s+\.context-rail:hover::-webkit-scrollbar-thumb,[^}]*\.assistant-body:focus-within::-webkit-scrollbar-thumb\s*\{[^}]*background-color:\s*rgba\(52,\s*45,\s*36,\s*0\.26\);/s
+      /\.command-workspace\s+\.context-rail:hover::-webkit-scrollbar-thumb,[^}]*\.about-legal-document-reader\s+pre:focus-within::-webkit-scrollbar-thumb\s*\{[^}]*background-color:\s*rgba\(52,\s*45,\s*36,\s*0\.26\);/s
     );
+    for (const selector of [
+      ".journal-paper",
+      ".today-assistant",
+      ".input-dock",
+      ".llm-provider-list",
+      ".llm-settings-main",
+      ".llm-settings-side",
+      ".llm-settings-grid",
+      ".data-backup-body",
+      ".about-panel"
+    ]) {
+      expect(css).toContain(selector);
+    }
   });
 
   test("keeps next step as a passive status card without action-like controls", () => {

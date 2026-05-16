@@ -90,6 +90,7 @@ function createBackendProcessEnv(baseEnv, apiBaseUrl, dataRoot, buildMetadata = 
   for (const name of [
     "JOURNAL_RELEASE_VERSION",
     "JOURNAL_FRONTEND_VERSION",
+    "JOURNAL_BACKEND_VERSION",
     "JOURNAL_BUILD_COMMIT",
     "JOURNAL_BUILD_TIME_UTC"
   ]) {
@@ -105,11 +106,12 @@ function createBackendProcessEnv(baseEnv, apiBaseUrl, dataRoot, buildMetadata = 
 }
 
 function classifyReusableBackendAppInfo(appInfo, lock, expected) {
+  const appBackendVersion = appInfo?.backendVersion ?? appInfo?.version;
   const matches =
     appInfo?.name === "Journal.Api"
     && samePath(appInfo.dataRoot, expected.dataRoot)
     && sameRequiredVersion(appInfo.releaseVersion, expected.releaseVersion)
-    && sameRequiredVersion(appInfo.version, lock.backendVersion);
+    && sameRequiredVersion(appBackendVersion, lock.backendVersion);
 
   if (matches) {
     return {
@@ -121,7 +123,7 @@ function classifyReusableBackendAppInfo(appInfo, lock, expected) {
   if (appInfo?.name === "Journal.Api") {
     return {
       action: "restart-stale",
-      reason: "Existing backend /app/info belongs to Journal but not this release or data root."
+      reason: "Existing backend /app/info belongs to Journal but not this release, backend version, or data root."
     };
   }
 
@@ -132,11 +134,12 @@ function classifyReusableBackendAppInfo(appInfo, lock, expected) {
 }
 
 function classifySpawnedBackendAppInfo(appInfo, expected) {
+  const appBackendVersion = appInfo?.backendVersion ?? appInfo?.version;
   const matches =
     appInfo?.name === "Journal.Api"
     && samePath(appInfo.dataRoot, expected.dataRoot)
     && sameRequiredVersion(appInfo.releaseVersion, expected.releaseVersion)
-    && Boolean(appInfo.version);
+    && Boolean(appBackendVersion);
 
   if (matches) {
     return {
@@ -517,7 +520,7 @@ function createBackendRuntime(options) {
         pid: startedPid,
         port,
         startedAtUtc,
-        backendVersion: appInfo.version,
+        backendVersion: appInfo.backendVersion ?? appInfo.version,
         releaseVersion: appInfo.releaseVersion,
         dataRoot,
         owner: "electron",
@@ -619,7 +622,7 @@ function createBackendRuntime(options) {
           apiBaseUrl,
           port: lock.port,
           pid: lock.pid,
-          backendVersion: appInfo.version ?? lock.backendVersion ?? null,
+          backendVersion: appInfo.backendVersion ?? appInfo.version ?? lock.backendVersion ?? null,
           releaseVersion: appInfo.releaseVersion ?? lock.releaseVersion ?? null,
           reason: null
         });

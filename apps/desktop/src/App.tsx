@@ -1962,7 +1962,7 @@ export default function App() {
               </div>
               <div>
                 <span>Backend</span>
-                <strong>{appInfo?.version ?? "未连接"}</strong>
+                <strong>{appInfo?.backendVersion ?? appInfo?.version ?? "未连接"}</strong>
               </div>
             </section>
             <dl className="about-runtime-list">

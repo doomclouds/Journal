@@ -105,6 +105,7 @@ export type HealthResponse = {
 export type AppInfo = {
   name: string;
   version: string;
+  backendVersion?: string;
   releaseVersion: string;
   commit: string;
   buildTimeUtc: string;

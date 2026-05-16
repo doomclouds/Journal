@@ -3,12 +3,14 @@ namespace Journal.Domain.Application;
 public sealed record ApplicationBuildInfo(
     string ReleaseVersion,
     string FrontendVersion,
+    string BackendVersion,
     string Commit,
     string BuildTimeUtc)
 {
     public static ApplicationBuildInfo Current { get; } = new(
         GetValue("JOURNAL_RELEASE_VERSION", ApplicationInfo.Version),
         GetValue("JOURNAL_FRONTEND_VERSION", ApplicationInfo.Version),
+        GetValue("JOURNAL_BACKEND_VERSION", ApplicationInfo.Version),
         GetValue("JOURNAL_BUILD_COMMIT", "dev"),
         GetValue("JOURNAL_BUILD_TIME_UTC", "local"));
 

@@ -57,6 +57,7 @@ const healthResponse = {
 const appInfo = {
   name: "Journal.Api",
   version: "0.1.0",
+  backendVersion: "0.1.2",
   releaseVersion: "0.1.0",
   commit: "abc1234",
   buildTimeUtc: "2026-05-14T12:00:00Z",
@@ -783,6 +784,7 @@ describe("App", () => {
     expect(within(dialog).getByRole("heading", { name: "Journal" })).toBeInTheDocument();
     expect(within(dialog).getByText("本地优先的晨间日记与 AI 整理工具")).toBeInTheDocument();
     expect(within(dialog).getByRole("region", { name: "版本信息" })).toHaveTextContent("0.1.0");
+    expect(within(dialog).getByRole("region", { name: "版本信息" })).toHaveTextContent("0.1.2");
     expect(within(dialog).getByText("Frontend")).toBeInTheDocument();
     expect(within(dialog).getByText("Backend")).toBeInTheDocument();
     expect(within(dialog).getByText(/abc1234/)).toBeInTheDocument();

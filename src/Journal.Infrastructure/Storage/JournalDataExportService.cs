@@ -16,8 +16,8 @@ public sealed class JournalDataExportService(LocalJournalPaths paths)
         new(
             "journal-export/v1",
             DateTimeOffset.Now,
-            ApplicationInfo.Version,
-            ApplicationInfo.Version,
+            ApplicationBuildInfo.Current.ReleaseVersion,
+            ApplicationBuildInfo.Current.BackendVersion,
             ApplicationBuildInfo.Current.FrontendVersion,
             CountFiles(paths.EntryRootDirectory(), "*.md"),
             CountJsonLines(paths.RawInputRootDirectory()),

@@ -76,8 +76,18 @@ button:focus-visible {
 }
 
 .command-workspace .context-rail,
+.journal-paper,
+.today-assistant,
+.input-dock,
+.llm-provider-list,
+.llm-settings-main,
+.llm-settings-side,
+.llm-settings-grid,
 .document-scroll,
-.assistant-body {
+.assistant-body,
+.data-backup-body,
+.about-panel,
+.about-legal-document-reader pre {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   scrollbar-gutter: stable;
@@ -85,29 +95,79 @@ button:focus-visible {
 
 .command-workspace .context-rail:hover,
 .command-workspace .context-rail:focus-within,
+.journal-paper:hover,
+.journal-paper:focus-within,
+.today-assistant:hover,
+.today-assistant:focus-within,
+.input-dock:hover,
+.input-dock:focus-within,
+.llm-provider-list:hover,
+.llm-provider-list:focus-within,
+.llm-settings-main:hover,
+.llm-settings-main:focus-within,
+.llm-settings-side:hover,
+.llm-settings-side:focus-within,
+.llm-settings-grid:hover,
+.llm-settings-grid:focus-within,
 .document-scroll:hover,
 .document-scroll:focus-within,
 .assistant-body:hover,
-.assistant-body:focus-within {
+.assistant-body:focus-within,
+.data-backup-body:hover,
+.data-backup-body:focus-within,
+.about-panel:hover,
+.about-panel:focus-within,
+.about-legal-document-reader pre:hover,
+.about-legal-document-reader pre:focus-within {
   scrollbar-color: rgba(52, 45, 36, 0.26) transparent;
 }
 
 .command-workspace .context-rail::-webkit-scrollbar,
+.journal-paper::-webkit-scrollbar,
+.today-assistant::-webkit-scrollbar,
+.input-dock::-webkit-scrollbar,
+.llm-provider-list::-webkit-scrollbar,
+.llm-settings-main::-webkit-scrollbar,
+.llm-settings-side::-webkit-scrollbar,
+.llm-settings-grid::-webkit-scrollbar,
 .document-scroll::-webkit-scrollbar,
-.assistant-body::-webkit-scrollbar {
+.assistant-body::-webkit-scrollbar,
+.data-backup-body::-webkit-scrollbar,
+.about-panel::-webkit-scrollbar,
+.about-legal-document-reader pre::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 .command-workspace .context-rail::-webkit-scrollbar-track,
+.journal-paper::-webkit-scrollbar-track,
+.today-assistant::-webkit-scrollbar-track,
+.input-dock::-webkit-scrollbar-track,
+.llm-provider-list::-webkit-scrollbar-track,
+.llm-settings-main::-webkit-scrollbar-track,
+.llm-settings-side::-webkit-scrollbar-track,
+.llm-settings-grid::-webkit-scrollbar-track,
 .document-scroll::-webkit-scrollbar-track,
-.assistant-body::-webkit-scrollbar-track {
+.assistant-body::-webkit-scrollbar-track,
+.data-backup-body::-webkit-scrollbar-track,
+.about-panel::-webkit-scrollbar-track,
+.about-legal-document-reader pre::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .command-workspace .context-rail::-webkit-scrollbar-thumb,
+.journal-paper::-webkit-scrollbar-thumb,
+.today-assistant::-webkit-scrollbar-thumb,
+.input-dock::-webkit-scrollbar-thumb,
+.llm-provider-list::-webkit-scrollbar-thumb,
+.llm-settings-main::-webkit-scrollbar-thumb,
+.llm-settings-side::-webkit-scrollbar-thumb,
+.llm-settings-grid::-webkit-scrollbar-thumb,
 .document-scroll::-webkit-scrollbar-thumb,
-.assistant-body::-webkit-scrollbar-thumb {
+.assistant-body::-webkit-scrollbar-thumb,
+.data-backup-body::-webkit-scrollbar-thumb,
+.about-panel::-webkit-scrollbar-thumb,
+.about-legal-document-reader pre::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
   background-color: transparent;
@@ -116,10 +176,30 @@ button:focus-visible {
 
 .command-workspace .context-rail:hover::-webkit-scrollbar-thumb,
 .command-workspace .context-rail:focus-within::-webkit-scrollbar-thumb,
+.journal-paper:hover::-webkit-scrollbar-thumb,
+.journal-paper:focus-within::-webkit-scrollbar-thumb,
+.today-assistant:hover::-webkit-scrollbar-thumb,
+.today-assistant:focus-within::-webkit-scrollbar-thumb,
+.input-dock:hover::-webkit-scrollbar-thumb,
+.input-dock:focus-within::-webkit-scrollbar-thumb,
+.llm-provider-list:hover::-webkit-scrollbar-thumb,
+.llm-provider-list:focus-within::-webkit-scrollbar-thumb,
+.llm-settings-main:hover::-webkit-scrollbar-thumb,
+.llm-settings-main:focus-within::-webkit-scrollbar-thumb,
+.llm-settings-side:hover::-webkit-scrollbar-thumb,
+.llm-settings-side:focus-within::-webkit-scrollbar-thumb,
+.llm-settings-grid:hover::-webkit-scrollbar-thumb,
+.llm-settings-grid:focus-within::-webkit-scrollbar-thumb,
 .document-scroll:hover::-webkit-scrollbar-thumb,
 .document-scroll:focus-within::-webkit-scrollbar-thumb,
 .assistant-body:hover::-webkit-scrollbar-thumb,
-.assistant-body:focus-within::-webkit-scrollbar-thumb {
+.assistant-body:focus-within::-webkit-scrollbar-thumb,
+.data-backup-body:hover::-webkit-scrollbar-thumb,
+.data-backup-body:focus-within::-webkit-scrollbar-thumb,
+.about-panel:hover::-webkit-scrollbar-thumb,
+.about-panel:focus-within::-webkit-scrollbar-thumb,
+.about-legal-document-reader pre:hover::-webkit-scrollbar-thumb,
+.about-legal-document-reader pre:focus-within::-webkit-scrollbar-thumb {
   background-color: rgba(52, 45, 36, 0.26);
 }
 

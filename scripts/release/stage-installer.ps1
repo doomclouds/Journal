@@ -72,6 +72,7 @@ function Assert-BuildMetadata {
   $expectedValues = @{
     JOURNAL_RELEASE_VERSION = $ReleaseVersion
     JOURNAL_FRONTEND_VERSION = $ReleaseVersion
+    JOURNAL_BACKEND_VERSION = $ReleaseVersion
     VITE_JOURNAL_RELEASE_VERSION = $ReleaseVersion
     VITE_JOURNAL_FRONTEND_VERSION = $ReleaseVersion
   }

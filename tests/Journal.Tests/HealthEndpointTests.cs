@@ -218,6 +218,7 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         var root = document.RootElement;
         Assert.Equal("Journal.Api", root.GetProperty("name").GetString());
         Assert.Equal("0.1.0", root.GetProperty("version").GetString());
+        Assert.Equal("0.1.0", root.GetProperty("backendVersion").GetString());
         Assert.Equal("0.1.0", root.GetProperty("releaseVersion").GetString());
         Assert.Equal("dev", root.GetProperty("commit").GetString());
         Assert.Equal("local", root.GetProperty("buildTimeUtc").GetString());

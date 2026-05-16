@@ -104,6 +104,7 @@ app.MapGet("/app/info", (
     return Results.Ok(new AppInfoResponse(
         ApplicationInfo.Name,
         ApplicationInfo.Version,
+        build.BackendVersion,
         build.ReleaseVersion,
         build.Commit,
         build.BuildTimeUtc,
@@ -757,6 +758,7 @@ public sealed record HealthResponse(
 public sealed record AppInfoResponse(
     string Name,
     string Version,
+    string BackendVersion,
     string ReleaseVersion,
     string Commit,
     string BuildTimeUtc,

@@ -62,6 +62,7 @@ function resolvePackagedBuildMetadata() {
   return {
     JOURNAL_RELEASE_VERSION: releaseVersion,
     JOURNAL_FRONTEND_VERSION: metadata.JOURNAL_FRONTEND_VERSION || releaseVersion,
+    JOURNAL_BACKEND_VERSION: metadata.JOURNAL_BACKEND_VERSION || releaseVersion,
     JOURNAL_BUILD_COMMIT: metadata.JOURNAL_BUILD_COMMIT,
     JOURNAL_BUILD_TIME_UTC: metadata.JOURNAL_BUILD_TIME_UTC
   };

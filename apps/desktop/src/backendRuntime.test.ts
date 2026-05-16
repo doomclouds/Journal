@@ -42,20 +42,22 @@ describe("backend runtime classification", () => {
     const metadataPath = path.join(root, "build-metadata.env");
     await writeFile(metadataPath, [
       "JOURNAL_RELEASE_VERSION=2.3.4",
-      "JOURNAL_FRONTEND_VERSION=2.3.4",
+      "JOURNAL_FRONTEND_VERSION=2.3.5",
+      "JOURNAL_BACKEND_VERSION=2.3.6",
       "JOURNAL_BUILD_COMMIT=abc1234",
       "JOURNAL_BUILD_TIME_UTC=2026-05-14T18:30:00Z",
-      "VITE_JOURNAL_FRONTEND_VERSION=2.3.4",
+      "VITE_JOURNAL_FRONTEND_VERSION=2.3.5",
       "VITE_JOURNAL_RELEASE_VERSION=2.3.4"
     ].join("\n"), "utf8");
 
     try {
       expect(runtime.readBuildMetadataFile(metadataPath)).toEqual({
         JOURNAL_RELEASE_VERSION: "2.3.4",
-        JOURNAL_FRONTEND_VERSION: "2.3.4",
+        JOURNAL_FRONTEND_VERSION: "2.3.5",
+        JOURNAL_BACKEND_VERSION: "2.3.6",
         JOURNAL_BUILD_COMMIT: "abc1234",
         JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z",
-        VITE_JOURNAL_FRONTEND_VERSION: "2.3.4",
+        VITE_JOURNAL_FRONTEND_VERSION: "2.3.5",
         VITE_JOURNAL_RELEASE_VERSION: "2.3.4"
       });
     } finally {
@@ -227,7 +229,7 @@ describe("backend runtime classification", () => {
 
     expect(result).toEqual({
       action: "restart-stale",
-      reason: "Existing backend /app/info belongs to Journal but not this release or data root."
+      reason: "Existing backend /app/info belongs to Journal but not this release, backend version, or data root."
     });
   });
 
@@ -252,6 +254,31 @@ describe("backend runtime classification", () => {
     expect(result).toEqual({
       action: "reuse",
       reason: null
+    });
+  });
+
+  test("classifies self-owned Journal app-info with a different backend version as stale", () => {
+    const result = runtime.classifyReusableBackendAppInfo(
+      {
+        name: "Journal.Api",
+        version: "0.1.0",
+        backendVersion: "0.1.1",
+        releaseVersion: "0.1.0",
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal"
+      },
+      {
+        backendVersion: "0.1.0",
+        releaseVersion: "0.1.0"
+      },
+      {
+        dataRoot: "C:\\Users\\10062\\AppData\\Local\\Journal",
+        releaseVersion: "0.1.0"
+      }
+    );
+
+    expect(result).toEqual({
+      action: "restart-stale",
+      reason: "Existing backend /app/info belongs to Journal but not this release, backend version, or data root."
     });
   });
 
@@ -337,7 +364,8 @@ describe("backend runtime classification", () => {
         releaseVersion: "2.3.4",
         buildMetadata: {
           JOURNAL_RELEASE_VERSION: "2.3.4",
-          JOURNAL_FRONTEND_VERSION: "2.3.4",
+          JOURNAL_FRONTEND_VERSION: "2.3.5",
+          JOURNAL_BACKEND_VERSION: "2.3.6",
           JOURNAL_BUILD_COMMIT: "abc1234",
           JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z"
         },
@@ -356,6 +384,7 @@ describe("backend runtime classification", () => {
           waitForAppInfo: async () => ({
             name: "Journal.Api",
             version: "0.1.0",
+            backendVersion: "2.3.6",
             releaseVersion: "2.3.4",
             dataRoot
           }),
@@ -371,7 +400,8 @@ describe("backend runtime classification", () => {
         ASPNETCORE_URLS: "http://127.0.0.1:61234",
         JOURNAL_DATA_ROOT: dataRoot,
         JOURNAL_RELEASE_VERSION: "2.3.4",
-        JOURNAL_FRONTEND_VERSION: "2.3.4",
+        JOURNAL_FRONTEND_VERSION: "2.3.5",
+        JOURNAL_BACKEND_VERSION: "2.3.6",
         JOURNAL_BUILD_COMMIT: "abc1234",
         JOURNAL_BUILD_TIME_UTC: "2026-05-14T18:30:00Z",
         JOURNAL_DESKTOP_ACCESS_TOKEN: "desktop-token-123"

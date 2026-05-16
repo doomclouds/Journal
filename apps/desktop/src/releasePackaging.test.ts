@@ -15,7 +15,7 @@ describe("release packaging", () => {
     expect(viteConfig).toContain('base: "./"');
   });
 
-  test("writes frontend version into build metadata", () => {
+  test("writes release version into frontend and backend build metadata", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "journal-build-metadata-"));
     const outputPath = join(tempRoot, "build-metadata.env");
 
@@ -37,8 +37,11 @@ describe("release packaging", () => {
       );
 
       const metadata = readFileSync(outputPath, "utf8");
+      expect(metadata).toContain("JOURNAL_RELEASE_VERSION=9.8.7");
       expect(metadata).toContain("JOURNAL_FRONTEND_VERSION=9.8.7");
+      expect(metadata).toContain("JOURNAL_BACKEND_VERSION=9.8.7");
       expect(metadata).toContain("VITE_JOURNAL_FRONTEND_VERSION=9.8.7");
+      expect(metadata).toContain("VITE_JOURNAL_RELEASE_VERSION=9.8.7");
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -63,6 +66,9 @@ describe("release packaging", () => {
     const releaseWorkflow = readFileSync(join(repoRoot, ".github", "workflows", "release-windows.yml"), "utf8");
 
     expect(releaseWorkflow).toContain("fetch-depth: 0");
+    expect(releaseWorkflow).not.toContain("frontend_version:");
+    expect(releaseWorkflow).not.toContain("backend_version:");
+    expect(releaseWorkflow).toContain("build-installer.ps1 -ReleaseVersion $version");
     expect(releaseWorkflow).toContain("write-github-release-notes.ps1");
     expect(releaseWorkflow).toContain("artifacts/installer/release-assets/GITHUB_RELEASE_NOTES.md");
     expect(releaseWorkflow).not.toContain("body_path: docs/release/GITHUB_RELEASE_TEMPLATE.md");
