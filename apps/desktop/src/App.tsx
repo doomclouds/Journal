@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { DatabaseBackup, FolderOpen, History, RefreshCw, Save, SendHorizontal, X } from "lucide-react";
+import { DatabaseBackup, FileText, FolderOpen, History, RefreshCw, Save, SendHorizontal, X } from "lucide-react";
 import {
   activateAiSettings,
   confirmTodayDraft,
@@ -66,43 +66,61 @@ import "./styles.css";
 type LoadState = "loading" | "ready" | "error";
 type NativeMenuCommand = "open-llm-settings" | "open-about" | "open-data-backup";
 type AboutLegalNoticeId = "statement" | "license" | "privacy" | "data-safety" | "ai-notice";
+type AboutLegalDocumentId = AboutLegalNoticeId;
+type AboutLegalDocumentView = {
+  documentId: AboutLegalDocumentId;
+  fileName: string;
+  content: string;
+};
 const nativeMenuDomEventName = "journal:native-menu-command";
 
 const aboutLegalNotices: Array<{
   id: AboutLegalNoticeId;
+  documentId: AboutLegalDocumentId;
+  documentName: string;
   label: string;
   title: string;
   body: string;
 }> = [
   {
     id: "statement",
+    documentId: "statement",
+    documentName: "PERSONAL_STATEMENT.md",
     label: "Statement",
     title: "个人声明",
-    body: "Journal 是一个 local-first 的晨间日记应用，面向长期个人记忆。\n\n它更在意保留原始表达、把日记落成可读 Markdown、在写入正式条目前认真确认，并让本地数据归用户拥有。\n\nAI 可以帮忙整理结构，但人的表达、判断和确认才是日记的中心。"
+    body: "本节为 Journal 产品立场的摘要说明。Journal 以本地优先、原始表达保留、用户确认和可读文件为基本原则。\n\n正式文件：PERSONAL_STATEMENT.md。"
   },
   {
     id: "license",
+    documentId: "license",
+    documentName: "LICENSE",
     label: "License",
-    title: "许可证",
-    body: "Journal 当前随仓库提供 Apache License 2.0 许可证文本。\n\n安装包会携带完整 LICENSE 与 NOTICE 文件。这里显示的是面向用户的入口摘要；完整条款以随软件分发的 LICENSE 文件为准。"
+    title: "许可声明",
+    body: "Journal 的许可信息以随软件分发的 LICENSE 与 NOTICE 文件为准。涉及使用、复制、修改、分发及归属声明时，请以正式文件内容为准。\n\n正式文件：LICENSE。"
   },
   {
     id: "privacy",
+    documentId: "privacy",
+    documentName: "PRIVACY.md",
     label: "Privacy",
-    title: "隐私边界",
-    body: "Journal 默认把日记条目、原始输入、草稿、版本快照、AI 审计记录和可重建索引保存在当前 Windows 用户的本地应用数据目录。\n\n本版本不提供云同步。启用真实 LLM provider 后，你提交用于整理日记的文本可能会发送给当前启用的 provider。"
+    title: "隐私声明",
+    body: "Journal 的隐私边界以本地数据存储、用户显式配置的 LLM provider、以及密钥可见性控制为核心。关于数据保存位置、第三方 provider 传输和 API Key 处理，请以正式文件为准。\n\n正式文件：PRIVACY.md。"
   },
   {
     id: "data-safety",
+    documentId: "data-safety",
+    documentName: "DATA_SAFETY.md",
     label: "Data Safety",
-    title: "数据安全",
-    body: "Markdown 日记、raw-input jsonl 和版本快照是长期 source material；SQLite 历史索引只是可重建缓存。\n\n卸载应用默认应保留本地用户数据。导入数据包会先备份当前数据，再恢复 source material 并重建索引。导出数据包默认不包含完整 API Key。"
+    title: "数据安全声明",
+    body: "Journal 将 Markdown 日记、原始输入和版本快照视为长期数据材料，将 SQLite 索引视为可重建缓存。关于卸载保留、导入备份、索引重建和密钥导出边界，请以正式文件为准。\n\n正式文件：DATA_SAFETY.md。"
   },
   {
     id: "ai-notice",
+    documentId: "ai-notice",
+    documentName: "AI_NOTICE.md",
     label: "AI Notice",
-    title: "AI 使用说明",
-    body: "AI 输出是整理辅助，不是事实源。\n\n真实 LLM 或 Mock provider 生成的内容会先进入草稿边界。正式 Markdown 日记只有在用户确认当前草稿后才会更新。校验失败时，Journal 会创建 attention 草稿并保留修复信息，不覆盖正式日记。"
+    title: "AI 使用声明",
+    body: "Journal 中的 AI 输出仅作为整理辅助，不构成事实认定或专业建议。正式日记的写入以用户确认后的草稿为准；校验失败时不会覆盖正式条目。\n\n正式文件：AI_NOTICE.md。"
   }
 ];
 
@@ -115,6 +133,10 @@ declare global {
       getDesktopAccessToken?: () => Promise<string | null>;
       selectImportPackage?: () => Promise<string | null>;
       openPath?: (targetPath: string) => Promise<boolean>;
+      readLegalDocument?: (documentId: AboutLegalDocumentId) => Promise<{
+        fileName: string;
+        content: string;
+      } | null>;
       onNativeMenuCommand?: (handler: (command: NativeMenuCommand) => void) => () => void;
     };
   }
@@ -217,6 +239,8 @@ export default function App() {
   const [aboutError, setAboutError] = useState("");
   const [selectedAboutLegalNoticeId, setSelectedAboutLegalNoticeId] =
     useState<AboutLegalNoticeId>("statement");
+  const [aboutLegalDocument, setAboutLegalDocument] = useState<AboutLegalDocumentView | null>(null);
+  const [isAboutLegalDocumentLoading, setIsAboutLegalDocumentLoading] = useState(false);
   const [dataBackupError, setDataBackupError] = useState("");
   const [dataBackupNotice, setDataBackupNotice] = useState("");
   const [importPackagePath, setImportPackagePath] = useState("");
@@ -576,6 +600,15 @@ export default function App() {
     setIsAboutOpen(false);
     setAboutError("");
     setSelectedAboutLegalNoticeId("statement");
+    setAboutLegalDocument(null);
+    setIsAboutLegalDocumentLoading(false);
+  }
+
+  function selectAboutLegalNotice(id: AboutLegalNoticeId) {
+    setSelectedAboutLegalNoticeId(id);
+    setAboutLegalDocument(null);
+    setAboutError("");
+    setIsAboutLegalDocumentLoading(false);
   }
 
   function resetDataBackupPanelState() {
@@ -633,6 +666,8 @@ export default function App() {
     setIsAboutOpen(true);
     setAboutError("");
     setSelectedAboutLegalNoticeId("statement");
+    setAboutLegalDocument(null);
+    setIsAboutLegalDocumentLoading(false);
     if (aboutInFlightRef.current) {
       return;
     }
@@ -655,6 +690,29 @@ export default function App() {
       if (aboutInFlightRef.current === request) {
         aboutInFlightRef.current = null;
       }
+    }
+  }
+
+  async function handleReadAboutLegalDocument() {
+    setAboutError("");
+    setAboutLegalDocument(null);
+    setIsAboutLegalDocumentLoading(true);
+    try {
+      const document = await window.journalDesktop?.readLegalDocument?.(selectedAboutLegalNotice.documentId);
+      if (!document) {
+        setAboutError(`未能读取正式文件：${selectedAboutLegalNotice.documentName}。`);
+        return;
+      }
+
+      setAboutLegalDocument({
+        documentId: selectedAboutLegalNotice.documentId,
+        fileName: document.fileName,
+        content: document.content
+      });
+    } catch (caught) {
+      setAboutError(getErrorMessage(caught));
+    } finally {
+      setIsAboutLegalDocumentLoading(false);
     }
   }
 
@@ -1923,7 +1981,7 @@ export default function App() {
                   key={notice.id}
                   className={notice.id === selectedAboutLegalNotice.id ? "active" : ""}
                   aria-pressed={notice.id === selectedAboutLegalNotice.id}
-                  onClick={() => setSelectedAboutLegalNoticeId(notice.id)}
+                  onClick={() => selectAboutLegalNotice(notice.id)}
                 >
                   {notice.label}
                 </button>
@@ -1932,6 +1990,30 @@ export default function App() {
             <section className="about-legal-detail" aria-live="polite" aria-label={selectedAboutLegalNotice.title}>
               <h3>{selectedAboutLegalNotice.title}</h3>
               <p>{selectedAboutLegalNotice.body}</p>
+              <div className="about-legal-document-action">
+                <button
+                  type="button"
+                  aria-label={`查看正式文件 ${selectedAboutLegalNotice.documentName}`}
+                  onClick={handleReadAboutLegalDocument}
+                  disabled={isAboutLegalDocumentLoading}
+                >
+                  <FileText size={15} strokeWidth={1.9} aria-hidden="true" />
+                  <span>{isAboutLegalDocumentLoading ? "读取中" : "查看正式文件"}</span>
+                  <code>{selectedAboutLegalNotice.documentName}</code>
+                </button>
+              </div>
+              {aboutLegalDocument?.documentId === selectedAboutLegalNotice.documentId ? (
+                <section
+                  className="about-legal-document-reader"
+                  aria-label={`正式文件阅读器 ${aboutLegalDocument.fileName}`}
+                >
+                  <header>
+                    <strong>{aboutLegalDocument.fileName}</strong>
+                    <span>内置阅读器</span>
+                  </header>
+                  <pre>{aboutLegalDocument.content}</pre>
+                </section>
+              ) : null}
             </section>
           </section>
         </div>

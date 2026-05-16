@@ -159,6 +159,8 @@ function Assert-StagedInstallerInputs {
     (Join-Path $legalPath "PRIVACY.md"),
     (Join-Path $legalPath "DATA_SAFETY.md"),
     (Join-Path $legalPath "AI_NOTICE.md"),
+    (Join-Path $legalPath "PERSONAL_STATEMENT.md"),
+    (Join-Path $legalPath "DISCLAIMER.md"),
     (Join-Path $assetsPath "journal.ico")
   )
 
@@ -230,6 +232,8 @@ Copy-RequiredFile -Source "NOTICE" -Destination (Join-Path $legalPath "NOTICE")
 Copy-RequiredFile -Source "docs/legal/PRIVACY.md" -Destination (Join-Path $legalPath "PRIVACY.md")
 Copy-RequiredFile -Source "docs/legal/DATA_SAFETY.md" -Destination (Join-Path $legalPath "DATA_SAFETY.md")
 Copy-RequiredFile -Source "docs/legal/AI_NOTICE.md" -Destination (Join-Path $legalPath "AI_NOTICE.md")
+Copy-RequiredFile -Source "docs/legal/PERSONAL_STATEMENT.md" -Destination (Join-Path $legalPath "PERSONAL_STATEMENT.md")
+Copy-RequiredFile -Source "docs/legal/DISCLAIMER.md" -Destination (Join-Path $legalPath "DISCLAIMER.md")
 Copy-RequiredFile -Source "assets/app-icon/journal.ico" -Destination (Join-Path $assetsPath "journal.ico")
 
 Assert-StagedInstallerInputs -Metadata $metadata

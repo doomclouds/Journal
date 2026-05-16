@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld("journalDesktop", {
   getDesktopAccessToken: () => ipcRenderer.invoke("journal:get-desktop-access-token"),
   selectImportPackage: () => ipcRenderer.invoke("journal:select-import-package"),
   openPath: targetPath => ipcRenderer.invoke("journal:open-path", targetPath),
+  readLegalDocument: documentId => ipcRenderer.invoke("journal:read-legal-document", documentId),
   ...createNativeMenuBridge(ipcRenderer, nativeMenuChannel)
 });

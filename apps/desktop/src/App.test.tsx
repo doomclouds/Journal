@@ -790,7 +790,45 @@ describe("App", () => {
     expect(within(dialog).getByRole("button", { name: "关闭" }).textContent).toBe("");
     expect(within(dialog).getByRole("button", { name: "Statement" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(within(dialog).getByRole("button", { name: "Privacy" }));
-    expect(within(dialog).getByRole("region", { name: "隐私边界" })).toHaveTextContent("本版本不提供云同步");
+    expect(within(dialog).getByRole("region", { name: "隐私声明" })).toHaveTextContent("正式文件");
+    expect(within(dialog).getByRole("region", { name: "隐私声明" })).toHaveTextContent("PRIVACY.md");
+    expect(within(dialog).getByRole("button", { name: "查看正式文件 PRIVACY.md" })).toBeInTheDocument();
+  });
+
+  test("reads the selected about legal document inside the app", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState(processedToday())))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(appInfo));
+    const readLegalDocument = vi.fn().mockResolvedValue({
+      fileName: "PRIVACY.md",
+      content: "# Journal 隐私声明\n\n当前版本不提供云同步功能。"
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers: Array<(command: "open-llm-settings" | "open-about") => void> = [];
+    vi.stubGlobal("journalDesktop", {
+      platform: "win32",
+      readLegalDocument,
+      onNativeMenuCommand: (handler: (command: "open-llm-settings" | "open-about") => void) => {
+        handlers.push(handler);
+        return () => undefined;
+      }
+    });
+
+    render(<App />);
+    await screen.findByText("本地优先晨间日记");
+    act(() => handlers[0]("open-about"));
+
+    const dialog = await screen.findByRole("dialog", { name: "关于 Journal" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Privacy" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "查看正式文件 PRIVACY.md" }));
+
+    expect(readLegalDocument).toHaveBeenCalledWith("privacy");
+    const reader = await within(dialog).findByRole("region", { name: "正式文件阅读器 PRIVACY.md" });
+    expect(reader).toHaveTextContent("Journal 隐私声明");
+    expect(reader).toHaveTextContent("当前版本不提供云同步功能");
   });
 
   test("deduplicates duplicate about menu commands while app info is loading", async () => {

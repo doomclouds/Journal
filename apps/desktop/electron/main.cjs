@@ -7,6 +7,7 @@ const {
   resolvePackagedBackendExePath: resolveBackendExePathFromResources
 } = require("./backendRuntime.cjs");
 const { createDataBackupIpcHandlers } = require("./dataBackupIpc.cjs");
+const { createLegalDocumentIpcHandlers } = require("./legalDocumentIpc.cjs");
 const { createApplicationMenuTemplate } = require("./menu.cjs");
 const {
   installNavigationGuards,
@@ -44,6 +45,14 @@ function resolvePackagedBackendExePath() {
 
 function resolvePackagedRendererEntryPathFromMain() {
   return resolvePackagedRendererEntryPath(__dirname);
+}
+
+function resolveRepoRootFromMain() {
+  return path.join(__dirname, "..", "..", "..");
+}
+
+function resolveInstalledLegalRoot() {
+  return path.join(process.resourcesPath, "..", "..", "legal");
 }
 
 function resolvePackagedBuildMetadata() {
@@ -116,6 +125,15 @@ function installDataBackupIpcHandlers() {
     dialog,
     shell,
     dataRoot: resolveLocalJournalDataRoot()
+  });
+}
+
+function installLegalDocumentIpcHandlers() {
+  createLegalDocumentIpcHandlers({
+    ipcMain,
+    ...(isDev
+      ? { repoRoot: resolveRepoRootFromMain() }
+      : { legalRoot: resolveInstalledLegalRoot() })
   });
 }
 
@@ -216,6 +234,7 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(() => {
     installLocalServiceIpcHandlers();
     installDataBackupIpcHandlers();
+    installLegalDocumentIpcHandlers();
     void createWindow();
 
     app.on("activate", () => {

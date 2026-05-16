@@ -9,6 +9,18 @@ const {
   openSafeJournalPath
 } = require("../electron/dataBackupIpc.cjs");
 
+let legalDocumentIpc: {
+  createLegalDocumentIpcHandlers?: (...args: unknown[]) => void;
+  readLegalDocument?: (...args: unknown[]) => Promise<{ fileName: string; content: string } | null>;
+  resolveLegalDocumentPath?: (...args: unknown[]) => string | null;
+} | null = null;
+
+try {
+  legalDocumentIpc = require("../electron/legalDocumentIpc.cjs");
+} catch {
+  legalDocumentIpc = null;
+}
+
 describe("Electron native menu", () => {
   test("uses Chinese top-level menu labels instead of Electron defaults", () => {
     const template = createApplicationMenuTemplate();
@@ -196,5 +208,24 @@ describe("Electron native menu", () => {
 
     expect(shell.openPath).toHaveBeenNthCalledWith(1, exportDirectory);
     expect(shell.openPath).toHaveBeenNthCalledWith(2, backupDirectory);
+  });
+
+  test("reads only known legal documents from the packaged legal folder", async () => {
+    expect(legalDocumentIpc).not.toBeNull();
+    const { readLegalDocument, resolveLegalDocumentPath } = legalDocumentIpc!;
+    const legalRoot = "C:\\Program Files\\Journal\\legal";
+    const privacyPath = "C:\\Program Files\\Journal\\legal\\PRIVACY.md";
+    const exists = (targetPath: string) => targetPath === privacyPath;
+    const readFile = vi.fn().mockResolvedValue("# Journal 隐私声明");
+
+    expect(resolveLegalDocumentPath?.("privacy", { legalRoot })).toBe(privacyPath);
+    expect(resolveLegalDocumentPath?.("..\\secrets", { legalRoot })).toBeNull();
+    await expect(readLegalDocument?.("privacy", { legalRoot, exists, readFile })).resolves.toEqual({
+      fileName: "PRIVACY.md",
+      content: "# Journal 隐私声明"
+    });
+    await expect(readLegalDocument?.("missing", { legalRoot, exists, readFile })).resolves.toBeNull();
+    expect(readFile).toHaveBeenCalledWith(privacyPath, "utf8");
+    expect(readFile).toHaveBeenCalledTimes(1);
   });
 });
