@@ -9,7 +9,7 @@ public sealed class JournalHarnessPromptTests
     [Fact]
     public void SystemInstructions_DeclarePlannerContractAndTwoLayerBoundary()
     {
-        Assert.Equal("journal-harness-v2", JournalHarnessPrompt.Version);
+        Assert.Equal("journal-harness-v4", JournalHarnessPrompt.Version);
         Assert.Equal("append-input", JournalHarnessPrompt.AppendInputMode);
         Assert.Equal("reorganize-existing", JournalHarnessPrompt.ReorganizeExistingMode);
         Assert.Contains("# Journal Harness Planner", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
@@ -26,7 +26,8 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("只能调用工具", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("不得在重新整理时新增 raw input", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("每条新增内容必须写成 Markdown bullet", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("使用 Markdown 加粗标注重点内容", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("默认不要使用 Markdown 加粗", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("emoji", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("按轻重缓急排序", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("同一事实只能进入一个最合适的 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("today-focus 与 work 的边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
@@ -70,7 +71,7 @@ public sealed class JournalHarnessPromptTests
 
         using var context = JsonDocument.Parse(request.ProtectedContext);
         var root = context.RootElement;
-        Assert.Equal("journal-harness-v2", root.GetProperty("version").GetString());
+        Assert.Equal("journal-harness-v4", root.GetProperty("version").GetString());
         Assert.Equal("2026-05-13", root.GetProperty("date").GetString());
         Assert.Equal("append-input", root.GetProperty("mode").GetString());
         Assert.Equal("# Draft", root.GetProperty("currentDraftMarkdown").GetString());
@@ -172,7 +173,7 @@ public sealed class JournalHarnessPromptTests
             "# Entry");
 
         using var context = JsonDocument.Parse(request.ProtectedContext);
-        Assert.Equal("journal-harness-v2", context.RootElement.GetProperty("version").GetString());
+        Assert.Equal("journal-harness-v4", context.RootElement.GetProperty("version").GetString());
         Assert.Equal("reorganize-existing", context.RootElement.GetProperty("mode").GetString());
         Assert.Contains("历史输入：今天要重新整理。", request.ProtectedContext, StringComparison.Ordinal);
         Assert.False(context.RootElement.TryGetProperty("currentDraftMarkdown", out _));
@@ -206,12 +207,17 @@ public sealed class JournalHarnessPromptTests
     }
 
     [Fact]
-    public void SystemInstructions_RequireMarkdownEmphasisAndPriorityOrdering()
+    public void SystemInstructions_DefaultToPlainTextAndAllowControlledEmoji()
     {
-        Assert.Contains("重点内容使用 Markdown 加粗", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("不要整段都加粗", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("默认不要使用 Markdown 加粗", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不要使用双星号包裹文字", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("emoji 是表达情绪和语气的有效手段", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("每个 section 最多 0-2 个 emoji", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("😊", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("🎉", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("重要且紧急的内容排在前面", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("- **今天最重要**", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("Markdown 加粗标注重点内容", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("- **", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -221,6 +227,23 @@ public sealed class JournalHarnessPromptTests
         Assert.Contains("重新分配 section", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("检查重复、错分、整段内容和相近 section 边界", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("如果发现安全可执行的整理点", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SystemInstructions_DefineHumanDiaryEditorAndIntentDecomposition()
+    {
+        Assert.Contains("晨间日记编辑者", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不是会议纪要助手", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("像用户本人早晨回看自己的一天", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("Atomic Journal Intents", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("achievement", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("meaning", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("relationship", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("今天的方向感", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("work 必须换角度", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不要把日记写成项目周报", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不要在多个 section 用近义句重复同一件事", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("不要把生活内容写成事项管理", JournalHarnessPrompt.SystemInstructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -251,7 +274,7 @@ public sealed class JournalHarnessPromptTests
             "# Confirmed Entry\n\n已确认正文");
 
         using var context = JsonDocument.Parse(request.ProtectedContext);
-        Assert.Equal("journal-harness-v2", context.RootElement.GetProperty("version").GetString());
+        Assert.Equal("journal-harness-v4", context.RootElement.GetProperty("version").GetString());
         Assert.Equal("append-input", context.RootElement.GetProperty("mode").GetString());
         Assert.Equal("2026-05-12", context.RootElement.GetProperty("date").GetString());
         Assert.Equal(

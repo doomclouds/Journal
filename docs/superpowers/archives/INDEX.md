@@ -3,7 +3,6 @@
 ## 2026-05
 
 - [2026-05-15-jmf-soft-section-consolidation-archives.md](./2026-05/2026-05-15-jmf-soft-section-consolidation-archives.md): 归档 JMF active/legacy 分类软合并、新增块与 AI/Harness 写入目标收敛、legacy 兼容和用户选择式单篇重新整理路径。
-- [2026-05-15-ui-ux-design-navigation-archives.md](./2026-05/2026-05-15-ui-ux-design-navigation-archives.md): 归档 Journal UI/UX Master 设计系统、页面级 override 和 agent 设计导航入口，作为后续桌面交互优化的读取与验收基线。
 - [2026-05-14-phase-6b-anniversary-wheel-archives.md](./2026-05/2026-05-14-phase-6b-anniversary-wheel-archives.md): 归档同日年轮按 `MM-DD` 回看历年日记、原始材料摘要、版本快照和 Today Assistant 入口的交付。
 - [2026-05-14-phase-7-windows-release-pipeline-archives.md](./2026-05/2026-05-14-phase-7-windows-release-pipeline-archives.md): 归档 Windows 本地发布闭环、安装版 Electron 后端托管、导入导出、Inno Setup 安装包和 GitHub Actions release workflow。
 - [2026-05-13-harness-unified-planner-prompt-archives.md](./2026-05/2026-05-13-harness-unified-planner-prompt-archives.md): 归档 Harness Run 新增输入与重新整理统一入口、两层 Planner Prompt Context、固定重新整理 user prompt 和今日页 SSE 接线。

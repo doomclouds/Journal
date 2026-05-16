@@ -35,6 +35,7 @@
   - `work` 放具体工作项目、开发、会议、交付或排障。
   - `learning`、`health`、`relationship`、`money`、`inspiration`、`future-notes`、`gratitude` 都有各自的优先归属。
 - Harness prompt 增加 Section Boundary Rules，要求同一事实只进入一个最合适的 section，并列出相近 section 的边界。
+- 2026-05-16 用户验证后补充写作风格边界：默认不要使用 Markdown 加粗，不要把重点靠排版符号表达；允许 AI 克制使用 emoji 表达情绪、关系、庆祝感和周末感。
 - Journal Context 的 `sectionCatalog` 额外序列化 `semanticHint` 和 `avoidWhen`，让模型拿到和代码同源的主题说明。
 - `JournalHarnessOperationExecutor` 对完全相同的 normalized fact 做最后防线去重，保留语义更具体的 section。例如同一事实同时写入 `today-focus` 和 `work` 时，保留 `work`。
 - 补测试覆盖 prompt 中的边界规则、catalog 语义字段，以及 executor 对重复事实的去重行为。
@@ -55,7 +56,8 @@
 - 按钮“重新整理”后，AI 仍保守维持旧 section 分布，没有以 raw inputs 重新规划整篇结构。
 - 按钮“重新整理”的 planner protected context 仍包含 `currentDraftMarkdown` 或 `confirmedEntryMarkdown`。
 - 按钮“重新整理”后的 reviewing draft 仍保留旧草稿里的正文，例如旧 `today-focus`、旧 `yesterday-review`。
-- 生成内容没有使用 Markdown 语法标注重点，例如缺少 `**关键行动**`、`**风险点**`、`**今天最重要**` 这类重点加粗。
+- 生成内容大量使用 Markdown 加粗，导致日记读起来像 AI 摘要或工作报告，而不是自然的个人日记。
+- 情绪、关系和周末语气完全不用 emoji，导致文字虽然准确但缺少轻松感和人的温度。
 
 ## Applicability / Non-Applicability
 

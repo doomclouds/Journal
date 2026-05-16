@@ -28,7 +28,7 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
         Assert.True(result.IsSuccess);
         Assert.Equal("deepseek", result.Metadata.Provider);
         Assert.Equal("deepseek-v4-flash", result.Metadata.Model);
-        Assert.Equal("journal-entry-json-v1.2", result.Metadata.PromptVersion);
+        Assert.Equal("journal-entry-json-v1.4", result.Metadata.PromptVersion);
 
         var request = Assert.IsType<OpenAiCompatibleRunRequest>(runtime.CapturedRequest);
         Assert.Equal("deepseek-v4-flash", request.Model);
@@ -48,6 +48,14 @@ public sealed class OpenAiCompatibleJournalAiProviderTests
         Assert.Contains("睡眠、精力、身体状态", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("消费、收入、预算", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("不要输出 legacy section", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("晨间日记编辑者", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("先在内部完成意图拆解", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("不要把日记写成项目周报", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("不要在多个字段用近义句重复同一件事", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("默认不要使用 Markdown 加粗", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("emoji 是表达情绪和语气的有效手段", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("😊", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Markdown 加粗标注重点内容", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("今天想把 AI provider 接上，先保留原始表达。", request.UserPrompt, StringComparison.Ordinal);
     }
 
