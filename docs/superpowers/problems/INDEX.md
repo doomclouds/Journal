@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-16-journal-index-backup-file-move-lock-problem.md](./2026-05/2026-05-16-journal-index-backup-file-move-lock-problem.md): 记录 Windows release CI 中 SQLite index schema recovery 备份移动撞短暂文件锁，导致 `File.Move` 偶发失败的运行时恢复问题。
 - [2026-05-15-electron-preload-sandbox-bridge-problem.md](./2026-05/2026-05-15-electron-preload-sandbox-bridge-problem.md): 记录 Electron 开发桌面端启用 renderer sandbox 后，模块化 preload/IPC bridge 未注入，导致数据备份文件选择器和打开本地路径能力失效的诊断与修复。
 - [2026-05-15-phase-7-problem-gate-omission-problem.md](./2026-05/2026-05-15-phase-7-problem-gate-omission-problem.md): 记录 Phase 7 大交付收尾时 requirement archive 已完成但 problem gate 被漏跑或误判 `none`，导致安装版验收问题信号未及时沉淀的流程问题。
 - [2026-05-14-harness-section-boundary-duplication-problem.md](./2026-05/2026-05-14-harness-section-boundary-duplication-problem.md): 记录 Harness Planner 缺少九宫格 section 语义边界时，同一事实会被重复写入 `today-focus` 与 `work` 等相近主题的分配问题。

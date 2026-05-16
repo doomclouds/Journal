@@ -9,6 +9,8 @@ public sealed class JournalIndexStore
     private const int SchemaVersion = 1;
     private const int SearchHitsPerDateLimit = 5;
     private const int LikeSnippetMaxLength = 240;
+    private const int FileMoveMaxAttempts = 8;
+    private const int FileMoveRetryDelayMilliseconds = 75;
     private readonly LocalJournalPaths _paths;
 
     public JournalIndexStore(LocalJournalPaths paths)
@@ -1110,9 +1112,31 @@ public sealed class JournalIndexStore
 
     private static void MoveIfExists(string sourcePath, string destinationPath)
     {
-        if (File.Exists(sourcePath))
+        if (!File.Exists(sourcePath))
         {
-            File.Move(sourcePath, destinationPath);
+            return;
+        }
+
+        Exception? firstFailure = null;
+        for (var attempt = 1; attempt <= FileMoveMaxAttempts; attempt++)
+        {
+            try
+            {
+                File.Move(sourcePath, destinationPath);
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                firstFailure ??= exception;
+                if (attempt == FileMoveMaxAttempts)
+                {
+                    throw firstFailure;
+                }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                System.Threading.Thread.Sleep(FileMoveRetryDelayMilliseconds);
+            }
         }
     }
 
