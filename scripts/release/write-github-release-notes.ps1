@@ -69,6 +69,10 @@ function Format-CommitLine {
   return "- $displaySubject ($hash)"
 }
 
+function Get-ReleaseDisplayDate {
+  return (Get-Date).ToString("yyyy-MM-dd")
+}
+
 if ($ReleaseVersion -notmatch "^\d+\.\d+\.\d+$") {
   throw "ReleaseVersion must use semantic version format, e.g. 0.1.1."
 }
@@ -107,37 +111,13 @@ if (Test-Path -LiteralPath $curatedNotesPath -PathType Leaf) {
   $curatedNotes = [System.IO.File]::ReadAllText($curatedNotesPath, [System.Text.Encoding]::UTF8).Trim()
 }
 
-$curatedBlock = if ([string]::IsNullOrWhiteSpace($curatedNotes)) {
-  @()
-} else {
-  @($curatedNotes, "")
-}
-
-$body = @(
-  "# Journal v$ReleaseVersion",
-  "",
-  "## Assets",
-  "",
-  "- ``Journal-Setup-$ReleaseVersion.exe``",
-  "- ``Journal-Setup-$ReleaseVersion.sha256``",
-  ""
-) + $curatedBlock + @(
-  "## Changes Since $rangeLabel",
-  "",
-  ($formattedCommits -join [Environment]::NewLine),
-  "",
-  "## Install",
-  "",
-  "Download the setup executable for this release and run it on Windows x64.",
-  "",
-  "## Data Safety",
-  "",
-  "The installer preserves ``%LocalAppData%/Journal`` during upgrade and uninstall. User journal data is not treated as disposable installer output. Export packages do not include full API keys by default.",
-  "",
-  "## Verification",
-  "",
-  "After downloading both assets, compare the SHA-256 hash of the setup executable with the value in the matching ``.sha256`` file."
-) -join [Environment]::NewLine
+$templatePath = Join-Path $repoRoot "docs/release/GITHUB_RELEASE_TEMPLATE.md"
+$body = [System.IO.File]::ReadAllText($templatePath, [System.Text.Encoding]::UTF8)
+$body = $body.Replace("<release-version>", $ReleaseVersion)
+$body = $body.Replace("<previous-version>", $rangeLabel)
+$body = $body.Replace("<release-date>", (Get-ReleaseDisplayDate))
+$body = $body.Replace("<curated-notes>", $curatedNotes)
+$body = $body.Replace("<commit-summary>", ($formattedCommits -join [Environment]::NewLine))
 
 $outputDirectory = Split-Path -Parent $outputFullPath
 if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) {

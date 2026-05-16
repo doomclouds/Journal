@@ -91,16 +91,36 @@ describe("release packaging", () => {
 
       const notes = readFileSync(outputPath, "utf8");
       expect(notes).toContain("# Journal v0.1.1");
-      expect(notes).toContain("## Highlights");
-      expect(notes).toContain("Added an in-app legal document reader in About");
-      expect(notes).toContain("Changes Since v0.1.0");
+      expect(notes).toContain("发布范围：`v0.1.0` → `v0.1.1`");
+      expect(notes).toContain("## 本次重点");
+      expect(notes).toContain("About 中新增内置正式文件阅读器");
+      expect(notes).toContain("## 下载与校验");
+      expect(notes).toContain("## 升级与数据");
+      expect(notes).toContain("## 建议验证");
+      expect(notes).toContain("## 完整变更");
+      expect(notes).toContain("<details>");
       expect(notes).toContain("add in-app legal document reader");
       expect(notes).toMatch(/add in-app legal document reader \([0-9a-f]{7,}\)/);
       expect(notes).not.toContain("$hash");
       expect(notes).toContain("Journal-Setup-0.1.1.exe");
+      expect(notes).toContain("Release / Frontend / Backend 版本显示为 `0.1.1`");
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
+  });
+
+  test("keeps the manual GitHub release template aligned with generated notes", () => {
+    const template = readFileSync(join(repoRoot, "docs", "release", "GITHUB_RELEASE_TEMPLATE.md"), "utf8");
+
+    expect(template).toContain("# Journal v<release-version>");
+    expect(template).toContain("## 本次重点");
+    expect(template).toContain("## 下载与校验");
+    expect(template).toContain("## 升级与数据");
+    expect(template).toContain("## 建议验证");
+    expect(template).toContain("## 完整变更");
+    expect(template).toContain("## 反馈");
+    expect(template).toContain("<details>");
+    expect(template).not.toContain("## Highlights");
   });
 
   test("about panel styles use concrete theme values", () => {
