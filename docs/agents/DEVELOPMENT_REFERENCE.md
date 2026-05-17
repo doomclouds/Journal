@@ -34,6 +34,7 @@
 - Memory corridor UI: `apps/desktop/src/AnniversaryWheelWorkbench.tsx`.
 - API client/contracts: `apps/desktop/src/api.ts`.
 - Windows release workflow: `.github/workflows/release-windows.yml`.
+- UI/UX navigation and accepted layout contracts: `docs/agents/UI_UX_DESIGN_NAVIGATION.md`.
 
 ## Development Commands
 
@@ -63,6 +64,7 @@ npm test --prefix apps/desktop -- App.test.tsx
 npm test --prefix apps/desktop -- HistoryWorkbench.test.tsx
 npm test --prefix apps/desktop -- AnniversaryWheelWorkbench.test.tsx
 npm test --prefix apps/desktop -- AnniversaryWheelWorkbench.test.tsx App.test.tsx
+npm test --prefix apps/desktop -- App.test.tsx AnniversaryWheelWorkbench.test.tsx HistoryWorkbench.test.tsx
 ```
 
 Development run:

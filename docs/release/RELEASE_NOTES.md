@@ -1,4 +1,20 @@
-# Journal 0.1.0 Release Notes
+# Journal Release Notes
+
+## 0.1.1
+
+### Highlights
+
+- Unified app versioning：前端、后端和 GitHub Release 统一以 tag 版本号作为发布版本。
+- Polished packaged app UX：补齐 About、隐私/AI/免责声明、本地文档阅读和安装版路径处理。
+- Release workflow improvements：GitHub Release 模板开始承载版本更新说明，安装包构建和校验脚本继续作为发布前检查入口。
+- Same-day memory corridor foundation：主线继续推进同日记忆回廊，围绕多年同日、纪念日和下一年提醒形成下一阶段产品方向。
+
+### Known Limits
+
+- `0.1.1` 仍然是本地优先 Windows 桌面版本，不包含云同步、自动更新、代码签名或应用内语音转写。
+- 后续 main 上的 Phase 8 记忆回廊增强如果尚未打 tag，不应被误认为已经包含在已发布安装包中。
+
+## 0.1.0
 
 ## Highlights
 

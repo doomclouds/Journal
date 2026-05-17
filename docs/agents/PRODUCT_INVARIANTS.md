@@ -54,6 +54,8 @@
 - Restoring a version is draft-only. It creates a `reviewing` draft and must not write `entries/` directly.
 - Current version restore is limited to today's date.
 - Anniversary mode is read-only. Do not expose restore, delete, diff, or edit actions there unless the product direction changes explicitly.
+- Same-Day Memory Corridor uses strict panel responsibilities: left rail is navigation only, middle stage is timeline / diary reading, and right panel is anniversary metadata / next-year note management.
+- Timeline cards are preview surfaces, not full diary bodies. Keep card preview text bounded: truncate long title/line text and cap the number of visible preview lines so detailed reading remains behind the diary reading mode.
 - The app should support append/update flows, but no user-facing delete model unless product direction changes.
 
 ## Data Backup And Release
