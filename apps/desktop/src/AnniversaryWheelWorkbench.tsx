@@ -48,6 +48,8 @@ const nextYearNoteStatusLabels: Record<JournalNextYearNoteStatus, string> = {
   adopted: "已采纳",
   dismissed: "已忽略"
 };
+const timelineCardTextMaxLength = 30;
+const timelineCardPreviewLineLimit = 3;
 
 function getLocalTodayIsoDate() {
   const today = new Date();
@@ -150,6 +152,23 @@ function getCardPreview(item: JournalHistoryEntrySummary) {
   const title = item.cardPreview?.title ?? item.hits[0]?.title ?? item.mood ?? "日记";
   const lines = item.cardPreview?.lines?.length ? item.cardPreview.lines : [firstLine(item)];
   return { title, lines };
+}
+
+function truncateTimelineCardText(value: string) {
+  const normalized = value.trim();
+  return normalized.length > timelineCardTextMaxLength
+    ? `${normalized.slice(0, timelineCardTextMaxLength)}...`
+    : normalized;
+}
+
+function getTimelineCardPreview(item: JournalHistoryEntrySummary) {
+  const preview = getCardPreview(item);
+  return {
+    title: truncateTimelineCardText(preview.title),
+    lines: preview.lines
+      .slice(0, timelineCardPreviewLineLimit)
+      .map(line => truncateTimelineCardText(line))
+  };
 }
 
 function isRealDate(year: number, monthDay: string) {
@@ -548,7 +567,7 @@ export function AnniversaryWheelWorkbench({
                     <div className="memory-corridor-spine" aria-hidden="true" />
                     {timelineEntries.map(entry => {
                       const item = entry.item;
-                      const preview = item ? getCardPreview(item) : null;
+                      const preview = item ? getTimelineCardPreview(item) : null;
                       return (
                         <section
                           id={entry.id}

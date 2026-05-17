@@ -373,6 +373,86 @@ describe("AnniversaryWheelWorkbench", () => {
     expect(within(stageTimeline).queryByText("- 打磨同日年轮")).not.toBeInTheDocument();
   });
 
+  test("truncates long timeline card preview text", () => {
+    const longTitle = "这是一段特别长的同日年轮卡片标题，用来模拟真实日记里很啰嗦的一句话";
+    const longLine = "这是一段特别长的同日年轮卡片摘要，用来确认外层时间线不会把整段内容全部铺出来";
+    const longPreviewResult: JournalAnniversaryWheelResult = {
+      ...result,
+      items: [{
+        ...result.items[0],
+        cardPreview: {
+          title: longTitle,
+          lines: [longLine]
+        }
+      }]
+    };
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={longPreviewResult}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    const stageTimeline = screen.getByLabelText("同日年轮时间线");
+    expect(within(stageTimeline).queryByText(longTitle)).not.toBeInTheDocument();
+    expect(within(stageTimeline).queryByText(longLine)).not.toBeInTheDocument();
+    expect(within(stageTimeline).getByText("这是一段特别长的同日年轮卡片标题，用来模拟真实日记里很啰嗦的...")).toBeInTheDocument();
+    expect(within(stageTimeline).getByText("这是一段特别长的同日年轮卡片摘要，用来确认外层时间线不会把整...")).toBeInTheDocument();
+  });
+
+  test("limits timeline card preview lines to three items", () => {
+    const manyLinesResult: JournalAnniversaryWheelResult = {
+      ...result,
+      items: [{
+        ...result.items[0],
+        cardPreview: {
+          title: "多条摘要卡片",
+          lines: ["第一条摘要", "第二条摘要", "第三条摘要", "第四条不应显示"]
+        }
+      }]
+    };
+
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={manyLinesResult}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    const stageTimeline = screen.getByLabelText("同日年轮时间线");
+    expect(within(stageTimeline).getByText("第一条摘要")).toBeInTheDocument();
+    expect(within(stageTimeline).getByText("第二条摘要")).toBeInTheDocument();
+    expect(within(stageTimeline).getByText("第三条摘要")).toBeInTheDocument();
+    expect(within(stageTimeline).queryByText("第四条不应显示")).not.toBeInTheDocument();
+  });
+
   test("opens selected date markdown in reading mode and returns to timeline", () => {
     const onSelectDate = vi.fn();
 
