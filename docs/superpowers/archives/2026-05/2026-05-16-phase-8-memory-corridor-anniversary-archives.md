@@ -41,9 +41,10 @@ Phase 8 将 Phase 6B 的只读同日年轮升级为记忆回廊：同一 `MM-DD`
 
 ## Related Problems
 
-- None.
+- [Memory Corridor Prototype Drift](../../problems/2026-05/2026-05-17-memory-corridor-prototype-drift-problem.md)
 
 ## Notes
 
 - Phase 8 intentionally supersedes Phase 6B 的“只读同日年轮”边界：同日阅读仍不编辑正式日记，但纪念日资料和下一年提醒属于独立本地数据域。
 - 纪念日 JSON 是源数据；SQLite history index 仍然是可重建缓存，不承担纪念日事实源职责。
+- 2026-05-17 人工验收后回补同日记忆回廊的原型结构合同：左侧年份是中间时间轴节点的导航镜像，中间卡片承载简介和阅读入口，测试必须覆盖这种结构关系。

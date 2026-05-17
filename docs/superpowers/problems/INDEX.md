@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-17-memory-corridor-prototype-drift-problem.md](./2026-05/2026-05-17-memory-corridor-prototype-drift-problem.md): 记录同日记忆回廊实现和测试把原型时间轴退化成普通列表，导致左侧年份未与中间节点绑定的 UI 合同漂移问题。
 - [2026-05-16-journal-index-backup-file-move-lock-problem.md](./2026-05/2026-05-16-journal-index-backup-file-move-lock-problem.md): 记录 Windows release CI 中 SQLite index schema recovery 备份移动撞短暂文件锁，导致 `File.Move` 偶发失败的运行时恢复问题。
 - [2026-05-15-electron-preload-sandbox-bridge-problem.md](./2026-05/2026-05-15-electron-preload-sandbox-bridge-problem.md): 记录 Electron 开发桌面端启用 renderer sandbox 后，模块化 preload/IPC bridge 未注入，导致数据备份文件选择器和打开本地路径能力失效的诊断与修复。
 - [2026-05-15-phase-7-problem-gate-omission-problem.md](./2026-05/2026-05-15-phase-7-problem-gate-omission-problem.md): 记录 Phase 7 大交付收尾时 requirement archive 已完成但 problem gate 被漏跑或误判 `none`，导致安装版验收问题信号未及时沉淀的流程问题。

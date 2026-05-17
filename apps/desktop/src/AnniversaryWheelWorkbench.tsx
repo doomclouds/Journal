@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, RefreshCw } from "lucide-react";
+import { ArrowLeft, Eye, RefreshCw } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   JournalAnniversaryItem,
@@ -152,6 +152,60 @@ function getCardPreview(item: JournalHistoryEntrySummary) {
   return { title, lines };
 }
 
+function isRealDate(year: number, monthDay: string) {
+  const month = Number(monthDay.slice(0, 2));
+  const day = Number(monthDay.slice(3));
+  if (!Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+
+  return month >= 1
+    && month <= 12
+    && day >= 1
+    && day <= new Date(year, month, 0).getDate();
+}
+
+function getAnchorYear(items: JournalHistoryEntrySummary[]) {
+  const firstYear = Number(items[0]?.date.year);
+  return Number.isInteger(firstYear) ? firstYear : new Date().getFullYear();
+}
+
+function getOriginYear(anniversary: JournalAnniversaryItem | null) {
+  const value = anniversary?.originDate?.slice(0, 4);
+  const year = value ? Number(value) : Number.NaN;
+  return Number.isInteger(year) ? year : null;
+}
+
+function getRelativeYearLabel(
+  year: number,
+  anchorYear: number,
+  hasEntry: boolean,
+  isOrigin: boolean,
+  isValidCalendarDate: boolean
+) {
+  if (!isValidCalendarDate) {
+    return "无此日";
+  }
+
+  if (isOrigin) {
+    return "起点";
+  }
+
+  if (year === anchorYear) {
+    return "今年";
+  }
+
+  if (year === anchorYear - 1) {
+    return "去年";
+  }
+
+  return hasEntry ? "有记录" : "无记录";
+}
+
+function getTimelineEntryId(year: number, monthDay: string) {
+  return `memory-entry-${year}-${monthDay}`;
+}
+
 export function AnniversaryWheelWorkbench({
   isBusy,
   monthDay,
@@ -202,6 +256,37 @@ export function AnniversaryWheelWorkbench({
   const expectsEntryDetail = selected !== null && selected.status !== "missing";
   const isEntryDetailLoading = expectsEntryDetail && matchingDetail === null;
   const dateInputValue = toDateInputValue(monthDay);
+  const anchorYear = getAnchorYear(items);
+  const originYear = getOriginYear(selectedAnniversary);
+  const itemsByYear = useMemo(
+    () => new Map(items.map(item => [Number(item.date.year), item])),
+    [items]
+  );
+  const timelineEntries = useMemo(
+    () => Array.from({ length: 10 }, (_, index) => {
+      const year = anchorYear - index;
+      const item = itemsByYear.get(year) ?? null;
+      const isOrigin = originYear === year;
+      const isValidCalendarDate = isRealDate(year, monthDay);
+      return {
+        year,
+        item,
+        id: getTimelineEntryId(year, monthDay),
+        side: index % 2 === 0 ? "is-left" : "is-right",
+        isOrigin,
+        isRealDate: isValidCalendarDate,
+        label: getRelativeYearLabel(year, anchorYear, item !== null, isOrigin, isValidCalendarDate)
+      };
+    }),
+    [anchorYear, itemsByYear, monthDay, originYear]
+  );
+  const meaningObservation = useMemo(() => {
+    const entryCount = items.length;
+    const originText = originYear ? `起点 ${originYear}` : "尚未设置起点";
+    const description = selectedAnniversary?.description?.trim();
+    const base = `${entryCount} 年记录，${originText}。`;
+    return description ? `${base}${description}` : base;
+  }, [items.length, originYear, selectedAnniversary?.description]);
 
   useEffect(() => {
     setAnniversaryTitle(selectedAnniversary?.title ?? "");
@@ -229,6 +314,16 @@ export function AnniversaryWheelWorkbench({
       setIsReading(false);
     }
     onSelectDate(date);
+  }
+
+  function jumpToTimelineEntry(entry: (typeof timelineEntries)[number]) {
+    const node = document.getElementById(entry.id);
+    if (typeof node?.scrollIntoView === "function") {
+      node.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (entry.item) {
+      selectYear(entry.item.date.isoDate);
+    }
   }
 
   function changeMonthDay(nextMonthDay: string, anniversaryId: string | null = null) {
@@ -364,30 +459,24 @@ export function AnniversaryWheelWorkbench({
         <section className="rail-section">
           <div className="section-head">
             <h2>年份</h2>
-            <span>{items.length} 年</span>
+            <span>{timelineEntries.length} 年</span>
           </div>
-          <div className="history-result-list anniversary-year-list" aria-label="同日年份列表">
-            {items.length > 0 ? items.map(item => {
-              const preview = getCardPreview(item);
-              return (
-                <button
-                  key={item.date.isoDate}
-                  type="button"
-                  className={`source-item history-result anniversary-year ${selected?.date.isoDate === item.date.isoDate ? "is-active" : ""}`}
-                  onClick={() => selectYear(item.date.isoDate)}
-                  aria-pressed={selected?.date.isoDate === item.date.isoDate}
-                >
-                  <span className="source-meta">
-                    <span>{item.date.year}</span>
-                    <span>{getStatusLabel(item.status)}</span>
-                  </span>
-                  <strong>{preview.title}</strong>
-                  <p>{preview.lines.join(" / ")}</p>
-                </button>
-              );
-            }) : (
-              <p className="muted">这一天还没有可回看的历史。</p>
-            )}
+          <div className="anniversary-year-node-list" aria-label="同日年份列表">
+            {timelineEntries.map(entry => (
+              <button
+                key={entry.id}
+                type="button"
+                className={`anniversary-year-node ${entry.item ? "has-entry" : "is-empty"} ${entry.isOrigin ? "is-origin" : ""} ${selected?.date.year === String(entry.year) ? "is-active" : ""}`}
+                onClick={() => jumpToTimelineEntry(entry)}
+                aria-controls={entry.id}
+                aria-pressed={selected?.date.year === String(entry.year)}
+                aria-current={selected?.date.year === String(entry.year) ? "true" : undefined}
+              >
+                <i className="anniversary-year-node-dot" aria-hidden="true" />
+                <strong>{entry.year}</strong>
+                <span>{entry.label}</span>
+              </button>
+            ))}
           </div>
         </section>
       </aside>
@@ -455,31 +544,62 @@ export function AnniversaryWheelWorkbench({
                       <span>{pinnedAnniversaries.length} 个常看日期</span>
                     </p>
                   </header>
-                  <div className="anniversary-timeline" aria-label="同日年轮时间线">
-                    {items.map(item => {
-                      const preview = getCardPreview(item);
+                  <div className="memory-corridor-timeline" aria-label="同日年轮时间线">
+                    <div className="memory-corridor-spine" aria-hidden="true" />
+                    {timelineEntries.map(entry => {
+                      const item = entry.item;
+                      const preview = item ? getCardPreview(item) : null;
                       return (
-                        <article className="anniversary-timeline-card" key={item.date.isoDate}>
-                          <div className="anniversary-timeline-card-head">
-                            <div>
-                              <span>{item.date.year}</span>
-                              <strong>{preview.title}</strong>
-                            </div>
-                            <span>{getStatusLabel(item.status)}</span>
+                        <section
+                          id={entry.id}
+                          className={`memory-entry ${entry.side} ${entry.isOrigin ? "is-origin" : ""} ${item ? "" : "is-empty"}`}
+                          data-year={entry.year}
+                          key={entry.id}
+                        >
+                          <div className="year-pin">
+                            <strong>{entry.year}</strong>
+                            <span>{entry.label}</span>
+                            <i aria-hidden="true" />
                           </div>
-                          <div className="anniversary-card-preview">
-                            {preview.lines.map(line => <p key={`${item.date.isoDate}-${line}`}>{line}</p>)}
-                          </div>
-                          <button
-                            type="button"
-                            className="assistant-inline-action"
-                            aria-label={`阅读 ${item.date.isoDate} 日记`}
-                            onClick={() => openReading(item.date.isoDate)}
+                          <article
+                            className={`memory-card ${item && selected?.date.isoDate === item.date.isoDate ? "is-active" : ""}`}
                           >
-                            <BookOpen size={14} aria-hidden="true" />
-                            阅读
-                          </button>
-                        </article>
+                            <div className="memory-card-head">
+                              <div className="memory-title">
+                                <span className="memory-meta">{entry.year} · {entry.label}</span>
+                                <h3>{preview?.title ?? (entry.isRealDate ? `这一年没有留下 ${monthDay}` : `${monthDay} 在这一年不存在`)}</h3>
+                              </div>
+                              <div className="card-actions">
+                                <span className="count-pill">
+                                  {item ? `${item.rawInputCount} 条材料` : "无记录"}
+                                </span>
+                                {item ? (
+                                  <button
+                                    type="button"
+                                    className="eye-button"
+                                    aria-label={`阅读 ${item.date.isoDate} 日记`}
+                                    title="阅读日记"
+                                    onClick={() => openReading(item.date.isoDate)}
+                                  >
+                                    <Eye size={15} aria-hidden="true" />
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                            {item && preview ? (
+                              <>
+                                <div className="anniversary-card-preview">
+                                  {preview.lines.map(line => <p key={`${item.date.isoDate}-${line}`}>{line}</p>)}
+                                </div>
+                                {item.entryUpdatedAt ? (
+                                  <span className="quote-line">最后写入 {formatHistoryTime(item.entryUpdatedAt)}</span>
+                                ) : null}
+                              </>
+                            ) : (
+                              <p>{entry.isRealDate ? "空白也是时间的一部分，它让记录习惯的形成过程变得可见。" : "这个月日只在真实存在的年份里承载记录。"}</p>
+                            )}
+                          </article>
+                        </section>
                       );
                     })}
                   </div>
@@ -507,6 +627,27 @@ export function AnniversaryWheelWorkbench({
         <div className="assistant-body">
           {anniversaryError ? <p className="api-error history-error" role="alert">{anniversaryError}</p> : null}
           {nextYearNoteError ? <p className="api-error history-error" role="alert">{nextYearNoteError}</p> : null}
+
+          <section className="assistant-card anniversary-meaning-card">
+            <div className="assistant-card-head">
+              <h3>意义观察</h3>
+              <span>{items.length} 年记录</span>
+            </div>
+            <p>{meaningObservation}</p>
+            <div className="anniversary-source-years" aria-label="相关年份">
+              {timelineEntries
+                .filter(entry => entry.item || entry.isOrigin)
+                .slice(0, 5)
+                .map(entry => (
+                  <span
+                    key={entry.id}
+                    className={entry.isOrigin ? "is-origin" : ""}
+                  >
+                    {entry.year}
+                  </span>
+                ))}
+            </div>
+          </section>
 
           <form className="assistant-card anniversary-form" onSubmit={handleSaveAnniversary}>
             <label>

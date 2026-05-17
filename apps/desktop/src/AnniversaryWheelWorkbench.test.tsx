@@ -156,7 +156,7 @@ afterEach(() => {
 
 describe("AnniversaryWheelWorkbench", () => {
   test("renders same-day year cards and timeline previews", () => {
-    render(
+    const { container } = render(
       <AnniversaryWheelWorkbench
         isBusy={false}
         monthDay="05-14"
@@ -178,12 +178,77 @@ describe("AnniversaryWheelWorkbench", () => {
 
     const preview = screen.getByRole("region", { name: "同日年轮预览" });
     const years = screen.getByLabelText("同日年份列表");
+    const stageTimeline = within(preview).getByLabelText("同日年轮时间线");
     expect(preview).toBeInTheDocument();
     expect(within(years).getByRole("button", { name: /2026/ })).toHaveAttribute("aria-pressed", "true");
     expect(within(years).getByRole("button", { name: /2025/ })).toBeInTheDocument();
+    expect(stageTimeline).toHaveClass("memory-corridor-timeline");
+    expect(container.querySelector(".memory-corridor-spine")).not.toBeNull();
+    expect(container.querySelector("#memory-entry-2026-05-14")).toHaveClass("memory-entry", "is-left");
+    expect(container.querySelector("#memory-entry-2025-05-14")).toHaveClass("memory-entry", "is-right");
+    expect(container.querySelector("#memory-entry-2024-05-14")).toHaveClass("memory-entry", "is-empty");
+    expect(container.querySelector("#memory-entry-2026-05-14 .year-pin")).not.toBeNull();
     expect(within(preview).getByText("年轮卡片标题")).toBeInTheDocument();
     expect(within(preview).getByText("卡片第一行")).toBeInTheDocument();
     expect(screen.getAllByText("去年卡片摘要").length).toBeGreaterThan(0);
+  });
+
+  test("renders left years as node navigation linked to timeline entries", () => {
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    const years = screen.getByLabelText("同日年份列表");
+    const year2025 = within(years).getByRole("button", { name: /2025/ });
+
+    expect(years).toHaveClass("anniversary-year-node-list");
+    expect(year2025).toHaveAttribute("aria-controls", "memory-entry-2025-05-14");
+    expect(year2025.querySelector(".anniversary-year-node-dot")).not.toBeNull();
+    expect(within(years).queryByText("去年卡片摘要")).not.toBeInTheDocument();
+  });
+
+  test("renders meaning observation in the anniversary side panel", () => {
+    render(
+      <AnniversaryWheelWorkbench
+        isBusy={false}
+        monthDay="05-14"
+        result={result}
+        selectedDate="2026-05-14"
+        detail={detail}
+        versions={[version]}
+        anniversaries={[savedAnniversary]}
+        anniversaryError=""
+        error=""
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onMonthDayChange={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSaveAnniversary={vi.fn()}
+        onAddNextYearNote={vi.fn()}
+      />
+    );
+
+    const inspector = screen.getByRole("complementary", { name: "同日年轮详情" });
+    expect(within(inspector).getByText("意义观察")).toBeInTheDocument();
+    expect(within(inspector).getAllByText(/2 年记录/).length).toBeGreaterThan(0);
+    expect(within(inspector).getByText(/起点 2025/)).toBeInTheDocument();
+    expect(within(inspector).getByText("2 年记录，起点 2025。每年都回来看看")).toBeInTheDocument();
   });
 
   test("waits for selected entry detail instead of flashing summary hits", () => {
@@ -298,11 +363,11 @@ describe("AnniversaryWheelWorkbench", () => {
       />
     );
 
-    const timeline = screen.getByLabelText("同日年份列表");
+    const yearNavigation = screen.getByLabelText("同日年份列表");
     const stageTimeline = screen.getByLabelText("同日年轮时间线");
-    expect(within(timeline).getByText("年轮卡片标题")).toBeInTheDocument();
+    expect(within(yearNavigation).queryByText("年轮卡片标题")).not.toBeInTheDocument();
+    expect(within(yearNavigation).queryByText("卡片第一行 / 卡片第二行")).not.toBeInTheDocument();
     expect(within(stageTimeline).getByText("年轮卡片标题")).toBeInTheDocument();
-    expect(within(timeline).getByText("卡片第一行 / 卡片第二行")).toBeInTheDocument();
     expect(within(stageTimeline).getByText("卡片第一行")).toBeInTheDocument();
     expect(within(stageTimeline).getByText("卡片第二行")).toBeInTheDocument();
     expect(within(stageTimeline).queryByText("- 打磨同日年轮")).not.toBeInTheDocument();

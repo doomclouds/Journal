@@ -1424,7 +1424,8 @@ describe("App", () => {
       "http://localhost:5057/journal/history/anniversary/2024-02-29?limit=50",
       undefined
     );
-    expect(within(screen.getByLabelText("同日年份列表")).queryByRole("button", { name: /2025/ })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("同日年份列表")).getByRole("button", { name: /2025/ }))
+      .toHaveAttribute("aria-controls", "memory-entry-2025-02-29");
     expect(screen.queryByText("去年同一天的卡片摘要")).not.toBeInTheDocument();
   });
 
