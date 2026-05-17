@@ -38,6 +38,11 @@ describe("HistoryWorkbench", () => {
           mood: "平静",
           rawInputCount: 2,
           versionCount: 1,
+          entryUpdatedAt: "2026-05-13T07:12:00+08:00",
+          cardPreview: {
+            title: "今天想推进",
+            lines: ["测试新整理的接口"]
+          },
           attentionReason: null,
           hits: [{
             sourceType: "section",
@@ -103,6 +108,11 @@ describe("HistoryWorkbench", () => {
           mood: "平静",
           rawInputCount: 2,
           versionCount: 1,
+          entryUpdatedAt: "2026-05-13T07:12:00+08:00",
+          cardPreview: {
+            title: "今天想推进",
+            lines: ["摘要不应冒充正文"]
+          },
           attentionReason: null,
           hits: [{
             sourceType: "section",
@@ -211,6 +221,11 @@ describe("HistoryWorkbench", () => {
           mood: "平静",
           rawInputCount: 2,
           versionCount: 1,
+          entryUpdatedAt: "2026-05-13T07:12:00+08:00",
+          cardPreview: {
+            title: "历史卡片",
+            lines: ["正式 Markdown"]
+          },
           attentionReason: null,
           hits: []
         }]}
@@ -290,6 +305,11 @@ describe("HistoryWorkbench", () => {
           mood: "平静",
           rawInputCount: 2,
           versionCount: 1,
+          entryUpdatedAt: "2026-05-13T07:12:00+08:00",
+          cardPreview: {
+            title: "历史卡片",
+            lines: ["正式 Markdown"]
+          },
           attentionReason: null,
           hits: []
         }]}
@@ -352,6 +372,11 @@ describe("HistoryWorkbench", () => {
           mood: "专注",
           rawInputCount: 1,
           versionCount: 0,
+          entryUpdatedAt: "2026-05-14T07:12:00+08:00",
+          cardPreview: {
+            title: "今日重点",
+            lines: ["新日期摘要"]
+          },
           attentionReason: null,
           hits: [{
             sourceType: "section",

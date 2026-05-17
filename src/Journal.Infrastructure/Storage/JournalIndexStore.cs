@@ -9,8 +9,23 @@ public sealed class JournalIndexStore
     private const int SchemaVersion = 1;
     private const int SearchHitsPerDateLimit = 5;
     private const int LikeSnippetMaxLength = 240;
+    private const int CardPreviewLineMaxLength = 90;
     private const int FileMoveMaxAttempts = 8;
     private const int FileMoveRetryDelayMilliseconds = 75;
+    private static readonly string[] CardPreviewSectionPriority =
+    [
+        "today-focus",
+        "work",
+        "relationship",
+        "mood",
+        "yesterday-review",
+        "inspiration"
+    ];
+
+    private static readonly HashSet<string> CardPreviewExcludedSectionIds = new(
+        ["raw-inputs", "metadata-note", "keywords"],
+        StringComparer.Ordinal);
+
     private readonly LocalJournalPaths _paths;
 
     public JournalIndexStore(LocalJournalPaths paths)
@@ -267,6 +282,7 @@ public sealed class JournalIndexStore
                    e.status,
                    e.mood,
                    e.attention_reason,
+                   e.last_write_time_utc,
                    (SELECT COUNT(*) FROM raw_inputs r WHERE r.date = e.date) AS raw_input_count,
                    (SELECT COUNT(*) FROM entry_versions v WHERE v.date = e.date) AS version_count
             FROM entries e
@@ -274,13 +290,19 @@ public sealed class JournalIndexStore
             """;
         command.Parameters.AddWithValue("$date", date.IsoDate);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        MutableSummary summary;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            return null;
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return null;
+            }
+
+            summary = ReadMutableSummary(reader);
         }
 
-        return ReadSummary(reader, []);
+        await PopulatePreviewSectionsAsync(connection, [summary], cancellationToken);
+        return summary.ToImmutable();
     }
 
     public async Task<JournalHistorySearchResult> SearchAsync(JournalHistoryQuery query, CancellationToken cancellationToken)
@@ -318,6 +340,7 @@ public sealed class JournalIndexStore
                        e.status,
                        e.mood,
                        e.attention_reason,
+                       e.last_write_time_utc,
                        (SELECT COUNT(*) FROM raw_inputs r WHERE r.date = e.date) AS raw_input_count,
                        (SELECT COUNT(*) FROM entry_versions v WHERE v.date = e.date) AS version_count
                 FROM entries e
@@ -330,6 +353,7 @@ public sealed class JournalIndexStore
                        se.status,
                        se.mood,
                        se.attention_reason,
+                       se.last_write_time_utc,
                        'section' AS source_type,
                        s.section_id AS section_id,
                        NULL AS raw_input_id,
@@ -353,6 +377,7 @@ public sealed class JournalIndexStore
                        se.status,
                        se.mood,
                        se.attention_reason,
+                       se.last_write_time_utc,
                        'raw-input' AS source_type,
                        NULL AS section_id,
                        r.id AS raw_input_id,
@@ -376,6 +401,7 @@ public sealed class JournalIndexStore
                    se.status,
                    se.mood,
                    se.attention_reason,
+                   se.last_write_time_utc,
                    COALESCE(h.source_type, 'section') AS source_type,
                    h.section_id,
                    h.raw_input_id,
@@ -688,6 +714,7 @@ public sealed class JournalIndexStore
                    e.status,
                    e.mood,
                    e.attention_reason,
+                   e.last_write_time_utc,
                    (SELECT COUNT(*) FROM raw_inputs r WHERE r.date = e.date) AS raw_input_count,
                    (SELECT COUNT(*) FROM entry_versions v WHERE v.date = e.date) AS version_count
             FROM entries e
@@ -700,14 +727,20 @@ public sealed class JournalIndexStore
             """;
         AddSearchParameters(command, query, limit);
 
-        var summaries = new List<JournalHistoryEntrySummary>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        var summaries = new List<MutableSummary>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            summaries.Add(ReadSummary(reader, []));
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                summaries.Add(ReadMutableSummary(reader));
+            }
         }
 
-        return summaries;
+        await PopulatePreviewSectionsAsync(connection, summaries, cancellationToken);
+
+        return summaries
+            .Select(summary => summary.ToImmutable())
+            .ToArray();
     }
 
     private static async Task<IReadOnlyList<JournalHistoryEntrySummary>> SearchFtsAsync(
@@ -724,6 +757,7 @@ public sealed class JournalIndexStore
                        e.status,
                        e.mood,
                        e.attention_reason,
+                       e.last_write_time_utc,
                        'section' AS source_type,
                        section_fts.section_id AS section_id,
                        NULL AS raw_input_id,
@@ -741,6 +775,7 @@ public sealed class JournalIndexStore
                        e.status,
                        e.mood,
                        e.attention_reason,
+                       e.last_write_time_utc,
                        'raw-input' AS source_type,
                        NULL AS section_id,
                        raw_input_fts.raw_input_id AS raw_input_id,
@@ -766,6 +801,7 @@ public sealed class JournalIndexStore
                    h.status,
                    h.mood,
                    h.attention_reason,
+                   h.last_write_time_utc,
                    h.source_type,
                    h.section_id,
                    h.raw_input_id,
@@ -798,6 +834,7 @@ public sealed class JournalIndexStore
                        e.status,
                        e.mood,
                        e.attention_reason,
+                       e.last_write_time_utc,
                        'section' AS source_type,
                        s.section_id AS section_id,
                        NULL AS raw_input_id,
@@ -819,6 +856,7 @@ public sealed class JournalIndexStore
                        e.status,
                        e.mood,
                        e.attention_reason,
+                       e.last_write_time_utc,
                        'raw-input' AS source_type,
                        NULL AS section_id,
                        r.id AS raw_input_id,
@@ -840,6 +878,7 @@ public sealed class JournalIndexStore
                    h.status,
                    h.mood,
                    h.attention_reason,
+                   h.last_write_time_utc,
                    h.source_type,
                    h.section_id,
                    h.raw_input_id,
@@ -863,39 +902,44 @@ public sealed class JournalIndexStore
         CancellationToken cancellationToken)
     {
         var grouped = new Dictionary<string, MutableSummary>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            var date = reader.GetString(0);
-            if (!grouped.TryGetValue(date, out var summary))
+            while (await reader.ReadAsync(cancellationToken))
             {
-                if (grouped.Count >= limit)
+                var date = reader.GetString(0);
+                if (!grouped.TryGetValue(date, out var summary))
                 {
-                    break;
+                    if (grouped.Count >= limit)
+                    {
+                        break;
+                    }
+
+                    summary = new MutableSummary(
+                        JournalDate.Parse(date),
+                        reader.GetString(1),
+                        GetNullableString(reader, 2),
+                        reader.GetInt32(10),
+                        reader.GetInt32(11),
+                        GetNullableString(reader, 3),
+                        ParseDateTime(reader.GetString(4)));
+                    grouped.Add(date, summary);
                 }
 
-                summary = new MutableSummary(
-                    JournalDate.Parse(date),
-                    reader.GetString(1),
-                    GetNullableString(reader, 2),
-                    reader.GetInt32(9),
-                    reader.GetInt32(10),
-                    GetNullableString(reader, 3));
-                grouped.Add(date, summary);
-            }
+                if (summary.Hits.Count >= SearchHitsPerDateLimit)
+                {
+                    continue;
+                }
 
-            if (summary.Hits.Count >= SearchHitsPerDateLimit)
-            {
-                continue;
+                summary.Hits.Add(new JournalHistoryHit(
+                    reader.GetString(5),
+                    GetNullableString(reader, 6),
+                    GetNullableString(reader, 7),
+                    reader.GetString(8),
+                    reader.GetString(9)));
             }
-
-            summary.Hits.Add(new JournalHistoryHit(
-                reader.GetString(4),
-                GetNullableString(reader, 5),
-                GetNullableString(reader, 6),
-                reader.GetString(7),
-                reader.GetString(8)));
         }
+
+        await PopulatePreviewSectionsAsync(GetCommandConnection(command), grouped.Values, cancellationToken);
 
         return grouped.Values
             .Select(summary => summary.ToImmutable())
@@ -908,60 +952,179 @@ public sealed class JournalIndexStore
         CancellationToken cancellationToken)
     {
         var grouped = new Dictionary<string, MutableSummary>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            var date = reader.GetString(0);
-            if (!grouped.TryGetValue(date, out var summary))
+            while (await reader.ReadAsync(cancellationToken))
             {
-                if (grouped.Count >= limit)
+                var date = reader.GetString(0);
+                if (!grouped.TryGetValue(date, out var summary))
                 {
-                    break;
+                    if (grouped.Count >= limit)
+                    {
+                        break;
+                    }
+
+                    summary = new MutableSummary(
+                        JournalDate.Parse(date),
+                        reader.GetString(1),
+                        GetNullableString(reader, 2),
+                        reader.GetInt32(11),
+                        reader.GetInt32(12),
+                        GetNullableString(reader, 3),
+                        ParseDateTime(reader.GetString(4)));
+                    grouped.Add(date, summary);
                 }
 
-                summary = new MutableSummary(
-                    JournalDate.Parse(date),
-                    reader.GetString(1),
-                    GetNullableString(reader, 2),
-                    reader.GetInt32(10),
-                    reader.GetInt32(11),
-                    GetNullableString(reader, 3));
-                grouped.Add(date, summary);
-            }
+                if (summary.Hits.Count >= SearchHitsPerDateLimit)
+                {
+                    continue;
+                }
 
-            if (summary.Hits.Count >= SearchHitsPerDateLimit)
-            {
-                continue;
-            }
+                var snippet = reader.GetString(9);
+                if (string.IsNullOrWhiteSpace(snippet))
+                {
+                    continue;
+                }
 
-            var snippet = reader.GetString(8);
-            if (string.IsNullOrWhiteSpace(snippet))
-            {
-                continue;
+                summary.Hits.Add(new JournalHistoryHit(
+                    reader.GetString(5),
+                    GetNullableString(reader, 6),
+                    GetNullableString(reader, 7),
+                    reader.GetString(8),
+                    snippet));
             }
-
-            summary.Hits.Add(new JournalHistoryHit(
-                reader.GetString(4),
-                GetNullableString(reader, 5),
-                GetNullableString(reader, 6),
-                reader.GetString(7),
-                snippet));
         }
+
+        await PopulatePreviewSectionsAsync(GetCommandConnection(command), grouped.Values, cancellationToken);
 
         return grouped.Values
             .Select(summary => summary.ToImmutable())
             .ToArray();
     }
 
-    private static JournalHistoryEntrySummary ReadSummary(SqliteDataReader reader, IReadOnlyList<JournalHistoryHit> hits) =>
+    private static MutableSummary ReadMutableSummary(SqliteDataReader reader) =>
         new(
             JournalDate.Parse(reader.GetString(0)),
             reader.GetString(1),
             GetNullableString(reader, 2),
-            reader.GetInt32(4),
             reader.GetInt32(5),
-            hits,
-            GetNullableString(reader, 3));
+            reader.GetInt32(6),
+            GetNullableString(reader, 3),
+            ParseDateTime(reader.GetString(4)));
+
+    private static async Task PopulatePreviewSectionsAsync(
+        SqliteConnection connection,
+        IEnumerable<MutableSummary> summaries,
+        CancellationToken cancellationToken)
+    {
+        foreach (var summary in summaries)
+        {
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT section_id, title, display_order, content
+                FROM entry_sections
+                WHERE date = $date
+                ORDER BY display_order, section_id;
+                """;
+            command.Parameters.AddWithValue("$date", summary.Date.IsoDate);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                summary.PreviewSections.Add(new CardPreviewSection(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetInt32(2),
+                    reader.GetString(3)));
+            }
+        }
+    }
+
+    private static SqliteConnection GetCommandConnection(SqliteCommand command) =>
+        command.Connection ?? throw new InvalidOperationException("SQLite command is not associated with a connection.");
+
+    private static JournalHistoryCardPreview CreateCardPreview(
+        IReadOnlyList<CardPreviewSection> sections,
+        string? mood,
+        int rawInputCount)
+    {
+        var selectedSections = sections
+            .Where(section => !CardPreviewExcludedSectionIds.Contains(section.SectionId))
+            .OrderBy(section => GetCardPreviewSectionRank(section.SectionId))
+            .ThenBy(section => section.DisplayOrder)
+            .ThenBy(section => section.SectionId, StringComparer.Ordinal)
+            .ToArray();
+
+        var title = "日记";
+        var lines = new List<string>(capacity: 3);
+        foreach (var section in selectedSections)
+        {
+            foreach (var line in SplitPreviewLines(section.Content))
+            {
+                if (lines.Count == 0 && !string.IsNullOrWhiteSpace(section.Title))
+                {
+                    title = section.Title;
+                }
+
+                lines.Add(line);
+                if (lines.Count >= 3)
+                {
+                    return new JournalHistoryCardPreview(title, lines.ToArray());
+                }
+            }
+        }
+
+        if (lines.Count > 0)
+        {
+            return new JournalHistoryCardPreview(title, lines.ToArray());
+        }
+
+        if (!string.IsNullOrWhiteSpace(mood))
+        {
+            return new JournalHistoryCardPreview("状态与情绪", [TruncateCardPreviewLine(mood.Trim())]);
+        }
+
+        return new JournalHistoryCardPreview("日记", [$"{rawInputCount} 条材料"]);
+    }
+
+    private static int GetCardPreviewSectionRank(string? sectionId)
+    {
+        if (sectionId is null)
+        {
+            return int.MaxValue;
+        }
+
+        var index = Array.IndexOf(CardPreviewSectionPriority, sectionId);
+        return index < 0 ? int.MaxValue : index;
+    }
+
+    private static IEnumerable<string> SplitPreviewLines(string snippet)
+    {
+        foreach (var rawLine in snippet.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (line.StartsWith("- ", StringComparison.Ordinal))
+            {
+                line = line[2..].Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                yield return TruncateCardPreviewLine(line);
+            }
+        }
+    }
+
+    private static string TruncateCardPreviewLine(string line) =>
+        line.Length > CardPreviewLineMaxLength
+            ? line[..(CardPreviewLineMaxLength - 1)] + "…"
+            : line;
+
+    private sealed record CardPreviewSection(
+        string SectionId,
+        string Title,
+        int DisplayOrder,
+        string Content);
 
     private static JournalIndexedEntry ReadIndexedEntry(SqliteDataReader reader) =>
         new(
@@ -972,9 +1135,9 @@ public sealed class JournalIndexStore
             reader.GetString(4),
             reader.GetString(5),
             reader.GetString(6),
-            DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+            ParseDateTime(reader.GetString(7)),
             reader.GetInt64(8),
-            DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+            ParseDateTime(reader.GetString(9)),
             GetNullableString(reader, 10));
 
     private static async Task<string?> ReadMetaAsync(SqliteConnection connection, string key, CancellationToken cancellationToken)
@@ -1058,6 +1221,9 @@ public sealed class JournalIndexStore
 
     private static string FormatDateTime(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset ParseDateTime(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     private static int NormalizeLimit(int limit) =>
         limit <= 0 ? 50 : Math.Clamp(limit, 1, 100);
@@ -1148,7 +1314,8 @@ public sealed class JournalIndexStore
             string? mood,
             int rawInputCount,
             int versionCount,
-            string? attentionReason)
+            string? attentionReason,
+            DateTimeOffset entryUpdatedAt)
         {
             Date = date;
             Status = status;
@@ -1156,6 +1323,7 @@ public sealed class JournalIndexStore
             RawInputCount = rawInputCount;
             VersionCount = versionCount;
             AttentionReason = attentionReason;
+            EntryUpdatedAt = entryUpdatedAt;
         }
 
         public JournalDate Date { get; }
@@ -1170,9 +1338,22 @@ public sealed class JournalIndexStore
 
         public string? AttentionReason { get; }
 
+        public DateTimeOffset EntryUpdatedAt { get; }
+
         public List<JournalHistoryHit> Hits { get; } = [];
 
+        public List<CardPreviewSection> PreviewSections { get; } = [];
+
         public JournalHistoryEntrySummary ToImmutable() =>
-            new(Date, Status, Mood, RawInputCount, VersionCount, Hits.ToArray(), AttentionReason);
+            new(
+                Date,
+                Status,
+                Mood,
+                RawInputCount,
+                VersionCount,
+                Hits.ToArray(),
+                AttentionReason,
+                EntryUpdatedAt,
+                CreateCardPreview(PreviewSections, Mood, RawInputCount));
     }
 }

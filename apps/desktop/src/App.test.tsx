@@ -26,6 +26,7 @@ import {
   type JournalHarnessRunEvent,
   type JournalDraft,
   type JournalEntryVersion,
+  type JournalAnniversaryItem,
   type JournalAnniversaryWheelResult,
   type JournalHistoryEntryDetail,
   type JournalHistoryEntrySummary,
@@ -194,6 +195,11 @@ const historySummary: JournalHistoryEntrySummary = {
   mood: "平静",
   rawInputCount: 1,
   versionCount: 1,
+  entryUpdatedAt: "2026-05-08T08:06:00+08:00",
+  cardPreview: {
+    title: "今日重点",
+    lines: ["推进 Phase 4A 历史搜索"]
+  },
   attentionReason: null,
   hits: [{
     sourceType: "section",
@@ -244,6 +250,11 @@ const anniversaryResult: JournalAnniversaryWheelResult = {
       date: anniversaryPreviousDate,
       mood: "期待",
       versionCount: 0,
+      entryUpdatedAt: null,
+      cardPreview: {
+        title: "去年同日",
+        lines: ["去年同一天的卡片摘要"]
+      },
       hits: [{
         sourceType: "raw-input",
         sectionId: null,
@@ -253,6 +264,38 @@ const anniversaryResult: JournalAnniversaryWheelResult = {
       }]
     }
   ]
+};
+
+const savedAnniversary: JournalAnniversaryItem = {
+  id: "anniversary-1",
+  monthDay: "05-14",
+  type: "self-reminder",
+  title: "第一个常看日",
+  description: "常回来看",
+  originDate: "2026-05-14",
+  pinned: true,
+  createdAt: "2026-05-14T10:00:00+08:00",
+  updatedAt: "2026-05-14T10:00:00+08:00",
+  nextYearNotes: [{
+    id: "note-1",
+    targetDate: "2027-05-14",
+    text: "明年再看",
+    status: "pending",
+    createdAt: "2026-05-14T10:05:00+08:00",
+    adoptedAt: null,
+    rawInputId: null
+  }]
+};
+
+const yearEndAnniversary: JournalAnniversaryItem = {
+  ...savedAnniversary,
+  id: "anniversary-12-31",
+  monthDay: "12-31",
+  type: "gratitude",
+  title: "年末常看日",
+  description: "年末回来复盘",
+  originDate: "2025-12-31",
+  nextYearNotes: []
 };
 
 function historyDetail(date = journalDate, content = "- 推进 Phase 4A 历史搜索"): JournalHistoryEntryDetail {
@@ -1263,6 +1306,10 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
       .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
       .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
     vi.stubGlobal("fetch", fetchMock);
@@ -1278,10 +1325,65 @@ describe("App", () => {
       )
     );
     const preview = await screen.findByRole("region", { name: "同日年轮预览" });
-    expect(within(preview).getByText("今年同日详情")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-08 日记" }));
+    expect(await within(preview).findByText("今年同日详情")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08/versions", undefined);
-    expect(screen.getByRole("button", { name: /2025/ })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("同日年份列表")).getByRole("button", { name: /2025/ })).toBeInTheDocument();
+  });
+
+  test("loads full pinned anniversaries for the left saved-date list", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([yearEndAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("同日年轮");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries/05-08", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries", undefined);
+    expect(await within(screen.getByLabelText("常看纪念日列表")).findByRole("button", { name: /年末常看日/ })).toBeInTheDocument();
+  });
+
+  test("clears stale saved anniversaries when anniversary metadata refresh fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([yearEndAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse({
+        ...anniversaryResult,
+        monthDay: "02-29",
+        items: []
+      }))
+      .mockRejectedValueOnce(new Error("anniversaries failed"))
+      .mockResolvedValueOnce(mockJsonResponse([yearEndAnniversary]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("同日年轮");
+    expect(await within(screen.getByLabelText("常看纪念日列表")).findByRole("button", { name: /年末常看日/ })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "2024-02-29" } });
+
+    expect(await screen.findByText("anniversaries failed")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("常看纪念日列表")).queryByRole("button", { name: /年末常看日/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("年末常看日")).not.toBeInTheDocument();
   });
 
   test("clears anniversary results and loads the selected calendar month-day", async () => {
@@ -1291,20 +1393,24 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([]))
       .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
       .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
       .mockResolvedValueOnce(mockJsonResponse({
         ...anniversaryResult,
         monthDay: "02-29",
         items: []
-      }));
+      }))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
     await clickJournalCorridorItem("同日年轮");
-    expect(await screen.findByRole("button", { name: /2025/ })).toBeInTheDocument();
-    expect(screen.getByText("去年同一天的原始材料")).toBeInTheDocument();
+    expect(await within(screen.getByLabelText("同日年份列表")).findByRole("button", { name: /2025/ })).toBeInTheDocument();
+    expect(screen.getAllByText("去年同一天的卡片摘要").length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText("选择同日年轮日期"), { target: { value: "2024-02-29" } });
 
@@ -1318,8 +1424,231 @@ describe("App", () => {
       "http://localhost:5057/journal/history/anniversary/2024-02-29?limit=50",
       undefined
     );
-    expect(screen.queryByRole("button", { name: /2025/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("去年同一天的原始材料")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("同日年份列表")).queryByRole("button", { name: /2025/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("去年同一天的卡片摘要")).not.toBeInTheDocument();
+  });
+
+  test("loads anniversaries for selected month day and saves current date anniversary", async () => {
+    const may14Result: JournalAnniversaryWheelResult = {
+      monthDay: "05-14",
+      items: []
+    };
+    const saved = {
+      ...savedAnniversary,
+      title: "小陌纪念日"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse(may14Result))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse(saved))
+      .mockResolvedValueOnce(mockJsonResponse([saved]))
+      .mockResolvedValueOnce(mockJsonResponse([saved]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("同日年轮");
+    fireEvent.change(await screen.findByLabelText("选择同日年轮日期"), { target: { value: "2026-05-14" } });
+    fireEvent.change(await screen.findByLabelText("纪念日名称"), { target: { value: "小陌纪念日" } });
+    const typeSelect = await screen.findByLabelText("纪念日类型");
+    expect(within(typeSelect).getByRole("option", { name: "项目里程碑" })).toBeInTheDocument();
+    expect(within(typeSelect).queryByRole("option", { name: "anniversary" })).not.toBeInTheDocument();
+    fireEvent.change(typeSelect, { target: { value: "project-milestone" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存纪念日" }));
+
+    await screen.findByRole("button", { name: /小陌纪念日/ });
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries/05-08", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries", expect.objectContaining({
+      method: "POST",
+      body: expect.stringContaining("\"pinned\":true")
+    }));
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries", expect.objectContaining({
+      method: "POST",
+      body: expect.stringContaining("\"type\":\"project-milestone\"")
+    }));
+    expect(fetchMock).not.toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries", expect.objectContaining({
+      body: expect.stringContaining("\"isPinned\":true")
+    }));
+    expect(screen.getByRole("button", { name: /小陌纪念日/ })).toBeInTheDocument();
+  });
+
+  test("disables anniversary save while request is in flight to prevent duplicate posts", async () => {
+    const saveDeferred = createDeferred<Response>();
+    const nonPostResponses = [
+      mockJsonResponse(healthResponse),
+      mockJsonResponse(createEditorState()),
+      mockJsonResponse(aiSettings),
+      mockJsonResponse(anniversaryResult),
+      mockJsonResponse([]),
+      mockJsonResponse([]),
+      mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")),
+      mockJsonResponse([historyVersion]),
+      mockJsonResponse([{ ...savedAnniversary, title: "防重复保存" }]),
+      mockJsonResponse([{ ...savedAnniversary, title: "防重复保存" }])
+    ];
+    const fetchMock = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === "http://localhost:5057/journal/anniversaries" && init?.method === "POST") {
+        return saveDeferred.promise;
+      }
+
+      const response = nonPostResponses.shift();
+      if (!response) {
+        throw new Error(`Unexpected fetch call: ${String(url)}`);
+      }
+
+      return Promise.resolve(response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("同日年轮");
+    expect(await within(screen.getByLabelText("同日年份列表")).findByRole("button", { name: /2025/ })).toBeInTheDocument();
+    const titleInput = await screen.findByLabelText("纪念日名称");
+    fireEvent.change(titleInput, { target: { value: "防重复保存" } });
+    expect(titleInput).toHaveValue("防重复保存");
+
+    const saveButton = screen.getByRole("button", { name: "保存纪念日" });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(saveButton).toBeDisabled());
+    expect(screen.getByRole("button", { name: "数据与备份" })).toBeDisabled();
+    fireEvent.click(saveButton);
+
+    expect(fetchMock.mock.calls.filter(([url, init]) =>
+      String(url) === "http://localhost:5057/journal/anniversaries"
+      && (init as RequestInit | undefined)?.method === "POST"
+    )).toHaveLength(1);
+
+    await act(async () => {
+      saveDeferred.resolve(mockJsonResponse({ ...savedAnniversary, title: "防重复保存" }));
+      await saveDeferred.promise;
+    });
+  });
+
+  test("does not allow adopting a future pending next-year note", async () => {
+    const futureAnniversary: JournalAnniversaryItem = {
+      ...savedAnniversary,
+      monthDay: "05-08",
+      originDate: "2026-05-08",
+      nextYearNotes: savedAnniversary.nextYearNotes.map(note => ({
+        ...note,
+        targetDate: "2999-05-08"
+      }))
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([futureAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse([futureAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("同日年轮");
+
+    expect(await screen.findByText("待处理")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "采纳提醒" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "忽略提醒" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/adopt"))).toBe(false);
+  });
+
+  test("adopts a due pending next-year note and refreshes anniversaries", async () => {
+    const pendingAnniversary: JournalAnniversaryItem = {
+      ...savedAnniversary,
+      monthDay: "05-08",
+      originDate: "2026-05-08",
+      nextYearNotes: savedAnniversary.nextYearNotes.map(note => ({
+        ...note,
+        targetDate: "2026-05-01"
+      }))
+    };
+    const adoptedAnniversary: JournalAnniversaryItem = {
+      ...pendingAnniversary,
+      nextYearNotes: pendingAnniversary.nextYearNotes.map(note => ({
+        ...note,
+        status: "adopted",
+        adoptedAt: "2026-05-14T10:10:00+08:00",
+        rawInputId: "raw-adopted-note"
+      }))
+    };
+    const adoptedEditor = createEditorState({
+      today: {
+        ...reviewingToday,
+        rawInputs: [
+          ...reviewingToday.rawInputs,
+          {
+            id: "raw-adopted-note",
+            date: journalDate,
+            createdAt: "2026-05-14T10:10:00+08:00",
+            source: "anniversary-note",
+            text: "明年再看"
+          }
+        ]
+      }
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
+      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
+      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
+      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([pendingAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse([pendingAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年同日详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
+      .mockResolvedValueOnce(mockJsonResponse({
+        anniversary: adoptedAnniversary,
+        rawInput: {
+          id: "raw-adopted-note",
+          date: journalDate,
+          createdAt: "2026-05-14T10:10:00+08:00",
+          source: "anniversary-note",
+          text: "明年再看"
+        }
+      }))
+      .mockResolvedValueOnce(mockJsonResponse([adoptedAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse([adoptedAnniversary]))
+      .mockResolvedValueOnce(mockJsonResponse(adoptedEditor));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await clickJournalCorridorItem("同日年轮");
+    fireEvent.click(await screen.findByRole("button", { name: "采纳提醒" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:5057/journal/anniversaries/anniversary-1/next-year-notes/note-1/adopt",
+        { method: "POST" }
+      )
+    );
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries/05-08", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/anniversaries", undefined);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) =>
+        String(url) === "http://localhost:5057/journal/today/editor"
+      )).toHaveLength(2)
+    );
+    expect(await screen.findByText("已采纳")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "返回今日" }));
+    expect((await screen.findAllByText("明年再看")).length).toBeGreaterThan(0);
   });
 
   test("keeps newest selected history date when detail requests resolve out of order", async () => {
@@ -1400,27 +1729,33 @@ describe("App", () => {
       .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
       .mockResolvedValueOnce(mockJsonResponse(aiSettings))
       .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
+      .mockResolvedValueOnce(mockJsonResponse([]))
+      .mockResolvedValueOnce(mockJsonResponse([]))
       .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 初始同日详情")))
       .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
       .mockReturnValueOnce(previousDetailDeferred.promise)
       .mockReturnValueOnce(previousVersionsDeferred.promise)
       .mockReturnValueOnce(currentDetailDeferred.promise)
-      .mockReturnValueOnce(currentVersionsDeferred.promise);
+      .mockReturnValueOnce(currentVersionsDeferred.promise)
+      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 今年详情")))
+      .mockResolvedValueOnce(mockJsonResponse([historyVersion]));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
     await clickJournalCorridorItem("同日年轮");
     await screen.findByRole("region", { name: "同日年轮预览" });
-    expect(await screen.findByRole("button", { name: /2025/ })).toBeInTheDocument();
+    const yearList = screen.getByLabelText("同日年份列表");
+    expect(await within(yearList).findByRole("button", { name: /2025/ })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /2025/ }));
-    fireEvent.click(screen.getByRole("button", { name: /2026/ }));
+    fireEvent.click(within(yearList).getByRole("button", { name: /2025/ }));
+    fireEvent.click(within(yearList).getByRole("button", { name: /2026/ }));
 
     currentDetailDeferred.resolve(mockJsonResponse(historyDetail(journalDate, "- 今年详情")));
     currentVersionsDeferred.resolve(mockJsonResponse([historyVersion]));
 
     const preview = screen.getByRole("region", { name: "同日年轮预览" });
+    fireEvent.click(screen.getByRole("button", { name: "阅读 2026-05-08 日记" }));
     expect(await within(preview).findByText("今年详情")).toBeInTheDocument();
     expect(within(preview).queryByText("去年详情")).not.toBeInTheDocument();
 
@@ -1435,106 +1770,6 @@ describe("App", () => {
     expect(within(preview).queryByText("去年详情")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2025-05-08", undefined);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5057/journal/history/2026-05-08", undefined);
-  });
-
-  test("ignores stale anniversary version detail after refresh clears the selected snapshot", async () => {
-    const versionDetailDeferred = createDeferred<Response>();
-    const refreshAnniversaryDeferred = createDeferred<Response>();
-    const refreshDetailDeferred = createDeferred<Response>();
-    const refreshVersionsDeferred = createDeferred<Response>();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
-      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
-      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
-      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 初始同日详情")))
-      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
-      .mockReturnValueOnce(versionDetailDeferred.promise)
-      .mockReturnValueOnce(refreshAnniversaryDeferred.promise)
-      .mockReturnValueOnce(refreshDetailDeferred.promise)
-      .mockReturnValueOnce(refreshVersionsDeferred.promise);
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<App />);
-
-    await clickJournalCorridorItem("同日年轮");
-    const preview = await screen.findByRole("region", { name: "同日年轮预览" });
-    fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
-    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
-
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://localhost:5057/journal/history/anniversary/05-08?limit=50",
-        undefined
-      )
-    );
-    expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
-
-    await act(async () => {
-      versionDetailDeferred.resolve(mockJsonResponse({
-        version: historyVersion,
-        markdown: "# 过期版本\n\n过期版本内容"
-      }));
-      await versionDetailDeferred.promise;
-    });
-
-    expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
-
-    await act(async () => {
-      refreshAnniversaryDeferred.resolve(mockJsonResponse(anniversaryResult));
-      refreshDetailDeferred.resolve(mockJsonResponse(historyDetail(journalDate, "- 刷新后的同日详情")));
-      refreshVersionsDeferred.resolve(mockJsonResponse([historyVersion]));
-      await refreshAnniversaryDeferred.promise;
-      await refreshDetailDeferred.promise;
-      await refreshVersionsDeferred.promise;
-    });
-
-    expect(within(preview).getByText("刷新后的同日详情")).toBeInTheDocument();
-    expect(within(preview).queryByText("过期版本内容")).not.toBeInTheDocument();
-  });
-
-  test("ignores stale anniversary version detail after returning to current entry", async () => {
-    const pendingVersionDetailDeferred = createDeferred<Response>();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(mockJsonResponse(healthResponse))
-      .mockResolvedValueOnce(mockJsonResponse(createEditorState()))
-      .mockResolvedValueOnce(mockJsonResponse(aiSettings))
-      .mockResolvedValueOnce(mockJsonResponse(anniversaryResult))
-      .mockResolvedValueOnce(mockJsonResponse(historyDetail(journalDate, "- 当前同日详情")))
-      .mockResolvedValueOnce(mockJsonResponse([historyVersion]))
-      .mockResolvedValueOnce(mockJsonResponse({
-        version: historyVersion,
-        markdown: "# 已打开版本\n\n已打开版本内容"
-      }))
-      .mockReturnValueOnce(pendingVersionDetailDeferred.promise);
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<App />);
-
-    await clickJournalCorridorItem("同日年轮");
-    const preview = await screen.findByRole("region", { name: "同日年轮预览" });
-    fireEvent.click(await screen.findByRole("button", { name: /查看版本/ }));
-
-    expect(await within(preview).findByText("已打开版本内容")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /查看版本/ }));
-    fireEvent.click(screen.getByRole("button", { name: /查看当前日记/ }));
-
-    expect(within(preview).getByText("当前同日详情")).toBeInTheDocument();
-    expect(within(preview).queryByText("复活版本内容")).not.toBeInTheDocument();
-
-    await act(async () => {
-      pendingVersionDetailDeferred.resolve(mockJsonResponse({
-        version: historyVersion,
-        markdown: "# 复活版本\n\n复活版本内容"
-      }));
-      await pendingVersionDetailDeferred.promise;
-    });
-
-    expect(within(preview).getByText("当前同日详情")).toBeInTheDocument();
-    expect(within(preview).queryByText("复活版本内容")).not.toBeInTheDocument();
   });
 
   test("clears stale history detail and version actions while a new selected date is loading", async () => {

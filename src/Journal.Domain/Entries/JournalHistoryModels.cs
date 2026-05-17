@@ -41,6 +41,10 @@ public sealed record JournalAnniversaryWheelResult(
     string MonthDay,
     IReadOnlyList<JournalHistoryEntrySummary> Items);
 
+public sealed record JournalHistoryCardPreview(
+    string Title,
+    IReadOnlyList<string> Lines);
+
 public sealed record JournalHistoryEntrySummary(
     JournalDate Date,
     string Status,
@@ -48,7 +52,9 @@ public sealed record JournalHistoryEntrySummary(
     int RawInputCount,
     int VersionCount,
     IReadOnlyList<JournalHistoryHit> Hits,
-    string? AttentionReason);
+    string? AttentionReason,
+    DateTimeOffset? EntryUpdatedAt,
+    JournalHistoryCardPreview CardPreview);
 
 public sealed record JournalHistoryHit(
     string SourceType,

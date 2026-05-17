@@ -82,6 +82,24 @@ public sealed class JournalDataExportServiceTests
     }
 
     [Fact]
+    public async Task ExportAsync_IncludesAnniversarySourceMaterial()
+    {
+        using var workspace = TempWorkspace.Create();
+        var paths = new LocalJournalPaths(new JournalStorageOptions(workspace.Root));
+        LocalJournalPaths.EnsureParentDirectory(paths.AnniversaryPath());
+        await File.WriteAllTextAsync(
+            paths.AnniversaryPath(),
+            """{"schema":"journal-anniversaries/v1","items":[]}""",
+            Encoding.UTF8);
+        var exportPath = Path.Combine(workspace.Root, "export.zip");
+
+        await new JournalDataExportService(paths).ExportAsync(exportPath, CancellationToken.None);
+
+        using var archive = ZipFile.OpenRead(exportPath);
+        Assert.Contains(archive.Entries, entry => entry.FullName == ".journal/anniversaries/anniversaries.json");
+    }
+
+    [Fact]
     public async Task ExportAsync_WhenCanceled_DoesNotLeaveFinalZip()
     {
         using var workspace = TempWorkspace.Create();

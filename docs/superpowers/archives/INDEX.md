@@ -2,6 +2,7 @@
 
 ## 2026-05
 
+- [2026-05-16-phase-8-memory-corridor-anniversary-archives.md](./2026-05/2026-05-16-phase-8-memory-corridor-anniversary-archives.md): 归档同日记忆回廊的时间线卡片、正式日记阅读态、纪念日数据域、下一年提醒采纳和导入导出支撑。
 - [2026-05-15-jmf-soft-section-consolidation-archives.md](./2026-05/2026-05-15-jmf-soft-section-consolidation-archives.md): 归档 JMF active/legacy 分类软合并、新增块与 AI/Harness 写入目标收敛、legacy 兼容和用户选择式单篇重新整理路径。
 - [2026-05-14-phase-6b-anniversary-wheel-archives.md](./2026-05/2026-05-14-phase-6b-anniversary-wheel-archives.md): 归档同日年轮按 `MM-DD` 回看历年日记、原始材料摘要、版本快照和 Today Assistant 入口的交付。
 - [2026-05-14-phase-7-windows-release-pipeline-archives.md](./2026-05/2026-05-14-phase-7-windows-release-pipeline-archives.md): 归档 Windows 本地发布闭环、安装版 Electron 后端托管、导入导出、Inno Setup 安装包和 GitHub Actions release workflow。

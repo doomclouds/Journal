@@ -48,6 +48,7 @@ builder.Services.AddSingleton(JournalStorageOptions.FromLocalAppData());
 builder.Services.AddSingleton<LocalJournalPaths>();
 builder.Services.AddSingleton<IJournalClock, SystemJournalClock>();
 builder.Services.AddSingleton<RawInputStore>();
+builder.Services.AddSingleton<JournalAnniversaryStore>();
 builder.Services.AddSingleton<DraftStore>();
 builder.Services.AddSingleton<EntryStore>();
 builder.Services.AddSingleton<IJournalVersionStore, JournalVersionStore>();
@@ -67,6 +68,7 @@ builder.Services.AddSingleton<JournalHarnessAuditStore>();
 builder.Services.AddSingleton<JournalHarnessService>();
 builder.Services.AddSingleton<TodayJournalService>();
 builder.Services.AddSingleton<JournalHistoryService>();
+builder.Services.AddSingleton<JournalAnniversaryService>();
 builder.Services.AddSingleton<JournalDataExportService>();
 builder.Services.AddSingleton<JournalDataImportService>();
 
@@ -403,6 +405,129 @@ app.MapGet("/journal/history/anniversary/{monthDay}", async Task<IResult> (
         normalizedMonthDay,
         limit.GetValueOrDefault(50),
         cancellationToken));
+});
+
+app.MapGet("/journal/anniversaries", async (
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await service.ListAsync(cancellationToken));
+});
+
+app.MapGet("/journal/anniversaries/{monthDay}", async Task<IResult> (
+    string monthDay,
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    if (!TryParseMonthDay(monthDay, out var normalizedMonthDay, out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    return Results.Ok(await service.ListByMonthDayAsync(normalizedMonthDay, cancellationToken));
+});
+
+app.MapPost("/journal/anniversaries", async Task<IResult> (
+    JournalAnniversarySaveRequest request,
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.SaveAsync(request, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPut("/journal/anniversaries/{id}", async Task<IResult> (
+    string id,
+    JournalAnniversarySaveRequest request,
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.UpdateAsync(id, request, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (JournalAnniversaryNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/journal/anniversaries/{id}/next-year-notes", async Task<IResult> (
+    string id,
+    JournalNextYearNoteCreateRequest request,
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.AddNextYearNoteAsync(id, request, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (JournalAnniversaryNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/journal/anniversaries/{id}/next-year-notes/{noteId}/adopt", async Task<IResult> (
+    string id,
+    string noteId,
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.AdoptNextYearNoteAsync(id, noteId, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (JournalAnniversaryNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+    catch (JournalAnniversaryStateConflictException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/journal/anniversaries/{id}/next-year-notes/{noteId}/dismiss", async Task<IResult> (
+    string id,
+    string noteId,
+    JournalAnniversaryService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.DismissNextYearNoteAsync(id, noteId, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (JournalAnniversaryNotFoundException exception)
+    {
+        return Results.NotFound(new { error = exception.Message });
+    }
+    catch (JournalAnniversaryStateConflictException exception)
+    {
+        return Results.Conflict(new { error = exception.Message });
+    }
 });
 
 app.MapGet("/journal/history/{date}", async Task<IResult> (

@@ -26,6 +26,12 @@ public sealed class LocalJournalPaths
     public string RawInputRootDirectory() =>
         Path.Combine(_rootDirectory, ".journal", "raw-inputs");
 
+    public string AnniversaryDirectory() =>
+        Path.Combine(_rootDirectory, ".journal", "anniversaries");
+
+    public string AnniversaryPath() =>
+        Path.Combine(AnniversaryDirectory(), "anniversaries.json");
+
     public string DraftPath(JournalDate date) =>
         Path.Combine(_rootDirectory, ".journal", "drafts", date.Year, date.Month, date.MarkdownFileName);
 

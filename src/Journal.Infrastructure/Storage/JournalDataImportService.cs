@@ -125,6 +125,10 @@ public sealed class JournalDataImportService(
             Path.Combine(backupDirectory, ".journal", "raw-inputs"),
             cancellationToken);
         CopyDirectory(
+            paths.AnniversaryDirectory(),
+            Path.Combine(backupDirectory, ".journal", "anniversaries"),
+            cancellationToken);
+        CopyDirectory(
             paths.DraftRootDirectory(),
             Path.Combine(backupDirectory, ".journal", "drafts"),
             cancellationToken);
@@ -149,6 +153,10 @@ public sealed class JournalDataImportService(
             paths.RawInputRootDirectory(),
             cancellationToken);
         CopyDirectory(
+            Path.Combine(backupDirectory, ".journal", "anniversaries"),
+            paths.AnniversaryDirectory(),
+            cancellationToken);
+        CopyDirectory(
             Path.Combine(backupDirectory, ".journal", "drafts"),
             paths.DraftRootDirectory(),
             cancellationToken);
@@ -168,6 +176,7 @@ public sealed class JournalDataImportService(
     {
         DeleteDirectory(paths.EntryRootDirectory(), cancellationToken);
         DeleteDirectory(paths.RawInputRootDirectory(), cancellationToken);
+        DeleteDirectory(paths.AnniversaryDirectory(), cancellationToken);
         DeleteDirectory(paths.DraftRootDirectory(), cancellationToken);
         DeleteDirectory(paths.VersionRootDirectory(), cancellationToken);
         DeleteDirectory(paths.AuditRootDirectory(), cancellationToken);
@@ -373,6 +382,7 @@ public sealed class JournalDataImportService(
         var segments = normalizedName.Split('/');
         return IsEntryMarkdownPath(segments)
             || IsRawInputPath(segments)
+            || IsAnniversaryPath(segments)
             || IsDraftPath(segments)
             || IsVersionPath(segments)
             || IsAuditPath(segments)
@@ -384,6 +394,7 @@ public sealed class JournalDataImportService(
         var segments = normalizedName.Split('/');
         return IsEntryDirectory(segments)
             || IsJournalSourceDirectory(segments, "raw-inputs")
+            || IsAnniversaryDirectory(segments)
             || IsJournalSourceDirectory(segments, "drafts")
             || IsJournalSourceDirectory(segments, "versions")
             || IsJournalSourceDirectory(segments, "audit")
@@ -399,6 +410,11 @@ public sealed class JournalDataImportService(
         segments.Length == 5
         && IsJournalDirectory(segments, "raw-inputs")
         && IsDatedFile(segments[2], segments[3], segments[4], ".jsonl");
+
+    private static bool IsAnniversaryPath(string[] segments) =>
+        segments.Length == 3
+        && IsJournalDirectory(segments, "anniversaries")
+        && string.Equals(segments[2], "anniversaries.json", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsDraftPath(string[] segments) =>
         segments.Length == 5
@@ -465,6 +481,12 @@ public sealed class JournalDataImportService(
             _ => false
         };
     }
+
+    private static bool IsAnniversaryDirectory(string[] segments) =>
+        segments.Length == 1 && string.Equals(segments[0], ".journal", StringComparison.OrdinalIgnoreCase)
+        || segments.Length == 2
+            && string.Equals(segments[0], ".journal", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(segments[1], "anniversaries", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsSettingsDirectory(string[] segments) =>
         segments.Length == 1 && string.Equals(segments[0], ".journal", StringComparison.OrdinalIgnoreCase)
